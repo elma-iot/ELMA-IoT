@@ -5168,3 +5168,20 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
 .diagram-viewport .peripheral-diagram-node { cursor:move; }
 
 .peripheral-diagram-actions { flex-wrap:wrap; }
+
+.peripheral-diagram-floating-label-contact .peripheral-diagram-floating-label-pill {
+    min-width: 18px;
+    min-height: 14px;
+    padding: 1px 4px;
+    font-size: 0.5rem;
+    line-height: 1;
+    letter-spacing: 0.015em;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.18);
+  }
+
+.peripheral-diagram-floating-label[data-node-id^="BOARD_"] .peripheral-diagram-floating-label-pill {
+    min-height: 16px;
+    padding: 2px 5px;
+    font-size: 0.56rem;
+    letter-spacing: 0.015em;
+  }
