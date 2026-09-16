@@ -1123,6 +1123,7 @@ export function createPeripheralDiagramWiringModule({
     if (labelConnectDragState.pointerId !== event.pointerId || !labelConnectDragState.sourceRef) {
       return;
     }
+    if(event.type==="pointercancel"){clearLabelConnectionPreview();return;}
     const targetElement = document.elementFromPoint(event.clientX, event.clientY)?.closest?.(".peripheral-diagram-floating-label[data-node-id][data-label-key]");
     const sourceRef = labelConnectDragState.sourceRef;
     const targetRef = targetElement
@@ -1497,6 +1498,7 @@ export function createPeripheralDiagramWiringModule({
     if (boardEndpointDragState.pointerId !== event.pointerId || !boardEndpointDragState.connectionGroup) {
       return;
     }
+    if(event.type==="pointercancel"){clearBoardEndpointPreview();return;}
     const targetBoardEntry = boardLabelEntryFromPoint(event.clientX, event.clientY);
     if (targetBoardEntry) {
       applyConnectionPinAssignment(boardEndpointDragState.connectionGroup, targetBoardEntry);
