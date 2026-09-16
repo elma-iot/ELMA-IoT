@@ -1,3 +1,4 @@
+import {obstacleAwareRoute} from './diagram-routing-layout.js';
 import {diagramRect,canvasClientPoint} from './diagram-viewport.js';
 import {voltageDividerMaximum} from './voltage-divider.js';
 import {
@@ -388,7 +389,38 @@ function smoothBezierPath(points) {
   return commands.join(" ");
 }
 
-function defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect) {
+function roundedPolylinePath(points, radius = 10) {
+  if (points.length < 2) return "";
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+  const commands = [`M ${points[0].x} ${points[0].y}`];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const incoming = pointDistance(previous, current);
+    const outgoing = pointDistance(current, next);
+    const cornerRadius = Math.min(radius, incoming / 2, outgoing / 2);
+    if (cornerRadius <= 0.5) {
+      commands.push(`L ${current.x} ${current.y}`);
+      continue;
+    }
+    const before = {
+      x: current.x + (((previous.x - current.x) / incoming) * cornerRadius),
+      y: current.y + (((previous.y - current.y) / incoming) * cornerRadius),
+    };
+    const after = {
+      x: current.x + (((next.x - current.x) / outgoing) * cornerRadius),
+      y: current.y + (((next.y - current.y) / outgoing) * cornerRadius),
+    };
+    commands.push(`L ${before.x} ${before.y}`);
+    commands.push(`Q ${current.x} ${current.y} ${after.x} ${after.y}`);
+  }
+  const end = points[points.length - 1];
+  commands.push(`L ${end.x} ${end.y}`);
+  return commands.join(" ");
+}
+
+function defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect, laneIndex = 0, bounds = {}) {
   const startLead = anchorLeadPoint(
     nodeAnchor,
     anchorDetourPoint(nodeAnchor, nodeOwnerRect, boardAnchor),
@@ -397,25 +429,23 @@ function defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRe
     boardAnchor,
     anchorDetourPoint(boardAnchor, boardOwnerRect, nodeAnchor),
   );
-  const controlPoint = defaultConnectionControlPoint(nodeAnchor, startLead, endLead);
-  return dedupeAdjacentPoints([
-    startLead,
-    controlPoint,
-    endLead,
-  ]);
+  return dedupeAdjacentPoints(obstacleAwareRoute(startLead,endLead,[nodeOwnerRect,boardOwnerRect],laneIndex,bounds));
+
 }
 
-function connectionGeometry(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect, manualCurvePoints = []) {
+function connectionGeometry(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect, manualCurvePoints = [], laneIndex = 0, bounds = {}) {
   const routePoints = cloneCurvePoints(manualCurvePoints);
-  const defaultPoints = defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect);
+  const defaultPoints = defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect, laneIndex,bounds);
   const points = dedupeAdjacentPoints([
     { x: nodeAnchor.x, y: nodeAnchor.y },
     ...(routePoints.length ? routePoints : defaultPoints),
     { x: boardAnchor.x, y: boardAnchor.y },
   ]);
 
+  bounds.usedRoutes?.push(points);
+
   return {
-    path: smoothBezierPath(points),
+    path: routePoints.length ? smoothBezierPath(points) : roundedPolylinePath(points),
     controlPoint: routePoints[0] || points[Math.min(2, points.length - 2)] || boardAnchor,
     handlePoint: routePoints[0] || points[Math.min(2, points.length - 2)] || boardAnchor,
     handlePoints: routePoints.length ? routePoints : defaultPoints,
@@ -2256,6 +2286,8 @@ export function createPeripheralDiagramWiringModule({
     lastRenderedLabelEntries = new Map(labelEntriesByRef);
     lastRenderedLabelRects = new Map(actualLabelRects);
     bindLabelConnectionInteractions(labelLayer, overlay);
+    const routingBounds={width:stageRect.width,height:stageRect.height,usedRoutes:[]};
+    let laneIndex=0;
 
     for (const node of nodes) {
       const nodeRect = nodeRects.get(node.id);
@@ -2301,7 +2333,7 @@ export function createPeripheralDiagramWiringModule({
         const palette = classifyWireColor(connection);
         const connectionKey = connectionStorageKey(connection);
         const savedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
-        const geometry = connectionGeometry(nodeAnchor, boardAnchor, visualRect, boardRect, savedCurvePoints);
+        const geometry = connectionGeometry(nodeAnchor, boardAnchor, visualRect, boardRect, savedCurvePoints, laneIndex++, routingBounds);
         if (!hasFiniteAnchorPoint(geometry?.controlPoint) || !hasFiniteAnchorPoint(geometry?.handlePoint)) {
           return;
         }
@@ -2411,7 +2443,7 @@ export function createPeripheralDiagramWiringModule({
       const palette = normalizeWirePalette(sourceEntry.palette);
       const connectionKey = `custom:${customLabelConnectionKey(connection)}`;
       const savedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
-      const geometry = connectionGeometry(sourceAnchor, targetAnchor, sourceEntry.nodeRect, targetEntry.nodeRect, savedCurvePoints);
+      const geometry = connectionGeometry(sourceAnchor, targetAnchor, sourceEntry.nodeRect, targetEntry.nodeRect, savedCurvePoints, laneIndex++, routingBounds);
       if (!hasFiniteAnchorPoint(geometry?.controlPoint) || !hasFiniteAnchorPoint(geometry?.handlePoint)) {
         return;
       }

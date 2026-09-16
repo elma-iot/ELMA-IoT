@@ -47,9 +47,17 @@ export function directCorridorPoints(start,end,lane=0) {
 }
 
 export function obstacleAwareRoute(start,end,owners,lane=0,bounds={}) {
-  const gap=8+(lane%8)*5;
+  const gap=10+lane*10;
+  const occupied=bounds.usedRoutes||[],spacing=10;
   const xs=[(start.x+end.x)/2,start.x,end.x],ys=[(start.y+end.y)/2,start.y,end.y];
   for(const r of owners){xs.push(r.left-gap,r.left+r.width+gap);ys.push(r.top-gap,r.top+r.height+gap);}
+  // Offer corridors beside existing runs; lane numbers alone do not prevent
+  // several routes choosing the same midpoint or component edge.
+  for(const route of occupied)for(let i=1;i<route.length;i++){
+    const a=route[i-1],b=route[i];
+    if(a.x===b.x)xs.push(a.x-spacing,a.x+spacing);
+    if(a.y===b.y)ys.push(a.y-spacing,a.y+spacing);
+  }
   const candidates=[];
   for(const x of xs)candidates.push([start,{x,y:start.y},{x,y:end.y},end]);
   for(const y of ys)candidates.push([start,{x:start.x,y},{x:end.x,y},end]);
@@ -59,6 +67,18 @@ export function obstacleAwareRoute(start,end,owners,lane=0,bounds={}) {
     for(const p of points)if(p.x<6||p.y<6||(bounds.width&&p.x>bounds.width-6)||(bounds.height&&p.y>bounds.height-6))cost+=1000000;
     for(let i=1;i<points.length;i++){
       const a=points[i-1],b=points[i];cost+=Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+      for(const route of occupied)for(let j=1;j<route.length;j++){
+        const c=route[j-1],d=route[j];
+        const horizontal=a.y===b.y&&c.y===d.y;
+        const vertical=a.x===b.x&&c.x===d.x;
+        if(!horizontal&&!vertical)continue;
+        const distance=Math.abs(horizontal?a.y-c.y:a.x-c.x);
+        const overlap=horizontal
+          ?Math.min(Math.max(a.x,b.x),Math.max(c.x,d.x))-Math.max(Math.min(a.x,b.x),Math.min(c.x,d.x))
+          :Math.min(Math.max(a.y,b.y),Math.max(c.y,d.y))-Math.max(Math.min(a.y,b.y),Math.min(c.y,d.y));
+        // Shared junctions are necessary, but long parallel runs need separation.
+        if(distance<spacing&&overlap>8)cost+=(spacing-distance)*overlap*100;
+      }
       for(const r of owners){
         const horizontal=a.y===b.y&&a.y>r.top&&a.y<r.top+r.height&&Math.max(a.x,b.x)>r.left&&Math.min(a.x,b.x)<r.left+r.width;
         const vertical=a.x===b.x&&a.x>r.left&&a.x<r.left+r.width&&Math.max(a.y,b.y)>r.top&&Math.min(a.y,b.y)<r.top+r.height;

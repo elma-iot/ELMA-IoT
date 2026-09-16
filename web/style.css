@@ -5162,7 +5162,7 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
 
 /* The viewport clips the view only; component positions stay in canvas units. */
 .diagram-viewport { position:relative;width:calc(100% + 36px);margin:-18px;overflow:hidden;touch-action:none;cursor:grab;isolation:isolate; }
-.diagram-viewport::before { content:"";position:absolute;inset:0;background-image:url("./elma_iot_logo.svg");background-repeat:repeat;background-size:84px 84px;opacity:0.5;pointer-events:none;z-index:0; }
+.diagram-viewport::before { content:"";position:absolute;inset:0;background-image:url("./elma_iot_logo.svg");background-repeat:repeat;background-size:84px 84px;opacity:0.1;pointer-events:none;z-index:0; }
 .diagram-viewport > .peripheral-diagram-stage { z-index:1;width:100%;margin:0;transform-origin:0 0; }
 .diagram-viewport.is-panning { cursor:grabbing;user-select:none; }
 .diagram-viewport .peripheral-diagram-node { cursor:move; }
