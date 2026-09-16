@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "ota_manager.h"
 
 #include <HTTPClient.h>
@@ -23,7 +24,7 @@ constexpr uint32_t OTA_NETWORK_TASK_STACK_BYTES = 24576;
 
 void logOtaTaskStack(const char* taskName) {
     const UBaseType_t minimumFreeWords = uxTaskGetStackHighWaterMark(nullptr);
-    Serial.printf("[ota] %s minimum free stack=%u bytes\n",
+    DebugLog.printf("[ota] %s minimum free stack=%u bytes\n",
                   taskName,
                   static_cast<unsigned>(minimumFreeWords * sizeof(StackType_t)));
 }
@@ -415,6 +416,7 @@ void OtaManager::loop() {
         if (restartHandler_ != nullptr) {
             restartHandler_(String("ota"));
         } else {
+            DebugLog.service(true);
             ESP.restart();
         }
     }
@@ -438,7 +440,11 @@ void OtaManager::loop() {
         }
         return;
     }
-    if (pendingReleaseRefresh_ && !busy_ && !releaseRefreshInProgress_ &&
+    const bool playbackActive = (pendingReleaseRefresh_ || pendingCheck_) && appState_ != nullptr && [this]() {
+        const auto playback = appState_->snapshot().playback;
+        return playback.state == "playing" || playback.state == "buffering";
+    }();
+    if (pendingReleaseRefresh_ && !playbackActive && !busy_ && !releaseRefreshInProgress_ &&
         static_cast<long>(millis() - releaseRefreshNextAttemptAtMs_) >= 0) {
         releaseRefreshInProgress_ = true;
         const BaseType_t created = xTaskCreatePinnedToCore(
@@ -452,7 +458,7 @@ void OtaManager::loop() {
         }
         return;
     }
-    if (pendingCheck_ && !busy_ && !releaseRefreshInProgress_) {
+    if (pendingCheck_ && (!playbackActive || pendingApply_) && !busy_ && !releaseRefreshInProgress_) {
         const bool applyAfterCheck = pendingApply_;
         pendingCheck_ = false;
         pendingApply_ = false;
@@ -1099,7 +1105,14 @@ String OtaManager::pendingInstallVersion() const {
 }
 
 bool OtaManager::isBusy() const {
-    return busy_ || localUploadStarted_ || pendingApply_ || installTaskHandle_ != nullptr;
+    return busy_ || localUploadStarted_ || pendingApply_ || installTaskHandle_ != nullptr ||
+        checkTaskHandle_ != nullptr || releaseRefreshTaskHandle_ != nullptr;
+}
+
+bool OtaManager::isFirmwareTransferActive() const {
+    return localUploadStarted_ || pendingApply_ || installTaskHandle_ != nullptr || !pendingInstallVersion_.isEmpty() ||
+        (busy_ && (updatePhase_ == "Connecting" || updatePhase_ == "Downloading" ||
+                   updatePhase_ == "Flashing" || updatePhase_ == "Verifying" || updatePhase_ == "Finalizing"));
 }
 
 void OtaManager::runVersionTask(const String& version, const String& assetName, const String& assetUrl) {
@@ -1450,7 +1463,7 @@ bool OtaManager::installNow(const CheckResult& result, String& message) {
         ? githubReleaseAssetUrl(settings_, result.latestVersion, result.assetName)
         : result.assetUrl;
     auto openFirmwareRequest = [&](size_t startOffset, String& error) {
-        Serial.printf("[ota] opening firmware url: %s (offset=%u)\n", firmwareUrl.c_str(), static_cast<unsigned>(startOffset));
+        DebugLog.printf("[ota] opening firmware url: %s (offset=%u)\n", firmwareUrl.c_str(), static_cast<unsigned>(startOffset));
         const int requestCode = beginAndGet(
             http,
             client,
@@ -1463,14 +1476,14 @@ bool OtaManager::installNow(const CheckResult& result, String& message) {
                 }
             });
         if (requestCode == HTTPC_ERROR_CONNECTION_REFUSED) {
-            Serial.printf("[ota] failed to open firmware url: %s\n", firmwareUrl.c_str());
+            DebugLog.printf("[ota] failed to open firmware url: %s\n", firmwareUrl.c_str());
             error = startOffset > 0 ? "Failed to reopen firmware URL" : "Failed to open firmware URL";
             return false;
         }
 
         const int expectedCode = startOffset > 0 ? HTTP_CODE_PARTIAL_CONTENT : HTTP_CODE_OK;
         if (requestCode != expectedCode) {
-            Serial.printf("[ota] firmware request failed code=%d url=%s offset=%u\n", requestCode, firmwareUrl.c_str(), static_cast<unsigned>(startOffset));
+            DebugLog.printf("[ota] firmware request failed code=%d url=%s offset=%u\n", requestCode, firmwareUrl.c_str(), static_cast<unsigned>(startOffset));
             if (startOffset > 0 && requestCode == HTTP_CODE_OK) {
                 error = "Firmware server does not support OTA resume";
             } else {

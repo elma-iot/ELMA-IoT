@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "audio_player.h"
 
 #include <Audio.h>
@@ -308,7 +309,7 @@ bool loadWavOverlay(StorageTarget target, const String& path, AudioPlayer::Impl:
 
 void audio_info(const char* info) {
     if (info != nullptr) {
-        Serial.printf("[audio] %s\n", info);
+        DebugLog.printf("[audio] %s\n", info);
     }
 }
 
@@ -382,19 +383,19 @@ void audio_process_i2s(uint32_t* sample, bool* continueI2S) {
 
 void audio_id3data(const char* info) {
     if (info != nullptr) {
-        Serial.printf("[audio] id3 %s\n", info);
+        DebugLog.printf("[audio] id3 %s\n", info);
     }
 }
 
 void audio_bitrate(const char* info) {
     if (info != nullptr) {
-        Serial.printf("[audio] bitrate %s\n", info);
+        DebugLog.printf("[audio] bitrate %s\n", info);
     }
 }
 
 void audio_commercial(const char* info) {
     if (info != nullptr) {
-        Serial.printf("[audio] codec %s\n", info);
+        DebugLog.printf("[audio] codec %s\n", info);
     }
 }
 
@@ -413,11 +414,11 @@ void audio_eof_mp3(const char* info) {
         g_impl->source = "manual";
         g_impl->publish();
     }
-    Serial.printf("[audio] eof mp3 %s\n", info == nullptr ? "" : info);
+    DebugLog.printf("[audio] eof mp3 %s\n", info == nullptr ? "" : info);
 }
 
 void audio_eof_speech(const char* info) {
-    Serial.printf("[audio] eof speech %s\n", info == nullptr ? "" : info);
+    DebugLog.printf("[audio] eof speech %s\n", info == nullptr ? "" : info);
 }
 
 void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t initialVolumePercent, bool outputEnabled, AppState& appState) {
@@ -425,7 +426,7 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
         impl_ = allocatePreferPsram<Impl>();
     }
     if (impl_ == nullptr) {
-        Serial.println("[audio] failed to allocate player implementation");
+        DebugLog.println("[audio] failed to allocate player implementation");
         return;
     }
     impl_->appState = &appState;
@@ -447,7 +448,7 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
     impl_->volume = constrain(initialVolumePercent, static_cast<uint8_t>(0), static_cast<uint8_t>(100));
     impl_->applyHardwareVolumePercent(impl_->volume);
     if (outputEnabled) {
-        Serial.printf("[audio] init driver=ESP32-audioI2S target=MAX98357A fmt=std-i2s bclk=%u ws=%u dout=%u requested_rate=%lu volume_percent=%u lib_volume=%u mono=%s\n",
+        DebugLog.printf("[audio] init driver=ESP32-audioI2S target=MAX98357A fmt=std-i2s bclk=%u ws=%u dout=%u requested_rate=%lu volume_percent=%u lib_volume=%u mono=%s\n",
                       bclkPin,
                       wsPin,
                       doutPin,
@@ -456,7 +457,7 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
                       impl_->hardwareAudioVolume,
                       DefaultConfig::AUDIO_FORCE_MONO ? "on" : "off");
     } else {
-        Serial.println("[audio] output disabled");
+        DebugLog.println("[audio] output disabled");
     }
     impl_->publish();
 }
@@ -516,7 +517,7 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     if (!connected) {
         impl_->applyHardwareVolumePercent(impl_->volume);
         impl_->state = "error";
-        Serial.printf("[audio] connecttohost failed for %s\n", normalizedUrl.c_str());
+        DebugLog.printf("[audio] connecttohost failed for %s\n", normalizedUrl.c_str());
         impl_->publish();
         return false;
     }
@@ -524,8 +525,8 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     impl_->activeSampleRateHz = impl_->audio.getSampleRate();
     impl_->bitsPerSample = impl_->audio.getBitsPerSample();
     impl_->channelCount = impl_->audio.getChannels();
-    Serial.printf("[audio] connecttohost ok for %s\n", normalizedUrl.c_str());
-    Serial.printf("[audio] playback started rate=%lu bits=%u channels=%u lib_volume=%u\n",
+    DebugLog.printf("[audio] connecttohost ok for %s\n", normalizedUrl.c_str());
+    DebugLog.printf("[audio] playback started rate=%lu bits=%u channels=%u lib_volume=%u\n",
                   static_cast<unsigned long>(impl_->activeSampleRateHz),
                   static_cast<unsigned>(impl_->bitsPerSample),
                   static_cast<unsigned>(impl_->channelCount),
@@ -584,7 +585,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
             acquireStorageLease(impl_, target);
             fs = getStorageFs(target);
             if (fs != nullptr) {
-                Serial.printf("[audio] retrying SD playback after remount path=%s\n", path.c_str());
+                DebugLog.printf("[audio] retrying SD playback after remount path=%s\n", path.c_str());
                 connected = impl_->audio.connecttoFS(*fs, path.c_str());
                 if (!connected) {
                     delay(120);
@@ -599,7 +600,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
         releaseStorageLease(impl_);
         impl_->applyHardwareVolumePercent(impl_->volume);
         impl_->state = "error";
-        Serial.printf("[audio] connecttoFS failed target=%s path=%s\n", storageTargetId(target), path.c_str());
+        DebugLog.printf("[audio] connecttoFS failed target=%s path=%s\n", storageTargetId(target), path.c_str());
         impl_->publish();
         return false;
     }
@@ -608,8 +609,8 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
     impl_->bitsPerSample = impl_->audio.getBitsPerSample();
     impl_->channelCount = impl_->audio.getChannels();
     impl_->applyHardwareVolumePercent(impl_->volume);
-    Serial.printf("[audio] connecttoFS ok target=%s path=%s\n", storageTargetId(target), path.c_str());
-    Serial.printf("[audio] local playback started rate=%lu bits=%u channels=%u lib_volume=%u\n",
+    DebugLog.printf("[audio] connecttoFS ok target=%s path=%s\n", storageTargetId(target), path.c_str());
+    DebugLog.printf("[audio] local playback started rate=%lu bits=%u channels=%u lib_volume=%u\n",
                   static_cast<unsigned long>(impl_->activeSampleRateHz),
                   static_cast<unsigned>(impl_->bitsPerSample),
                   static_cast<unsigned>(impl_->channelCount),
@@ -658,13 +659,23 @@ void AudioPlayer::stop() {
     impl_->audio.stopSong();
     clearOverlay(impl_);
     releaseStorageLease(impl_);
-    Serial.println("[audio] playback stopped");
+    DebugLog.println("[audio] playback stopped");
     impl_->state = "idle";
     impl_->type = "idle";
     impl_->title = "Idle";
     impl_->url = "";
     impl_->source = "manual";
     impl_->publish();
+}
+
+void AudioPlayer::releaseResourcesForUpdate() {
+    if (impl_ == nullptr) return;
+    stop();
+    // stopSong only silences I2S; it retains the decoder, input buffer and
+    // network connection. Recreate the idle driver to actually release them.
+    impl_->audio.~Audio();
+    new (&impl_->audio) Audio();
+    begin(impl_->bclkPin, impl_->wsPin, impl_->doutPin, impl_->volume, impl_->outputEnabled, *impl_->appState);
 }
 
 bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin) {
@@ -703,7 +714,7 @@ bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t 
     impl_->wsPin = wsPin;
     impl_->doutPin = doutPin;
     impl_->outputEnabled = true;
-    Serial.printf("[audio] reconfigured target=MAX98357A fmt=std-i2s bclk=%u ws=%u dout=%u requested_rate=%lu lib_volume=%u mono=%s\n",
+    DebugLog.printf("[audio] reconfigured target=MAX98357A fmt=std-i2s bclk=%u ws=%u dout=%u requested_rate=%lu lib_volume=%u mono=%s\n",
                   bclkPin,
                   wsPin,
                   doutPin,
@@ -749,7 +760,7 @@ bool AudioPlayer::disableOutput() {
     impl_->title = "Idle";
     impl_->url = "";
     impl_->source = "disabled";
-    Serial.println("[audio] output disabled");
+    DebugLog.println("[audio] output disabled");
     impl_->publish();
     return true;
 }
@@ -764,7 +775,7 @@ void AudioPlayer::setVolumePercent(uint8_t volumePercent) {
     }
     impl_->volume = nextVolume;
     impl_->applyHardwareVolumePercent(impl_->volume);
-    Serial.printf("[audio] volume percent=%u lib_volume=%u\n", impl_->volume, impl_->hardwareAudioVolume);
+    DebugLog.printf("[audio] volume percent=%u lib_volume=%u\n", impl_->volume, impl_->hardwareAudioVolume);
     impl_->publish();
 }
 
@@ -774,7 +785,7 @@ void AudioPlayer::setDirectLibraryVolume(uint8_t libraryVolume) {
     }
     impl_->setHardwareAudioVolume(libraryVolume);
     impl_->volume = static_cast<uint8_t>(constrain(map(impl_->hardwareAudioVolume, 0, DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME, 0, 100), 0L, 100L));
-    Serial.printf("[audio] direct lib_volume=%u mapped_percent=%u\n", impl_->hardwareAudioVolume, impl_->volume);
+    DebugLog.printf("[audio] direct lib_volume=%u mapped_percent=%u\n", impl_->hardwareAudioVolume, impl_->volume);
     impl_->publish();
 }
 
@@ -783,7 +794,7 @@ void AudioPlayer::setEqualizer(const String& preset, int8_t lowDb, int8_t presen
         return;
     }
     impl_->audio.setTone(lowDb, presenceDb, highDb);
-    Serial.printf("[audio] equalizer preset=%s low=%d presence=%d high=%d dB\n",
+    DebugLog.printf("[audio] equalizer preset=%s low=%d presence=%d high=%d dB\n",
                   preset.c_str(), lowDb, presenceDb, highDb);
 }
 

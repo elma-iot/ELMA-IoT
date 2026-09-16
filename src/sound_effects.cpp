@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "sound_effects.h"
 
 namespace {
@@ -51,5 +52,5 @@ void SoundEffectsManager::playEffect(const char* effectName) {
     if (muted_) {
         return;
     }
-    Serial.printf("[sfx] %s requested at %u%%\n", effectName, volumePercent_);
+    DebugLog.printf("[sfx] %s requested at %u%%\n", effectName, volumePercent_);
 }

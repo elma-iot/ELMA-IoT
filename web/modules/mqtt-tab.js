@@ -122,7 +122,7 @@ export function createMqttTab({
         body: JSON.stringify({ action: "connect" }),
       });
 
-      if (document.body.classList.contains("local-builder-mode")) {
+      if (document.body.classList.contains("local-builder-mode") || document.body.classList.contains("android-designer")) {
         await loadStatus();
         setMqttConnectStatus(`MQTT Connected to ${host}. Credentials saved for the firmware build.`);
         setMessage(`MQTT Connected — ${host}`);

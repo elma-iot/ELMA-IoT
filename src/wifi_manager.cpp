@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "wifi_manager.h"
 
 #include "default_config.h"
@@ -39,10 +40,21 @@ void WiFiManager::updateRadioModeAndSleep() {
 
     WiFi.mode(targetMode);
 
-    // Allow modem sleep whenever we are not actively hosting an AP.
-    // AP mode is kept fully awake so the captive portal remains responsive.
-    WiFi.setSleep(!apMode_);
+    applyRadioSleep();
     applyRadioTxPower();
+}
+
+void WiFiManager::applyRadioSleep() {
+    // Keep streaming/update latency low, but do not leave the RF receiver
+    // continuously powered after playback stops. STA modem sleep keeps the
+    // association and MQTT connection alive between beacon intervals.
+    WiFi.setSleep(!apMode_ && !lowLatencyMode_);
+}
+
+void WiFiManager::setLowLatencyMode(bool enabled) {
+    if (lowLatencyMode_ == enabled) return;
+    lowLatencyMode_ = enabled;
+    if (initialized_) applyRadioSleep();
 }
 
 void WiFiManager::applyRadioTxPower() {
@@ -55,12 +67,14 @@ void WiFiManager::applyRadioTxPower() {
     // reconnect or change credentials merely to apply a power-only edit.
     txPowerApplyError_ = esp_wifi_set_max_tx_power(requested);
     if (txPowerApplyError_ != ESP_OK) {
-        Serial.printf("[wifi] transmit power apply failed: %d\n", txPowerApplyError_);
+        DebugLog.printf("[wifi] transmit power apply failed: %d\n", txPowerApplyError_);
     }
 }
 
 void WiFiManager::appendTxPowerStatus(JsonObject network) const {
     const wifi_mode_t mode = WiFi.getMode();
+    wifi_ps_type_t sleepMode = WIFI_PS_NONE;
+    if (esp_wifi_get_ps(&sleepMode) == ESP_OK) network["modemSleepEnabled"] = sleepMode != WIFI_PS_NONE;
     int8_t activePower = 0;
     const bool available = mode != WIFI_MODE_NULL && esp_wifi_get_max_tx_power(&activePower) == ESP_OK;
     network["staTxPowerDbm"] = settings_.wifi.staTxPowerDbm;
@@ -150,7 +164,7 @@ void WiFiManager::startStation() {
     if (preferredAccessPoint.found && preferredAccessPoint.channel > 0) {
         WiFi.begin(settings_.wifi.ssid.c_str(), settings_.wifi.password.c_str(), preferredAccessPoint.channel,
                    preferredAccessPoint.bssid, true);
-        Serial.printf("[wifi] selected strongest BSSID for ssid='%s' rssi=%ld channel=%ld bssid=%02X:%02X:%02X:%02X:%02X:%02X\n",
+        DebugLog.printf("[wifi] selected strongest BSSID for ssid='%s' rssi=%ld channel=%ld bssid=%02X:%02X:%02X:%02X:%02X:%02X\n",
                       settings_.wifi.ssid.c_str(),
                       static_cast<long>(preferredAccessPoint.rssi),
                       static_cast<long>(preferredAccessPoint.channel),
@@ -158,7 +172,7 @@ void WiFiManager::startStation() {
                       preferredAccessPoint.bssid[3], preferredAccessPoint.bssid[4], preferredAccessPoint.bssid[5]);
     } else {
         WiFi.begin(settings_.wifi.ssid.c_str(), settings_.wifi.password.c_str());
-        Serial.printf("[wifi] %s for ssid='%s', using default station connect\n",
+        DebugLog.printf("[wifi] %s for ssid='%s', using default station connect\n",
                       usePreferredBssid ? "no matching BSSID scan result" : "skipping BSSID pin after auth failure",
                       settings_.wifi.ssid.c_str());
     }
@@ -167,7 +181,7 @@ void WiFiManager::startStation() {
     stationAttemptActive_ = true;
     connectAttemptStartedAt_ = millis();
     lastConnectAttemptAt_ = connectAttemptStartedAt_;
-    Serial.printf("[wifi] connect attempt %u/%u to ssid='%s'\n", static_cast<unsigned>(consecutiveFailureCount_ + 1),
+    DebugLog.printf("[wifi] connect attempt %u/%u to ssid='%s'\n", static_cast<unsigned>(consecutiveFailureCount_ + 1),
                   static_cast<unsigned>(WIFI_MAX_CONSECUTIVE_FAILURES), settings_.wifi.ssid.c_str());
     updateAppState();
 }
@@ -187,7 +201,7 @@ void WiFiManager::startAccessPoint() {
     dnsStarted_ = true;
     apShutdownPending_ = false;
     apShutdownAt_ = 0;
-    Serial.printf("[wifi] AP started ssid='%s' ip=%s\n", apSsid_.c_str(), WiFi.softAPIP().toString().c_str());
+    DebugLog.printf("[wifi] AP started ssid='%s' ip=%s\n", apSsid_.c_str(), WiFi.softAPIP().toString().c_str());
     updateAppState();
 }
 
@@ -215,19 +229,19 @@ void WiFiManager::loop() {
         if (!hadConnection_) {
             applyRadioTxPower();
             if (consecutiveFailureCount_ > 0) {
-                Serial.printf("[wifi] connected after %u failed attempt(s)\n", static_cast<unsigned>(consecutiveFailureCount_));
+                DebugLog.printf("[wifi] connected after %u failed attempt(s)\n", static_cast<unsigned>(consecutiveFailureCount_));
             }
-            Serial.printf("[wifi] station connected ssid='%s' ip=%s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            DebugLog.printf("[wifi] station connected ssid='%s' ip=%s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
             if (apMode_) {
                 apShutdownPending_ = true;
                 apShutdownAt_ = millis() + WIFI_AP_HANDOFF_TIMEOUT_MS;
-                Serial.printf("[wifi] station connected, keeping AP alive for up to %lu ms for browser IP handoff\n",
+                DebugLog.printf("[wifi] station connected, keeping AP alive for up to %lu ms for browser IP handoff\n",
                               static_cast<unsigned long>(WIFI_AP_HANDOFF_TIMEOUT_MS));
             }
         }
 
         if (apShutdownPending_ && static_cast<long>(millis() - apShutdownAt_) >= 0) {
-            Serial.println("[wifi] AP grace period elapsed, stopping AP");
+            DebugLog.println("[wifi] AP grace period elapsed, stopping AP");
             stopAccessPoint();
         }
 
@@ -312,7 +326,7 @@ bool WiFiManager::prepareStationHandoff(IPAddress& stationIp, uint32_t& shutdown
         shutdownDelayMs = WIFI_AP_HANDOFF_SHUTDOWN_DELAY_MS;
         apShutdownPending_ = true;
         apShutdownAt_ = millis() + shutdownDelayMs;
-        Serial.printf("[wifi] browser acknowledged station IP %s; stopping AP in %lu ms\n",
+        DebugLog.printf("[wifi] browser acknowledged station IP %s; stopping AP in %lu ms\n",
                       stationIp.toString().c_str(), static_cast<unsigned long>(shutdownDelayMs));
     }
     return true;
@@ -349,7 +363,7 @@ void WiFiManager::registerFailedAttempt(const char* reason) {
     }
 
     const char* disconnectReasonName = lastDisconnectReasonValid_ ? WiFi.disconnectReasonName(lastDisconnectReason_) : "unknown";
-    Serial.printf("[wifi] connect failed trigger=%s wifi_reason=%s(%d) count=%u/%u\n", reason,
+    DebugLog.printf("[wifi] connect failed trigger=%s wifi_reason=%s(%d) count=%u/%u\n", reason,
                   disconnectReasonName,
                   static_cast<int>(lastDisconnectReason_),
                   static_cast<unsigned>(consecutiveFailureCount_),
@@ -372,11 +386,11 @@ void WiFiManager::registerFailedAttempt(const char* reason) {
         if (isConfiguredNetworkVisible()) {
             setFrontendError("Wi-Fi reconnect is failing for saved network '" + settings_.wifi.ssid + "'. Keeping AP/retry mode active instead of rebooting.");
             recoveryRebootRecommended_ = false;
-            Serial.println("[wifi] max consecutive failures reached with saved network visible, continuing retries without recovery reboot");
+            DebugLog.println("[wifi] max consecutive failures reached with saved network visible, continuing retries without recovery reboot");
         } else {
             setFrontendError("Saved Wi-Fi network '" + settings_.wifi.ssid + "' is not visible. Reboot skipped.");
             recoveryRebootRecommended_ = false;
-            Serial.println("[wifi] max consecutive failures reached but saved network is not visible, reboot skipped");
+            DebugLog.println("[wifi] max consecutive failures reached but saved network is not visible, reboot skipped");
         }
     }
 }
@@ -484,7 +498,7 @@ void WiFiManager::setFrontendError(const String& message) {
 void WiFiManager::handleDisconnectEvent(arduino_event_info_t info) {
     lastDisconnectReason_ = static_cast<wifi_err_reason_t>(info.wifi_sta_disconnected.reason);
     lastDisconnectReasonValid_ = true;
-    Serial.printf("[wifi] disconnect event reason=%s(%d)\n", WiFi.disconnectReasonName(lastDisconnectReason_),
+    DebugLog.printf("[wifi] disconnect event reason=%s(%d)\n", WiFi.disconnectReasonName(lastDisconnectReason_),
                   static_cast<int>(lastDisconnectReason_));
 }
 

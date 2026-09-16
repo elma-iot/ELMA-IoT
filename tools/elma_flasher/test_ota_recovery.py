@@ -43,6 +43,20 @@ class FakeDevice:
 
 
 class OtaRecoveryTests(unittest.TestCase):
+    def test_v10_classic_esp32_uses_legacy_slot_limit(self):
+        server = DesignerServer(None)
+        self.assertEqual(server.legacy_ota_capacity("esp32", "elma", "0.1.10"), 0x190000)
+        self.assertIsNone(server.legacy_ota_capacity("esp32", "elma", "0.1.12"))
+        self.assertIsNone(server.legacy_ota_capacity("esp32s3", "elma", "0.1.10"))
+
+    def test_configuration_is_applied_after_legacy_reboot(self):
+        client = Mock()
+        client.json.side_effect = [OSError("restarting"), {"firmware": {"version": "0.1.42"}}]
+        server = DesignerServer(None)
+        with patch("elma_flasher.APP_VERSION", "0.1.42"), patch("elma_flasher.time.sleep"):
+            server.apply_settings_after_legacy_ota(DesignerJob(), client, {"device": {"statusLedPin": 22}})
+        client.json_request.assert_called_once_with("/api/settings", value={"device": {"statusLedPin": 22}})
+
     def test_lost_ack_resumes_at_confirmed_offset(self):
         device = FakeDevice()
         with patch("elma_flasher.time.sleep"):

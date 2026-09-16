@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "storage_backend.h"
 
 #include <LittleFS.h>
@@ -166,22 +167,22 @@ const esp_partition_t* flashFilesystemPartition() {
 void mountFlashStorage() {
     if (flashFilesystemPartition() == nullptr) {
         flashMounted = false;
-        Serial.println("[storage] Flash filesystem disabled by partition table");
+        DebugLog.println("[storage] Flash filesystem disabled by partition table");
         return;
     }
 
     flashMounted = LittleFS.begin(false);
     if (!flashMounted) {
-        Serial.println("[storage] LittleFS mount failed, attempting format");
+        DebugLog.println("[storage] LittleFS mount failed, attempting format");
         flashMounted = LittleFS.begin(true);
     }
 
     if (flashMounted) {
-        Serial.printf("[storage] LittleFS mounted total=%u used=%u\n",
+        DebugLog.printf("[storage] LittleFS mounted total=%u used=%u\n",
                       static_cast<unsigned>(LittleFS.totalBytes()),
                       static_cast<unsigned>(LittleFS.usedBytes()));
     } else {
-        Serial.println("[storage] LittleFS mount failed");
+        DebugLog.println("[storage] LittleFS mount failed");
     }
 }
 
@@ -225,7 +226,7 @@ void mountSdStorage(const SdSettings& settings) {
 
     for (const uint32_t frequencyHz : kSdFrequenciesHz) {
         if (!SD.begin(settings.csPin, sdSpi, frequencyHz, "/sd", 5, false)) {
-            Serial.printf("[storage] SD begin failed cs=%u sck=%u mosi=%u miso=%u freq=%lu\n",
+            DebugLog.printf("[storage] SD begin failed cs=%u sck=%u mosi=%u miso=%u freq=%lu\n",
                           static_cast<unsigned>(settings.csPin),
                           static_cast<unsigned>(settings.sckPin),
                           static_cast<unsigned>(settings.mosiPin),
@@ -237,7 +238,7 @@ void mountSdStorage(const SdSettings& settings) {
         const uint64_t cardBytes = SD.cardSize();
         const size_t totalBytes = SD.totalBytes();
         if (cardBytes == 0 || totalBytes == 0) {
-            Serial.printf("[storage] SD detected but filesystem unavailable cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u\n",
+            DebugLog.printf("[storage] SD detected but filesystem unavailable cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u\n",
                           static_cast<unsigned>(settings.csPin),
                           static_cast<unsigned>(settings.sckPin),
                           static_cast<unsigned>(settings.mosiPin),
@@ -251,7 +252,7 @@ void mountSdStorage(const SdSettings& settings) {
 
         sdMounted = true;
         resetSdMountRetryState();
-        Serial.printf("[storage] SD mounted cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u used=%u\n",
+        DebugLog.printf("[storage] SD mounted cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u used=%u\n",
                       static_cast<unsigned>(settings.csPin),
                       static_cast<unsigned>(settings.sckPin),
                       static_cast<unsigned>(settings.mosiPin),
@@ -268,7 +269,7 @@ void mountSdStorage(const SdSettings& settings) {
         ++sdConsecutiveMountFailures;
         const unsigned long retryDelayMs = sdRetryDelayForFailureCount(sdConsecutiveMountFailures);
         nextSdMountAttemptAt = millis() + retryDelayMs;
-        Serial.printf("[storage] SD mount failed cs=%u sck=%u mosi=%u miso=%u retry_in=%lu failure=%u\n",
+        DebugLog.printf("[storage] SD mount failed cs=%u sck=%u mosi=%u miso=%u retry_in=%lu failure=%u\n",
                       static_cast<unsigned>(settings.csPin),
                       static_cast<unsigned>(settings.sckPin),
                       static_cast<unsigned>(settings.mosiPin),
@@ -352,7 +353,7 @@ void pollStorageBackends() {
 
     if (sdMounted) {
         if (!sdFilesystemHealthy()) {
-            Serial.println("[storage] SD card removed or became unavailable");
+            DebugLog.println("[storage] SD card removed or became unavailable");
             unmountSdStorage();
             resetSdMountRetryState();
         }

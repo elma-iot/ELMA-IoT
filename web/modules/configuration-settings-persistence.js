@@ -1,4 +1,7 @@
+import {voltageDividerSettings} from './voltage-divider.js';
 import { normalizeWifiPower, renderWifiPowerValues } from "./wifi-power-controls.js";
+import { restoreLegacyPeripheralProfiles } from "./legacy-peripheral-profiles.js";
+import { applyMqttDefaults } from "./mqtt-defaults.js";
 
 export function createConfigurationSettingsPersistenceModule({
   state,
@@ -138,6 +141,7 @@ export function createConfigurationSettingsPersistenceModule({
 
   function fillForm(data) {
     state.settingsLoading = true;
+    applyMqttDefaults(data);
     data.wifi ||= {};
     data.wifi.staTxPowerDbm = normalizeWifiPower(data.wifi.staTxPowerDbm);
     data.wifi.apTxPowerDbm = normalizeWifiPower(data.wifi.apTxPowerDbm);
@@ -148,6 +152,7 @@ export function createConfigurationSettingsPersistenceModule({
     }
     data.sd ||= {};
     data.ui = normalizeUiSettings(data.ui);
+    data.ui.peripheralProfiles = restoreLegacyPeripheralProfiles(data);
     state.peripheralDiagramPositions = cloneSettingsObject(loadPeripheralDiagramPositions()) || {};
     applyPeripheralProfileSelectionsState(data.ui.peripheralProfiles);
     state.peripheralHelperBindings = cloneSettingsObject(data.ui.peripheralHelperBindings) || {};
@@ -289,6 +294,7 @@ export function createConfigurationSettingsPersistenceModule({
       : 0;
     payload.battery.measuredVoltage = parseDecimalFieldValue(elements.batteryMeasuredVoltage, payload.battery.measuredVoltage || 0);
     payload.battery.calibrationMultiplier = currentBatteryCalibrationMultiplier();
+    Object.assign(payload.battery,voltageDividerSettings({...state.settings?.battery,...payload.battery}));
     payload.battery.updateIntervalMs = Number(payload.battery.updateIntervalMs || 10000);
     payload.battery.movingAverageWindowSize = Number(payload.battery.movingAverageWindowSize || 10);
     payload.oled.i2cAddress = Number(payload.oled.i2cAddress || 60);
@@ -323,6 +329,12 @@ export function createConfigurationSettingsPersistenceModule({
     }
     state.settingsDirty = true;
     state.settingsEditRevision = Number(state.settingsEditRevision || 0) + 1;
+    // Android may suspend WebView timers immediately when the app backgrounds.
+    // Commit the complete peripheral snapshot before the deferred UI autosave.
+    if (document.body.classList.contains("android-designer") && window.elmaPersistAndroidDraft) {
+      try { window.elmaPersistAndroidDraft(currentSettingsSnapshot()); }
+      catch (error) { handleError(error); }
+    }
     if (state.settingsSaveTimer) {
       window.clearTimeout(state.settingsSaveTimer);
     }

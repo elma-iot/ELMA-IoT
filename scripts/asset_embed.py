@@ -190,6 +190,11 @@ def build_web_assets() -> None:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(prepare_payload(path))
 
+    subprocess.run(
+        ["node", str(ROOT / "scripts" / "build_board_web.mjs"), str(ROOT), str(BUILD_WEB_DIR)],
+        cwd=ROOT, check=True,
+    )
+
 
 def prepare_payload(path: Path) -> bytes:
     raw = path.read_bytes()
@@ -249,10 +254,21 @@ source_lines = [
     "",
 ]
 
-for asset_path, symbol, _, payload, _ in assets:
+def asset_guard(asset_path: str):
+    variant = re.match(r"__boards/(\d+)/", asset_path)
+    if variant:
+        return f"#if APP_COMPILED_BOARD_PROFILE_ID == {variant.group(1)}"
+    if asset_path in ("app.js", "index.html"):
+        return "#if APP_COMPILED_BOARD_PROFILE_ID == 0"
     board_asset_id = BOARD_ASSET_IDS.get(asset_path)
     if board_asset_id:
-        guard = f"#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == {board_asset_id}"
+        return f"#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == {board_asset_id}"
+    return None
+
+
+for asset_path, symbol, _, payload, _ in assets:
+    guard = asset_guard(asset_path)
+    if guard:
         header_lines.append(guard)
         source_lines.append(guard)
     header_lines.append(f"extern const uint8_t {symbol}[];")
@@ -261,7 +277,7 @@ for asset_path, symbol, _, payload, _ in assets:
     source_lines.append(f"    {c_array(payload)}")
     source_lines.append("};")
     source_lines.append(f"const size_t {symbol}_len = sizeof({symbol});")
-    if board_asset_id:
+    if guard:
         header_lines.append("#endif")
         source_lines.append("#endif")
     source_lines.append("")
@@ -271,13 +287,14 @@ header_lines.append("extern const size_t WEB_ASSET_COUNT;")
 
 source_lines.append("const EmbeddedWebAsset WEB_ASSETS[] = {")
 for asset_path, symbol, mime, _, gzip_encoded in assets:
-    board_asset_id = BOARD_ASSET_IDS.get(asset_path)
-    if board_asset_id:
-        source_lines.append(f"#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == {board_asset_id}")
+    guard = asset_guard(asset_path)
+    if guard:
+        source_lines.append(guard)
+    route_path = re.sub(r"^__boards/\d+/", "", asset_path)
     source_lines.append(
-        f'    {{"/{asset_path}", "{mime}", {symbol}, {symbol}_len, {str(gzip_encoded).lower()}}},'
+        f'    {{"/{route_path}", "{mime}", {symbol}, {symbol}_len, {str(gzip_encoded).lower()}}},'
     )
-    if board_asset_id:
+    if guard:
         source_lines.append("#endif")
 source_lines.append("};")
 source_lines.append("const size_t WEB_ASSET_COUNT = sizeof(WEB_ASSETS) / sizeof(WEB_ASSETS[0]);")

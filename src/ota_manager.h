@@ -20,6 +20,7 @@ class OtaManager {
     void setRollbackState(bool pendingVerify, const String& pendingVersion, const String& rolledBackVersion, const String& rollbackReason);
     String pendingInstallVersion() const;
     bool isBusy() const;
+    bool isFirmwareTransferActive() const;
     void loop();
     bool triggerCheck(bool applyAfterCheck);
     bool triggerReleaseRefresh(String& error);

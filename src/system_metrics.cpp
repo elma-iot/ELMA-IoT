@@ -1,4 +1,5 @@
 #include "system_metrics.h"
+#include "chip_temperature.h"
 
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
@@ -9,6 +10,7 @@
 
 namespace {
 SystemMetricsSnapshot metricsSnapshot;
+ChipTemperature chipTemperature;
 bool metricsInitialized = false;
 TaskHandle_t idleTaskHandles[portNUM_PROCESSORS] = {nullptr};
 volatile uint32_t sampledTickCounts[portNUM_PROCESSORS] = {0};
@@ -172,13 +174,11 @@ void sampleSystemMetrics() {
     // CPU frequency is governed at runtime, so unlike the other hardware
     // fields it must be refreshed instead of remaining at its boot value.
     next.hardware.cpuFreqMHz = ESP.getCpuFreqMHz();
-#if defined(ARDUINO_ARCH_ESP32)
-    next.chipTemperatureC = temperatureRead();
-    next.chipTemperatureAvailable = isfinite(next.chipTemperatureC);
-#else
-    next.chipTemperatureC = 0.0f;
-    next.chipTemperatureAvailable = false;
-#endif
+    const uint32_t sampledAt = millis();
+    chipTemperature.sample(sampledAt);
+    next.chipTemperatureC = chipTemperature.valueC();
+    next.chipTemperatureAvailable = chipTemperature.available(sampledAt);
+    next.chipTemperatureSampledAt = sampledAt - chipTemperature.ageMs(sampledAt);
     next.freeHeapBytes = ESP.getFreeHeap();
     next.minFreeHeapBytes = ESP.getMinFreeHeap();
     next.largestHeapBlockBytes = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
@@ -238,6 +238,13 @@ void appendSystemMetricsJson(JsonObject root) {
         cpuLoadCores.add(snapshot.cpuLoadCorePercent[coreIndex]);
     }
     system["chipTemperatureAvailable"] = snapshot.chipTemperatureAvailable;
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    system["chipTemperatureEstimated"] = true;
+#else
+    system["chipTemperatureEstimated"] = false;
+#endif
+    system["chipTemperatureReason"] = snapshot.chipTemperatureAvailable ? "" : "Waiting for a valid internal sensor reading; invalid or expired samples are not displayed.";
+    system["chipTemperatureAgeMs"] = snapshot.chipTemperatureAvailable ? millis() - snapshot.chipTemperatureSampledAt : 0;
     if (snapshot.chipTemperatureAvailable) {
         system["chipTemperatureC"] = snapshot.chipTemperatureC;
     } else {

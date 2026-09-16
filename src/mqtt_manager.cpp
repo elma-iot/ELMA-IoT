@@ -1,8 +1,10 @@
+#include "device_log.h"
 #include "mqtt_manager.h"
 
 #include "motor_runtime_config.h"
 #include "system_metrics.h"
 #include "version.h"
+#include <esp_heap_caps.h>
 
 namespace {
 String payloadToString(char* payload, size_t len) {
@@ -363,7 +365,7 @@ void MqttManager::begin(const SettingsBundle& settings, AppState& appState, WiFi
     client_.onConnect([this](bool sessionPresent) { handleConnected(sessionPresent); });
     client_.onDisconnect([this](AsyncMqttClientDisconnectReason reason) { handleDisconnected(reason); });
     client_.onSubscribe([this](uint16_t, uint8_t) { noteBrokerActivity(); });
-    client_.onPublish([this](uint16_t) { noteBrokerActivity(); });
+    client_.onPublish([this](uint16_t) { releasePublishSlot(); noteBrokerActivity(); });
     client_.onMessage([this](char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
         handleMessage(topic, payload, properties, len, index, total);
     });
@@ -393,7 +395,7 @@ void MqttManager::applySettings(const SettingsBundle& settings) {
 
     if (client_.connected()) {
         if (settings_.mqtt.discoveryEnabled && (discoverySettingsChanged || !discoveryPublishedForSession_)) {
-            discoveryPublishPending_ = true;
+            publishDiscovery();
         }
         statePublishPending_ = true;
     }
@@ -401,14 +403,21 @@ void MqttManager::applySettings(const SettingsBundle& settings) {
 
 void MqttManager::configureClient() {
     client_.disconnect(true);
-    client_.setServer(settings_.mqtt.host.c_str(), settings_.mqtt.port);
-    client_.setClientId(settings_.mqtt.clientId.isEmpty() ? settings_.device.deviceName.c_str() : settings_.mqtt.clientId.c_str());
+    // AsyncMqttClient borrows these pointers; neither temporaries nor a
+    // SettingsBundle replaced by a later UI save may own their storage.
+    clientHost_ = settings_.mqtt.host;
+    clientId_ = settings_.mqtt.clientId.isEmpty() ? settings_.device.deviceName : settings_.mqtt.clientId;
+    clientUsername_ = settings_.mqtt.username;
+    clientPassword_ = settings_.mqtt.password;
+    clientWillTopic_ = HaBridge::availabilityTopic(settings_);
+    client_.setServer(clientHost_.c_str(), settings_.mqtt.port);
+    client_.setClientId(clientId_.c_str());
     client_.setCredentials(
-        settings_.mqtt.username.isEmpty() ? nullptr : settings_.mqtt.username.c_str(),
-        settings_.mqtt.username.isEmpty() ? nullptr : settings_.mqtt.password.c_str());
+        clientUsername_.isEmpty() ? nullptr : clientUsername_.c_str(),
+        clientUsername_.isEmpty() ? nullptr : clientPassword_.c_str());
     client_.setKeepAlive(MQTT_KEEP_ALIVE_SECONDS);
     client_.setCleanSession(true);
-    client_.setWill(HaBridge::availabilityTopic(settings_).c_str(), 1, true, "offline");
+    client_.setWill(clientWillTopic_.c_str(), 1, true, "offline");
     lastConnectAttemptAt_ = 0;
     lastBrokerActivityAt_ = 0;
     if (settings_.mqtt.host.isEmpty()) {
@@ -421,7 +430,7 @@ void MqttManager::configureClient() {
     }
 
     if (!settings_.mqtt.host.isEmpty() && wifiManager_ != nullptr && wifiManager_->isConnected()) {
-        Serial.printf("[mqtt] immediate reconnect attempt %u/%u to %s:%u\n",
+        DebugLog.printf("[mqtt] immediate reconnect attempt %u/%u to %s:%u\n",
                   static_cast<unsigned>(min<uint8_t>(static_cast<uint8_t>(consecutiveFailureCount_ + 1), MQTT_MAX_CONSECUTIVE_FAILURES)),
                       static_cast<unsigned>(MQTT_MAX_CONSECUTIVE_FAILURES),
                       settings_.mqtt.host.c_str(), settings_.mqtt.port);
@@ -431,26 +440,30 @@ void MqttManager::configureClient() {
 }
 
 void MqttManager::loop() {
+    publisherTask_ = xTaskGetCurrentTaskHandle();
     handleWiFiState();
     connectIfNeeded();
     if (client_.connected()) {
-        if (discoveryPublishPending_ && settings_.mqtt.discoveryEnabled) {
-            publishDiscovery();
-            discoveryPublishPending_ = false;
-            discoveryPublishedForSession_ = true;
+        if (discoveryRestartPending_.exchange(false)) {
+            discoveryCursor_ = 0;
+            stateCursor_ = 0;
         }
-        if (statePublishPending_) {
-            publishState();
+        const bool memoryAvailable = ESP.getFreeHeap() >= 40000 &&
+            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) >= 8192;
+        if (memoryAvailable && discoveryPublishPending_ && settings_.mqtt.discoveryEnabled &&
+            pendingPublishes_ < 4 && millis() - lastDiscoveryStepAt_ >= 100UL &&
+            (otaManager_ == nullptr || !otaManager_->isBusy())) {
+            lastDiscoveryStepAt_ = millis();
+            publishDiscoveryNow();
+        }
+        if (memoryAvailable && pendingPublishes_ < 4 && statePublishPending_ && millis() - lastStateAttemptAt_ >= 1000UL) {
+            lastStateAttemptAt_ = millis();
             statePublishPending_ = false;
+            publishStateNow();
         }
     }
-    if (client_.connected() && lastBrokerActivityAt_ != 0 && millis() - lastBrokerActivityAt_ > MQTT_STALE_CONNECTION_MS) {
-        Serial.printf("[mqtt] no broker activity for %lu ms, forcing reconnect\n",
-                      static_cast<unsigned long>(MQTT_STALE_CONNECTION_MS));
-        lastConnectAttemptAt_ = 0;
-        client_.disconnect(true);
-        return;
-    }
+    // AsyncMqttClient's keepalive tracks PINGRESP and disconnects on timeout.
+    // Application-data silence is normal while publishing is deferred.
     if (isConnected() && millis() - lastStatePublishAt_ > 30000UL) {
         publishState();
     }
@@ -483,13 +496,13 @@ void MqttManager::handleWiFiState() {
         lastBrokerActivityAt_ = 0;
         lastConnectAttemptAt_ = millis();
         if (client_.connected()) {
-            Serial.println("[mqtt] Wi-Fi dropped, forcing MQTT disconnect");
+            DebugLog.println("[mqtt] Wi-Fi dropped, forcing MQTT disconnect");
             client_.disconnect(true);
         }
         return;
     }
 
-    Serial.println("[mqtt] Wi-Fi restored, resetting MQTT session");
+    DebugLog.println("[mqtt] Wi-Fi restored, resetting MQTT session");
     discoveryPublishedForSession_ = false;
     lastOtaDiscoverySignature_ = "";
     lastConnectAttemptAt_ = 0;
@@ -499,7 +512,7 @@ void MqttManager::handleWiFiState() {
 
 void MqttManager::handleConnected(bool sessionPresent) {
     (void)sessionPresent;
-    Serial.printf("[mqtt] connected host=%s port=%u\n", settings_.mqtt.host.c_str(), settings_.mqtt.port);
+    DebugLog.printf("[mqtt] connected host=%s port=%u\n", settings_.mqtt.host.c_str(), settings_.mqtt.port);
     consecutiveFailureCount_ = 0;
     recoveryRebootRecommended_ = false;
     wifiWasConnected_ = wifiManager_ != nullptr && wifiManager_->isConnected();
@@ -509,7 +522,7 @@ void MqttManager::handleConnected(bool sessionPresent) {
         appState_->setMqttConnected(true);
     }
     const MqttFeatureFlags featureFlags = configuredMqttFeatures(settings_, motorStatusAppender_);
-    client_.publish(HaBridge::availabilityTopic(settings_).c_str(), 1, true, "online");
+    publishPacket(HaBridge::availabilityTopic(settings_).c_str(), 1, true, "online");
     if (featureFlags.audio) {
         client_.subscribe(HaBridge::commandTopic(settings_, "play").c_str(), 1);
         client_.subscribe(HaBridge::commandTopic(settings_, "tts").c_str(), 1);
@@ -564,7 +577,9 @@ void MqttManager::handleConnected(bool sessionPresent) {
 }
 
 void MqttManager::handleDisconnected(AsyncMqttClientDisconnectReason reason) {
-    Serial.printf("[mqtt] disconnected reason=%d\n", static_cast<int>(reason));
+    pendingPublishes_ = 0;
+    discoveryRestartPending_ = true;
+    DebugLog.printf("[mqtt] disconnected reason=%d\n", static_cast<int>(reason));
     discoveryPublishedForSession_ = false;
     lastOtaDiscoverySignature_ = "";
     lastBrokerActivityAt_ = 0;
@@ -873,7 +888,7 @@ void MqttManager::publishJson(const String& topic, const JsonDocument& doc, bool
     }
     String payload;
     serializeJson(doc, payload);
-    client_.publish(topic.c_str(), 1, retained, payload.c_str());
+    publishPacket(topic.c_str(), 1, retained, doc.overflowed() ? nullptr : payload.c_str(), payload.length());
     noteBrokerActivity();
 }
 
@@ -900,16 +915,63 @@ String MqttManager::currentConfigUrl() const {
     return String();
 }
 
-void MqttManager::publishState() {
+void MqttManager::releasePublishSlot() {
+    uint8_t count = pendingPublishes_.load();
+    while (count && !pendingPublishes_.compare_exchange_weak(count, count - 1)) {}
+}
+
+uint16_t MqttManager::publishPacket(const char* topic, uint8_t qos, bool retained, const char* payload, size_t length) {
+    const bool statePass = xTaskGetCurrentTaskHandle() == publisherTask_ && statePassActive_;
+    if (statePass && statePassIndex_++ < stateCursor_) return 1;
+    if (statePass && statePassBlocked_) return 0;
+    auto defer = [&]() -> uint16_t {
+        if (statePass) statePassBlocked_ = true;
+        statePublishPending_ = true;
+        return 0;
+    };
+    if (!client_.connected() || !topic || !*topic || !payload) return defer();
+    if (!length) length = strlen(payload);
+    const size_t bytes = strlen(topic) + length + 64;
+    // The library allocates a vector and dereferences topic without checking
+    // allocation failure. Reserve heap for audio/TLS and bound QoS1 backlog.
+    if (ESP.getFreeHeap() < 24000 + bytes * 2 ||
+        heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < max(size_t(4096), bytes * 2)) return defer();
+    uint8_t count = pendingPublishes_.load();
+    do {
+        if (count >= 4) return defer();
+    } while (!pendingPublishes_.compare_exchange_weak(count, count + 1));
+    const uint16_t id = client_.publish(topic, qos, retained, payload, length);
+    if (!id) { releasePublishSlot(); return defer(); }
+    if (statePass) ++stateCursor_;
+    return id;
+}
+
+bool MqttManager::publishDiscoveryStep(size_t index, const std::function<uint16_t()>& send) {
+    if (index != discoveryCursor_) return false;
+    if (send()) ++discoveryCursor_;
+    return true;
+}
+
+void MqttManager::publishState() { statePublishPending_ = true; }
+void MqttManager::publishChipTemperature() { statePublishPending_ = true; }
+void MqttManager::publishDiscovery() {
+    discoveryRestartPending_ = true;
+    discoveryPublishPending_ = true;
+}
+
+void MqttManager::publishStateNow() {
     if (!client_.connected() || appState_ == nullptr) {
         return;
     }
+    statePassActive_ = true;
+    statePassBlocked_ = false;
+    statePassIndex_ = 0;
     lastStatePublishAt_ = millis();
     const AppStateSnapshot snapshot = appState_->snapshot();
     const MqttFeatureFlags featureFlags = configuredMqttFeatures(settings_, motorStatusAppender_);
 
     auto clearRetainedTopic = [this](const String& topic) {
-        client_.publish(topic.c_str(), 1, true, "");
+        publishPacket(topic.c_str(), 1, true, "");
     };
 
     if (featureFlags.audio) {
@@ -941,7 +1003,7 @@ void MqttManager::publishState() {
     network["mqttConnected"] = snapshot.network.mqttConnected;
     publishJson(HaBridge::networkStateTopic(settings_), network, true);
 
-    publishChipTemperature();
+    publishChipTemperatureNow();
 
     if (featureFlags.battery) {
         JsonDocument battery;
@@ -1003,29 +1065,32 @@ void MqttManager::publishState() {
         clearRetainedTopic(HaBridge::motorStateTopic(settings_));
     }
 
-    if (settings_.mqtt.discoveryEnabled && discoveryPublishedForSession_ && otaDiscoverySignature != lastOtaDiscoverySignature_) {
+    if (settings_.mqtt.discoveryEnabled && discoveryPublishedForSession_ && otaDiscoverySignature != lastOtaDiscoverySignature_ && !discoveryPublishPending_) {
         publishDiscovery();
     }
 
     if (featureFlags.audio) {
-        client_.publish((settings_.mqtt.baseTopic + "/state/volume").c_str(), 1, true, String(snapshot.playback.volumePercent).c_str());
+        publishPacket((settings_.mqtt.baseTopic + "/state/volume").c_str(), 1, true, String(snapshot.playback.volumePercent).c_str());
     }
     if (featureFlags.battery) {
-        client_.publish((settings_.mqtt.baseTopic + "/state/battery_voltage").c_str(), 1, true, String(snapshot.battery.voltage, 3).c_str());
-        client_.publish((settings_.mqtt.baseTopic + "/state/battery_percent").c_str(), 1, true, String(batteryPercentFromVoltage(snapshot.battery.voltage)).c_str());
-        client_.publish((settings_.mqtt.baseTopic + "/state/battery_charging").c_str(), 1, true, mqttBinaryPayload(snapshot.battery.charging));
+        publishPacket((settings_.mqtt.baseTopic + "/state/battery_voltage").c_str(), 1, true, String(snapshot.battery.voltage, 3).c_str());
+        publishPacket((settings_.mqtt.baseTopic + "/state/battery_percent").c_str(), 1, true, String(batteryPercentFromVoltage(snapshot.battery.voltage)).c_str());
+        publishPacket((settings_.mqtt.baseTopic + "/state/battery_charging").c_str(), 1, true, mqttBinaryPayload(snapshot.battery.charging));
     }
 #ifdef APP_ENABLE_HACS_MQTT
     if (featureFlags.audio) {
-        client_.publish(HaBridge::hacsMediaPlayerStateTopic(settings_, "state").c_str(), 1, true, normalizedHacsPlaybackState(snapshot.playback.state).c_str());
-        client_.publish(HaBridge::hacsMediaPlayerStateTopic(settings_, "title").c_str(), 1, true, snapshot.playback.title.c_str());
-        client_.publish(HaBridge::hacsMediaPlayerStateTopic(settings_, "mediatype").c_str(), 1, true, normalizedHacsMediaType(snapshot.playback.type).c_str());
-        client_.publish(HaBridge::hacsMediaPlayerStateTopic(settings_, "volume").c_str(), 1, true, hacsVolumePayload(snapshot.playback.volumePercent).c_str());
+        publishPacket(HaBridge::hacsMediaPlayerStateTopic(settings_, "state").c_str(), 1, true, normalizedHacsPlaybackState(snapshot.playback.state).c_str());
+        publishPacket(HaBridge::hacsMediaPlayerStateTopic(settings_, "title").c_str(), 1, true, snapshot.playback.title.c_str());
+        publishPacket(HaBridge::hacsMediaPlayerStateTopic(settings_, "mediatype").c_str(), 1, true, normalizedHacsMediaType(snapshot.playback.type).c_str());
+        publishPacket(HaBridge::hacsMediaPlayerStateTopic(settings_, "volume").c_str(), 1, true, hacsVolumePayload(snapshot.playback.volumePercent).c_str());
     }
 #endif
+    statePassActive_ = false;
+    if (statePassBlocked_) statePublishPending_ = true;
+    else stateCursor_ = 0;
 }
 
-void MqttManager::publishChipTemperature() {
+void MqttManager::publishChipTemperatureNow() {
     if (!client_.connected()) {
         return;
     }
@@ -1033,50 +1098,33 @@ void MqttManager::publishChipTemperature() {
     const SystemMetricsSnapshot metrics = getSystemMetricsSnapshot();
     const String topic = chipTemperatureStateTopic(settings_);
     if (!metrics.chipTemperatureAvailable) {
-        client_.publish(topic.c_str(), 1, true, "");
+        publishPacket(topic.c_str(), 1, true, "");
         noteBrokerActivity();
         return;
     }
 
-    client_.publish(topic.c_str(), 1, true, String(metrics.chipTemperatureC, 1).c_str());
+    publishPacket(topic.c_str(), 1, true, String(metrics.chipTemperatureC, 1).c_str());
     noteBrokerActivity();
 }
 
 void MqttManager::publishBattery(float voltage, float rawAdcVoltage, uint16_t rawAdc, bool charging) {
-    if (!client_.connected()) {
-        return;
-    }
-    if (!configuredMqttFeatures(settings_, motorStatusAppender_).battery) {
-        client_.publish(HaBridge::batteryStateTopic(settings_).c_str(), 1, true, "");
-        client_.publish((settings_.mqtt.baseTopic + "/state/battery_voltage").c_str(), 1, true, "");
-        client_.publish((settings_.mqtt.baseTopic + "/state/battery_percent").c_str(), 1, true, "");
-        client_.publish((settings_.mqtt.baseTopic + "/state/battery_charging").c_str(), 1, true, "");
-        noteBrokerActivity();
-        return;
-    }
-    JsonDocument battery;
-    battery["voltage"] = voltage;
-    battery["percent"] = batteryPercentFromVoltage(voltage);
-    battery["rawAdcVoltage"] = rawAdcVoltage;
-    battery["rawAdc"] = rawAdc;
-    battery["charging"] = charging;
-    publishJson(HaBridge::batteryStateTopic(settings_), battery, true);
-    client_.publish((settings_.mqtt.baseTopic + "/state/battery_voltage").c_str(), 1, true, String(voltage, 3).c_str());
-    client_.publish((settings_.mqtt.baseTopic + "/state/battery_percent").c_str(), 1, true, String(batteryPercentFromVoltage(voltage)).c_str());
-    client_.publish((settings_.mqtt.baseTopic + "/state/battery_charging").c_str(), 1, true, mqttBinaryPayload(charging));
-    noteBrokerActivity();
+    (void)voltage; (void)rawAdcVoltage; (void)rawAdc; (void)charging;
+    publishState();
 }
 
-void MqttManager::publishDiscovery() {
+void MqttManager::publishDiscoveryNow() {
     if (!client_.connected() || !settings_.mqtt.discoveryEnabled) {
         return;
     }
+    size_t packetIndex = 0;
     const String configurationUrl = currentConfigUrl();
     const MqttFeatureFlags featureFlags = configuredMqttFeatures(settings_, motorStatusAppender_);
     std::vector<String> firmwareOptions;
     String otaDiscoverySignature = configurationUrl;
-    auto clearDiscoveryTopic = [this](const char* component, const char* objectId) {
-        client_.publish(HaBridge::discoveryTopic(settings_, component, objectId).c_str(), 1, true, "");
+    auto clearDiscoveryTopic = [this, &packetIndex](const char* component, const char* objectId) {
+        return publishDiscoveryStep(packetIndex++, [&]() {
+            return publishPacket(HaBridge::discoveryTopic(settings_, component, objectId).c_str(), 1, true, "");
+        });
     };
     if (otaManager_ != nullptr) {
         JsonDocument otaInfo;
@@ -1100,128 +1148,128 @@ void MqttManager::publishDiscovery() {
         }
     }
     if (featureFlags.battery) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "sensor", "battery_voltage").c_str(), 1, true,
-            HaBridge::discoveryPayloadSensor(settings_, "battery_voltage", "Battery Voltage", HaBridge::batteryStateTopic(settings_).c_str(), "{{ value_json.voltage | float(0) | round(2) }}", "V", "voltage", "measurement", "mdi:battery", 2, configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadSensor(settings_, "battery_voltage", "Battery Voltage", HaBridge::batteryStateTopic(settings_).c_str(), "{{ value_json.voltage | float(0) | round(2) }}", "V", "voltage", "measurement", "mdi:battery", 2, configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "sensor", "battery_percent").c_str(), 1, true,
-            HaBridge::discoveryPayloadSensor(settings_, "battery_percent", "Battery", HaBridge::batteryStateTopic(settings_).c_str(), "{{ value_json.percent | int(0) }}", "%", "battery", "measurement", "mdi:battery-medium", 0, configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadSensor(settings_, "battery_percent", "Battery", HaBridge::batteryStateTopic(settings_).c_str(), "{{ value_json.percent | int(0) }}", "%", "battery", "measurement", "mdi:battery-medium", 0, configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "binary_sensor", "battery_charging").c_str(), 1, true,
-            HaBridge::discoveryPayloadBinarySensor(settings_, "battery_charging", "Battery Charging", HaBridge::batteryStateTopic(settings_).c_str(), "{{ 'ON' if value_json.charging else 'OFF' }}", "battery_charging", "ON", "OFF", "mdi:battery-charging", configurationUrl).c_str());
+            HaBridge::discoveryPayloadBinarySensor(settings_, "battery_charging", "Battery Charging", HaBridge::batteryStateTopic(settings_).c_str(), "{{ 'ON' if value_json.charging else 'OFF' }}", "battery_charging", "ON", "OFF", "mdi:battery-charging", configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("sensor", "battery_voltage");
-        clearDiscoveryTopic("sensor", "battery_percent");
-        clearDiscoveryTopic("binary_sensor", "battery_charging");
+        if (clearDiscoveryTopic("sensor", "battery_voltage")) return;
+        if (clearDiscoveryTopic("sensor", "battery_percent")) return;
+        if (clearDiscoveryTopic("binary_sensor", "battery_charging")) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "wifi_rssi").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "wifi_rssi", "Wi-Fi RSSI", HaBridge::networkStateTopic(settings_).c_str(), "{{ value_json.wifiRssi }}", "dBm", "signal_strength", "measurement", "mdi:wifi", -1, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "wifi_rssi", "Wi-Fi RSSI", HaBridge::networkStateTopic(settings_).c_str(), "{{ value_json.wifiRssi }}", "dBm", "signal_strength", "measurement", "mdi:wifi", -1, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "connected_ip").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "connected_ip", "Connected IP", HaBridge::networkStateTopic(settings_).c_str(), "{{ value_json.ip if value_json.wifiConnected and value_json.ip else 'offline' }}", nullptr, nullptr, nullptr, "mdi:ip-network-outline", -1, configurationUrl).c_str());
+        HaBridge::discoveryPayloadSensor(settings_, "connected_ip", "Connected IP", HaBridge::networkStateTopic(settings_).c_str(), "{{ value_json.ip if value_json.wifiConnected and value_json.ip else 'offline' }}", nullptr, nullptr, nullptr, "mdi:ip-network-outline", -1, configurationUrl).c_str()); })) return;
     if (getSystemMetricsSnapshot().chipTemperatureAvailable) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "sensor", "cpu_temperature").c_str(), 1, true,
-            HaBridge::discoveryPayloadSensor(settings_, "cpu_temperature", "CPU Temperature", chipTemperatureStateTopic(settings_).c_str(), "{{ value | float(0) | round(1) }}", "°C", "temperature", "measurement", "mdi:thermometer", 1, configurationUrl).c_str());
+            HaBridge::discoveryPayloadSensor(settings_, "cpu_temperature", "CPU Temperature", chipTemperatureStateTopic(settings_).c_str(), "{{ value | float(0) | round(1) }}", "°C", "temperature", "measurement", "mdi:thermometer", 1, configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("sensor", "cpu_temperature");
+        if (clearDiscoveryTopic("sensor", "cpu_temperature")) return;
     }
     if (featureFlags.audio) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "sensor", "playback_state").c_str(), 1, true,
-            HaBridge::discoveryPayloadSensor(settings_, "playback_state", "Playback State", HaBridge::playbackStateTopic(settings_).c_str(), "{{ value_json.state }}", nullptr, nullptr, nullptr, "mdi:speaker-wireless", -1, configurationUrl).c_str());
+            HaBridge::discoveryPayloadSensor(settings_, "playback_state", "Playback State", HaBridge::playbackStateTopic(settings_).c_str(), "{{ value_json.state }}", nullptr, nullptr, nullptr, "mdi:speaker-wireless", -1, configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("sensor", "playback_state");
+        if (clearDiscoveryTopic("sensor", "playback_state")) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_ota_status").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_ota_status", "Firmware OTA Status", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.updateStatus if value_json.busy and value_json.updateStatus else (value_json.phase if value_json.busy else (value_json.lastError if value_json.lastError else (value_json.lastResult if value_json.lastResult else value_json.updateStatus))) }}", nullptr, nullptr, nullptr, "mdi:update", -1, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_ota_status", "Firmware OTA Status", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.updateStatus if value_json.busy and value_json.updateStatus else (value_json.phase if value_json.busy else (value_json.lastError if value_json.lastError else (value_json.lastResult if value_json.lastResult else value_json.updateStatus))) }}", nullptr, nullptr, nullptr, "mdi:update", -1, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_installed_version").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_installed_version", "Installed Firmware", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.currentVersion if value_json.currentVersion else 'unknown' }}", nullptr, nullptr, nullptr, "mdi:chip", -1, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_installed_version", "Installed Firmware", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.currentVersion if value_json.currentVersion else 'unknown' }}", nullptr, nullptr, nullptr, "mdi:chip", -1, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_latest_version").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_latest_version", "Latest Compatible Firmware", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.latestVersion if value_json.latestVersion else (value_json.currentVersion if value_json.currentVersion else 'unknown') }}", nullptr, nullptr, nullptr, "mdi:source-branch", -1, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_latest_version", "Latest Compatible Firmware", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.latestVersion if value_json.latestVersion else (value_json.currentVersion if value_json.currentVersion else 'unknown') }}", nullptr, nullptr, nullptr, "mdi:source-branch", -1, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_available_builds").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_available_builds", "Compatible Firmware Builds", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.latestAssetsSummary if value_json.latestAssetsSummary else (value_json.compatibleVersionsSummary if value_json.compatibleVersionsSummary else 'Run Check Firmware Releases') }}", nullptr, nullptr, nullptr, "mdi:format-list-bulleted", -1, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_available_builds", "Compatible Firmware Builds", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.latestAssetsSummary if value_json.latestAssetsSummary else (value_json.compatibleVersionsSummary if value_json.compatibleVersionsSummary else 'Run Check Firmware Releases') }}", nullptr, nullptr, nullptr, "mdi:format-list-bulleted", -1, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_ota_progress").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_ota_progress", "Firmware OTA Progress", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.progressPercent | int(0) }}", "%", nullptr, nullptr, "mdi:progress-download", 0, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_ota_progress", "Firmware OTA Progress", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.progressPercent | int(0) }}", "%", nullptr, nullptr, "mdi:progress-download", 0, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_last_rollback_version").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_last_rollback_version", "Last Rolled Back Firmware", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.rolledBackVersion if value_json.rolledBackVersion else '' }}", nullptr, nullptr, nullptr, "mdi:history", -1, configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_last_rollback_version", "Last Rolled Back Firmware", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.rolledBackVersion if value_json.rolledBackVersion else '' }}", nullptr, nullptr, nullptr, "mdi:history", -1, configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "sensor", "firmware_last_rollback_reason").c_str(), 1, true,
-        HaBridge::discoveryPayloadSensor(settings_, "firmware_last_rollback_reason", "Last Rollback Reason", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.rollbackReason if value_json.rollbackReason else '' }}", nullptr, nullptr, nullptr, "mdi:alert-circle-outline", -1, configurationUrl).c_str());
+        HaBridge::discoveryPayloadSensor(settings_, "firmware_last_rollback_reason", "Last Rollback Reason", HaBridge::otaStateTopic(settings_).c_str(), "{{ value_json.rollbackReason if value_json.rollbackReason else '' }}", nullptr, nullptr, nullptr, "mdi:alert-circle-outline", -1, configurationUrl).c_str()); })) return;
     if (featureFlags.audio) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "number", "volume").c_str(), 1, true,
-            HaBridge::discoveryPayloadNumber(settings_, "volume", "Notifier Volume", (settings_.mqtt.baseTopic + "/state/volume").c_str(), HaBridge::commandTopic(settings_, "volume").c_str(), 0, 100, 1, "%", "mdi:volume-high", configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadNumber(settings_, "volume", "Notifier Volume", (settings_.mqtt.baseTopic + "/state/volume").c_str(), HaBridge::commandTopic(settings_, "volume").c_str(), 0, 100, 1, "%", "mdi:volume-high", configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", "alarm_trigger").c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, "alarm_trigger", "Alarm Trigger", HaBridge::commandTopic(settings_, "alarm").c_str(), "trigger", "mdi:alarm-bell", configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadButton(settings_, "alarm_trigger", "Alarm Trigger", HaBridge::commandTopic(settings_, "alarm").c_str(), "trigger", "mdi:alarm-bell", configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", "alarm_stop").c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, "alarm_stop", "Alarm Stop", HaBridge::commandTopic(settings_, "alarm").c_str(), "stop", "mdi:alarm-off", configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadButton(settings_, "alarm_stop", "Alarm Stop", HaBridge::commandTopic(settings_, "alarm").c_str(), "stop", "mdi:alarm-off", configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", "notify").c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, "notify", "Play Notification Cue", HaBridge::commandTopic(settings_, "notify").c_str(), "notify", "mdi:message-badge", configurationUrl).c_str());
+            HaBridge::discoveryPayloadButton(settings_, "notify", "Play Notification Cue", HaBridge::commandTopic(settings_, "notify").c_str(), "notify", "mdi:message-badge", configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("number", "volume");
-        clearDiscoveryTopic("button", "alarm_trigger");
-        clearDiscoveryTopic("button", "alarm_stop");
-        clearDiscoveryTopic("button", "notify");
+        if (clearDiscoveryTopic("number", "volume")) return;
+        if (clearDiscoveryTopic("button", "alarm_trigger")) return;
+        if (clearDiscoveryTopic("button", "alarm_stop")) return;
+        if (clearDiscoveryTopic("button", "notify")) return;
     }
     if (featureFlags.display) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", "display_trigger").c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, "display_trigger", "Display Trigger", HaBridge::commandTopic(settings_, "display_trigger").c_str(), "trigger", "mdi:gesture-tap-button", configurationUrl).c_str());
+            HaBridge::discoveryPayloadButton(settings_, "display_trigger", "Display Trigger", HaBridge::commandTopic(settings_, "display_trigger").c_str(), "trigger", "mdi:gesture-tap-button", configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("button", "display_trigger");
+        if (clearDiscoveryTopic("button", "display_trigger")) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "button", "reboot").c_str(), 1, true,
-        HaBridge::discoveryPayloadButton(settings_, "reboot", "Reboot Device", HaBridge::commandTopic(settings_, "reboot").c_str(), "reboot", "mdi:restart", configurationUrl).c_str());
+        HaBridge::discoveryPayloadButton(settings_, "reboot", "Reboot Device", HaBridge::commandTopic(settings_, "reboot").c_str(), "reboot", "mdi:restart", configurationUrl).c_str()); })) return;
     if (featureFlags.storage) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", "storage_sd_remount").c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, "storage_sd_remount", "Remount SD Card", HaBridge::commandTopic(settings_, "storage/sd_remount").c_str(), "remount", "mdi:sd", configurationUrl).c_str());
+            HaBridge::discoveryPayloadButton(settings_, "storage_sd_remount", "Remount SD Card", HaBridge::commandTopic(settings_, "storage/sd_remount").c_str(), "remount", "mdi:sd", configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("button", "storage_sd_remount");
+        if (clearDiscoveryTopic("button", "storage_sd_remount")) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "button", "web_ui_lock").c_str(), 1, true,
-        HaBridge::discoveryPayloadButton(settings_, "web_ui_lock", "Lock Web UI", HaBridge::commandTopic(settings_, "web_ui").c_str(), "lock", "mdi:web-off", configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadButton(settings_, "web_ui_lock", "Lock Web UI", HaBridge::commandTopic(settings_, "web_ui").c_str(), "lock", "mdi:web-off", configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "button", "web_ui_unlock").c_str(), 1, true,
-        HaBridge::discoveryPayloadButton(settings_, "web_ui_unlock", "Unlock Web UI", HaBridge::commandTopic(settings_, "web_ui").c_str(), "unlock", "mdi:web-check", configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadButton(settings_, "web_ui_unlock", "Unlock Web UI", HaBridge::commandTopic(settings_, "web_ui").c_str(), "unlock", "mdi:web-check", configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "select", "firmware_version_select").c_str(), 1, true,
-        HaBridge::discoveryPayloadSelect(settings_, "firmware_version_select", "Firmware Version", HaBridge::otaStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, "ota/select_version").c_str(), firmwareOptions, "mdi:format-list-bulleted-square", "{{ value_json.selectedOption if value_json.selectedOption else '' }}", configurationUrl).c_str());
+        HaBridge::discoveryPayloadSelect(settings_, "firmware_version_select", "Firmware Version", HaBridge::otaStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, "ota/select_version").c_str(), firmwareOptions, "mdi:format-list-bulleted-square", "{{ value_json.selectedOption if value_json.selectedOption else '' }}", configurationUrl).c_str()); })) return;
     if (featureFlags.audio) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", "stop").c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, "stop", "Stop Playback", HaBridge::commandTopic(settings_, "stop").c_str(), "stop", "mdi:stop", configurationUrl).c_str());
+            HaBridge::discoveryPayloadButton(settings_, "stop", "Stop Playback", HaBridge::commandTopic(settings_, "stop").c_str(), "stop", "mdi:stop", configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("button", "stop");
+        if (clearDiscoveryTopic("button", "stop")) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "button", "firmware_check").c_str(), 1, true,
-        HaBridge::discoveryPayloadButton(settings_, "firmware_check", "Check Firmware Releases", HaBridge::commandTopic(settings_, "ota/check").c_str(), "check", "mdi:update", configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadButton(settings_, "firmware_check", "Check Firmware Releases", HaBridge::commandTopic(settings_, "ota/check").c_str(), "check", "mdi:update", configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "switch", "firmware_auto_update").c_str(), 1, true,
-        HaBridge::discoveryPayloadSwitch(settings_, "firmware_auto_update", "Firmware Auto Update", HaBridge::otaStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, "ota/auto_update").c_str(), "{{ 'ON' if value_json.autoUpdate else 'OFF' }}", "mdi:auto-upload", configurationUrl).c_str());
-    client_.publish(
+        HaBridge::discoveryPayloadSwitch(settings_, "firmware_auto_update", "Firmware Auto Update", HaBridge::otaStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, "ota/auto_update").c_str(), "{{ 'ON' if value_json.autoUpdate else 'OFF' }}", "mdi:auto-upload", configurationUrl).c_str()); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "button", "firmware_install").c_str(), 1, true,
-        HaBridge::discoveryPayloadButton(settings_, "firmware_install", "Install Firmware", HaBridge::commandTopic(settings_, "ota/install").c_str(), "install", "mdi:package-up", configurationUrl).c_str());
+        HaBridge::discoveryPayloadButton(settings_, "firmware_install", "Install Firmware", HaBridge::commandTopic(settings_, "ota/install").c_str(), "install", "mdi:package-up", configurationUrl).c_str()); })) return;
     if (featureFlags.audio) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "text", "play_url").c_str(), 1, true,
-            HaBridge::discoveryPayloadText(settings_, "play_url", "Play URL", HaBridge::commandTopic(settings_, "play").c_str(), "mdi:link", HaBridge::playbackStateTopic(settings_).c_str(), "{{ value_json.url if value_json.url else '' }}", configurationUrl).c_str());
+            HaBridge::discoveryPayloadText(settings_, "play_url", "Play URL", HaBridge::commandTopic(settings_, "play").c_str(), "mdi:link", HaBridge::playbackStateTopic(settings_).c_str(), "{{ value_json.url if value_json.url else '' }}", configurationUrl).c_str()); })) return;
     } else {
-        clearDiscoveryTopic("text", "play_url");
+        if (clearDiscoveryTopic("text", "play_url")) return;
     }
     for (uint8_t channelIndex = 0; channelIndex < 2; ++channelIndex) {
         if (!featureFlags.motorChannels[channelIndex]) {
@@ -1243,56 +1291,58 @@ void MqttManager::publishDiscovery() {
             ? "{{ value_json.channels[0].closeDurationMs | int(5000) if value_json.channels and value_json.channels|count > 0 else 5000 }}"
             : "{{ value_json.channels[1].closeDurationMs | int(5000) if value_json.channels and value_json.channels|count > 1 else 5000 }}";
 
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "sensor", (channelSuffix + String("_status")).c_str()).c_str(), 1, true,
-            HaBridge::discoveryPayloadSensor(settings_, (channelSuffix + String("_status")).c_str(), (channelName + " Status").c_str(), HaBridge::motorStateTopic(settings_).c_str(), channelStatusTemplate, nullptr, nullptr, nullptr, "mdi:garage-variant", -1, configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadSensor(settings_, (channelSuffix + String("_status")).c_str(), (channelName + " Status").c_str(), HaBridge::motorStateTopic(settings_).c_str(), channelStatusTemplate, nullptr, nullptr, nullptr, "mdi:garage-variant", -1, configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "switch", (channelSuffix + String("_valve")).c_str()).c_str(), 1, true,
-            HaBridge::discoveryPayloadSwitch(settings_, (channelSuffix + String("_valve")).c_str(), (channelName + " Valve").c_str(), HaBridge::motorStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/switch").c_str()).c_str(), channelSwitchTemplate, "mdi:valve", configurationUrl, "OPEN", "CLOSE", false).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadSwitch(settings_, (channelSuffix + String("_valve")).c_str(), (channelName + " Valve").c_str(), HaBridge::motorStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/switch").c_str()).c_str(), channelSwitchTemplate, "mdi:valve", configurationUrl, "OPEN", "CLOSE", false).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", (channelSuffix + String("_open")).c_str()).c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, (channelSuffix + String("_open")).c_str(), (channelName + " Open").c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/open").c_str()).c_str(), "OPEN", "mdi:arrow-expand-horizontal", configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadButton(settings_, (channelSuffix + String("_open")).c_str(), (channelName + " Open").c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/open").c_str()).c_str(), "OPEN", "mdi:arrow-expand-horizontal", configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "button", (channelSuffix + String("_close")).c_str()).c_str(), 1, true,
-            HaBridge::discoveryPayloadButton(settings_, (channelSuffix + String("_close")).c_str(), (channelName + " Close").c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/close").c_str()).c_str(), "CLOSE", "mdi:arrow-collapse-horizontal", configurationUrl).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadButton(settings_, (channelSuffix + String("_close")).c_str(), (channelName + " Close").c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/close").c_str()).c_str(), "CLOSE", "mdi:arrow-collapse-horizontal", configurationUrl).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "number", (channelSuffix + String("_open_duration")).c_str()).c_str(), 1, true,
-            HaBridge::discoveryPayloadNumber(settings_, (channelSuffix + String("_open_duration")).c_str(), (channelName + " Open Duration").c_str(), HaBridge::motorStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/open/duration").c_str()).c_str(), 100, 600000, 100, "ms", "mdi:timer-play-outline", configurationUrl, openDurationTemplate).c_str());
-        client_.publish(
+            HaBridge::discoveryPayloadNumber(settings_, (channelSuffix + String("_open_duration")).c_str(), (channelName + " Open Duration").c_str(), HaBridge::motorStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/open/duration").c_str()).c_str(), 100, 600000, 100, "ms", "mdi:timer-play-outline", configurationUrl, openDurationTemplate).c_str()); })) return;
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::discoveryTopic(settings_, "number", (channelSuffix + String("_close_duration")).c_str()).c_str(), 1, true,
-            HaBridge::discoveryPayloadNumber(settings_, (channelSuffix + String("_close_duration")).c_str(), (channelName + " Close Duration").c_str(), HaBridge::motorStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/close/duration").c_str()).c_str(), 100, 600000, 100, "ms", "mdi:timer-stop-outline", configurationUrl, closeDurationTemplate).c_str());
+            HaBridge::discoveryPayloadNumber(settings_, (channelSuffix + String("_close_duration")).c_str(), (channelName + " Close Duration").c_str(), HaBridge::motorStateTopic(settings_).c_str(), HaBridge::commandTopic(settings_, (String("motor/") + channelSuffix + "/close/duration").c_str()).c_str(), 100, 600000, 100, "ms", "mdi:timer-stop-outline", configurationUrl, closeDurationTemplate).c_str()); })) return;
     }
     for (uint8_t channelIndex = 0; channelIndex < 2; ++channelIndex) {
         if (featureFlags.motorChannels[channelIndex]) {
             continue;
         }
         const String channelSuffix = motorChannelSuffix(channelIndex);
-        clearDiscoveryTopic("sensor", (channelSuffix + String("_status")).c_str());
-        clearDiscoveryTopic("switch", (channelSuffix + String("_valve")).c_str());
-        clearDiscoveryTopic("button", (channelSuffix + String("_open")).c_str());
-        clearDiscoveryTopic("button", (channelSuffix + String("_close")).c_str());
-        clearDiscoveryTopic("number", (channelSuffix + String("_open_duration")).c_str());
-        clearDiscoveryTopic("number", (channelSuffix + String("_close_duration")).c_str());
+        if (clearDiscoveryTopic("sensor", (channelSuffix + String("_status")).c_str())) return;
+        if (clearDiscoveryTopic("switch", (channelSuffix + String("_valve")).c_str())) return;
+        if (clearDiscoveryTopic("button", (channelSuffix + String("_open")).c_str())) return;
+        if (clearDiscoveryTopic("button", (channelSuffix + String("_close")).c_str())) return;
+        if (clearDiscoveryTopic("number", (channelSuffix + String("_open_duration")).c_str())) return;
+        if (clearDiscoveryTopic("number", (channelSuffix + String("_close_duration")).c_str())) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "button", "firmware_install_latest").c_str(), 1, true,
-        "");
-    client_.publish(
+        ""); })) return;
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "text", "firmware_install_version").c_str(), 1, true,
-        "");
+        ""); })) return;
 #ifdef APP_ENABLE_HACS_MQTT
     if (featureFlags.audio) {
-        client_.publish(
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
             HaBridge::hacsMediaPlayerDiscoveryTopic(settings_).c_str(), 1, true,
-            HaBridge::discoveryPayloadHacsMediaPlayer(settings_).c_str());
+            HaBridge::discoveryPayloadHacsMediaPlayer(settings_).c_str()); })) return;
     } else {
-        client_.publish(HaBridge::hacsMediaPlayerDiscoveryTopic(settings_).c_str(), 1, true, "");
+        if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(HaBridge::hacsMediaPlayerDiscoveryTopic(settings_).c_str(), 1, true, ""); })) return;
     }
-    client_.publish(
+    if (publishDiscoveryStep(packetIndex++, [&]() { return publishPacket(
         HaBridge::discoveryTopic(settings_, "media_player", "hacs_player").c_str(), 1, true,
-        "");
+        ""); })) return;
 #endif
     lastOtaDiscoverySignature_ = otaDiscoverySignature;
+    discoveryCursor_ = 0;
+    discoveryPublishPending_ = false;
     discoveryPublishedForSession_ = true;
 }
 
@@ -1389,7 +1439,7 @@ void MqttManager::registerFailedAttempt(AsyncMqttClientDisconnectReason reason) 
         ++consecutiveFailureCount_;
     }
 
-    Serial.printf("[mqtt] connect failed reason=%d count=%u/%u\n", static_cast<int>(reason),
+    DebugLog.printf("[mqtt] connect failed reason=%d count=%u/%u\n", static_cast<int>(reason),
                   static_cast<unsigned>(consecutiveFailureCount_),
                   static_cast<unsigned>(MQTT_MAX_CONSECUTIVE_FAILURES));
 
@@ -1402,7 +1452,7 @@ void MqttManager::registerFailedAttempt(AsyncMqttClientDisconnectReason reason) 
     if (consecutiveFailureCount_ >= MQTT_MAX_CONSECUTIVE_FAILURES) {
         setFrontendError("MQTT broker unreachable. The device will keep retrying without rebooting.");
         recoveryRebootRecommended_ = false;
-        Serial.println("[mqtt] max consecutive failures reached, continuing retries without recovery reboot");
+        DebugLog.println("[mqtt] max consecutive failures reached, continuing retries without recovery reboot");
     }
 }
 

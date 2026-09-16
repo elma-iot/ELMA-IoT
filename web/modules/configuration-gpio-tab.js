@@ -22,6 +22,7 @@ export function createConfigurationGpioTab({
   loadStatus,
   handleError,
   isPcDesignerRuntime = false,
+  renderAssignmentWarnings = () => {},
 }) {
   const GPIO_LEGEND_ITEMS = {
     free: {
@@ -353,6 +354,7 @@ export function createConfigurationGpioTab({
     const roleMap = gpioRoleMap(state.settings || {}, state.status || {});
     const roleState = gpioConfigRoleState(state.settings || {});
     const selectedBoard = String(elements.gpioBoardSelector?.value || "esp32-s3-super-mini");
+    renderAssignmentWarnings();
     const layout = gpioBoardLayouts[selectedBoard] || gpioBoardLayouts["esp32-s3-super-mini"];
     renderGpioPinColumn(elements.gpioLeftPins, layout.left, roleMap, roleState, `${selectedBoard}-main-left`);
     renderGpioPinColumn(elements.gpioRightPins, layout.right, roleMap, roleState, `${selectedBoard}-main-right`);
@@ -484,6 +486,7 @@ export function createConfigurationGpioTab({
   function bindEvents() {
     elements.gpioBoardSelector?.addEventListener("change", () => {
       saveGpioBoardPreferences();
+      syncGpioMappingControls();
       updateGpioBoardImage();
     });
 
@@ -501,6 +504,7 @@ export function createConfigurationGpioTab({
         updateGpioBoardSelectorMode(state.status, { force: true });
       }
       saveGpioBoardPreferences();
+      syncGpioMappingControls();
       updateGpioBoardImage();
     });
 

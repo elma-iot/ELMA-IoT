@@ -29,7 +29,9 @@ class DisplayManager {
     unsigned long temporaryCenterTextUntilMs_ = 0;
     uint16_t scrollOffset_ = 0;
     String lastSignature_;
+    String lastCenterText_;
     String temporaryCenterText_;
+    bool dimmed_ = false;
 
     bool isEnabled() const;
     Adafruit_GFX* gfx();

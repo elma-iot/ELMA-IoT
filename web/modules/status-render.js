@@ -29,6 +29,7 @@ export function createStatusRenderModule({
   renderDeviceResources,
   maybeRefreshVisibleStorageTab,
   isGpioUiInteracting,
+  isPeripheralUiInteracting,
   renderGpioOverview,
   renderPeripheralDiagram,
   renderMotorTab,
@@ -51,6 +52,9 @@ export function createStatusRenderModule({
   updateStorageMeter,
   formatPlaybackClock,
 }) {
+  let batteryHeroSignature = "";
+  let wifiHeroSignature = "";
+  let pinOptionsSignature = "";
   function estimateBatteryPercent(voltage) {
     const numericVoltage = Number(voltage || 0);
     if (!Number.isFinite(numericVoltage) || numericVoltage <= 0) {
@@ -98,6 +102,9 @@ export function createStatusRenderModule({
 
     const numericVoltage = Number(voltage || 0);
     const isCharging = Boolean(charging);
+    const signature = `${numericVoltage}|${isCharging}`;
+    if (signature === batteryHeroSignature) return;
+    batteryHeroSignature = signature;
     const usbPowered = numericVoltage > 4.5;
     const percent = estimateBatteryPercent(numericVoltage);
     const levelClass = batteryLevelClass(percent);
@@ -143,6 +150,9 @@ export function createStatusRenderModule({
     }
 
     const signal = wifiSignalState(rssi, connected);
+    const signature = `${connected}|${ipAddress}|${rssi}`;
+    if (signature === wifiHeroSignature) return;
+    wifiHeroSignature = signature;
     const bars = Array.from({ length: 4 }, (_, index) => {
       const active = index < signal.level;
       return `<span class="wifi-bar ${active ? `active ${signal.tone}` : ""}"></span>`;
@@ -243,10 +253,15 @@ export function createStatusRenderModule({
     const battery = status?.battery || {};
     const firmware = status?.firmware || {};
     const settings = status?.settings || {};
-    populateStatusLedPinOptions();
-    populateSdPinOptions();
-    populateBatteryAdcPinOptions();
-    populateWapeTriggerPinOptions();
+    const nextPinOptionsSignature = JSON.stringify([firmware, state.settings, elements.gpioBoardSelector?.value]);
+    const configurationInteracting = isGpioUiInteracting() || isPeripheralUiInteracting();
+    if (nextPinOptionsSignature !== pinOptionsSignature && !configurationInteracting) {
+      populateStatusLedPinOptions();
+      populateSdPinOptions();
+      populateBatteryAdcPinOptions();
+      populateWapeTriggerPinOptions();
+      pinOptionsSignature = nextPinOptionsSignature;
+    }
     maybeRedirectToStationIp(status);
     const ota = status.otaManager || status.ota || {};
     const wifiConnected = Boolean(network.wifiConnected);
@@ -289,13 +304,13 @@ export function createStatusRenderModule({
     renderHardwareSummary(status);
     renderDeviceResources(status);
     maybeRefreshVisibleStorageTab();
-    if (!isGpioUiInteracting()) {
+    if (activeTabName() === "gpio" && !configurationInteracting) {
       renderGpioOverview();
+      if (!state.peripheralDiagramDrag) {
+        renderPeripheralDiagram();
+      }
     }
-    if (!state.peripheralDiagramDrag) {
-      renderPeripheralDiagram();
-    }
-    renderMotorTab?.();
+    if (activeTabName() === "motor") renderMotorTab?.();
     updateStoragePreviewProgressUi();
 
     const previousUpdateVersion = String(previousStatus?.ota?.latestVersion || previousStatus?.otaManager?.latestVersion || "");
@@ -361,8 +376,7 @@ export function createStatusRenderModule({
     updateWifiActionButton();
     updateMqttActionButton();
     updateStoragePreviewPlaybackControls();
-    populateButtonActionSelects();
-    renderOledPreview();
+    if (activeTabName() === "oled") renderOledPreview();
   }
 
   return {

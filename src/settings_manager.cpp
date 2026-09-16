@@ -6,8 +6,24 @@
 #include "default_config.h"
 #include "motor_runtime_config.h"
 #include "wifi_power_policy.h"
+#include "gpio_pin_policy.h"
 
 namespace {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+constexpr auto kPinChip = GpioPinPolicy::Chip::S3;
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+constexpr auto kPinChip = GpioPinPolicy::Chip::C3;
+#else
+constexpr auto kPinChip = GpioPinPolicy::Chip::Esp32;
+#endif
+bool safeOutputPin(int pin) {
+#if APP_COMPILED_BOARD_PROFILE_ID == 7
+    if (pin == 16 || pin == 17) return false;
+#elif APP_COMPILED_BOARD_PROFILE_ID >= 3 && APP_COMPILED_BOARD_PROFILE_ID <= 6
+    if (pin >= 33 && pin <= 37) return false;
+#endif
+    return GpioPinPolicy::output(kPinChip, pin);
+}
 constexpr char PREF_NAMESPACE[] = "notifier";
 constexpr char PREF_MARKER[] = "saved";
 constexpr float kLegacyEsp32BatteryCalibration = 3.866f;
@@ -80,13 +96,7 @@ bool isValidBatteryAdcPin(uint8_t pin) {
 }
 
 bool isValidStatusLedPin(uint8_t pin) {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-    return pin <= 48;
-#elif defined(CONFIG_IDF_TARGET_ESP32C3)
-    return isValidC3ExposedPin(pin);
-#else
-    return pin <= 39;
-#endif
+    return safeOutputPin(pin);
 }
 
 bool isValidWapeTriggerPin(uint8_t pin) {
@@ -113,13 +123,7 @@ bool isValidSdPin(uint8_t pin) {
 }
 
 bool isValidI2sPin(uint8_t pin) {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-    return pin >= 9 && pin <= 12;
-#elif defined(CONFIG_IDF_TARGET_ESP32C3)
-    return isValidC3ExposedPin(pin);
-#else
-    return pin <= 39;
-#endif
+    return safeOutputPin(pin);
 }
 
 bool audioUsesPin(const AudioSettings& audio, int pin) {
@@ -542,6 +546,9 @@ SettingsBundle SettingsManager::defaults() const {
     settings.ota.autoCheck = true;
     settings.ota.autoUpdate = true;
 
+    settings.battery.dividerR1Ohms = 220000;
+    settings.battery.dividerR2Ohms = 220000;
+    settings.battery.dividerMaxVin = 4.2f;
     settings.battery.calibrationMultiplier = DefaultConfig::BATTERY_CALIBRATION;
     settings.battery.adcPin = 0;
     settings.battery.measuredVoltage = 0.0f;
@@ -713,7 +720,11 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     settings.effects.updateSuccessVolumePercent = clampValue<uint8_t>(settings.effects.updateSuccessVolumePercent, static_cast<uint8_t>(0), static_cast<uint8_t>(100));
     settings.device.lowBatterySleepThresholdPercent = clampValue<uint8_t>(settings.device.lowBatterySleepThresholdPercent, static_cast<uint8_t>(1), static_cast<uint8_t>(100));
     settings.device.lowBatteryWakeIntervalMinutes = clampValue<uint16_t>(settings.device.lowBatteryWakeIntervalMinutes, static_cast<uint16_t>(0), static_cast<uint16_t>(1440));
-    settings.battery.calibrationMultiplier = clampValue<float>(settings.battery.calibrationMultiplier, 0.1f, 10.0f);
+    settings.battery.dividerR1Ohms = clampValue<uint32_t>(settings.battery.dividerR1Ohms, 10u, 10000000u);
+    settings.battery.dividerR2Ohms = clampValue<uint32_t>(settings.battery.dividerR2Ohms, 10u, 10000000u);
+    settings.battery.dividerMaxVin = clampValue<float>(settings.battery.dividerMaxVin, 0.1f, 100.0f);
+    const float dividerRatio = 1.0f + static_cast<float>(settings.battery.dividerR1Ohms) / settings.battery.dividerR2Ohms;
+    settings.battery.calibrationMultiplier = clampValue<float>(settings.battery.calibrationMultiplier, 0.1f, dividerRatio > 10.0f ? dividerRatio : 10.0f);
     settings.battery.measuredVoltage = clampValue<float>(settings.battery.measuredVoltage, 0.0f, 20.0f);
     if (!isValidI2sPin(settings.audio.bclkPin)) {
         settings.audio.bclkPin = DefaultConfig::I2S_BCLK_PIN;
@@ -781,7 +792,9 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
         settings.oled.rotation = 0;
     }
     settings.oled.dimTimeoutSeconds = clampValue<uint16_t>(settings.oled.dimTimeoutSeconds, static_cast<uint16_t>(0), static_cast<uint16_t>(3600));
-    if (oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd)) {
+    if (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
+        (settings.oled.resetPin >= 0 && !safeOutputPin(settings.oled.resetPin)) ||
+        oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd)) {
         settings.oled.enabled = false;
         settings.oled.sdaPin = DefaultConfig::OLED_SDA_PIN;
         settings.oled.sclPin = DefaultConfig::OLED_SCL_PIN;
@@ -843,6 +856,9 @@ SettingsBundle SettingsManager::load() {
     settings.ota.autoCheck = readBool("ota_auto", settings.ota.autoCheck);
     settings.ota.autoUpdate = readBool("ota_upd", settings.ota.autoUpdate);
 
+    settings.battery.dividerR1Ohms = readUInt("bat_r1", settings.battery.dividerR1Ohms);
+    settings.battery.dividerR2Ohms = readUInt("bat_r2", settings.battery.dividerR2Ohms);
+    settings.battery.dividerMaxVin = readFloat("bat_vmax", settings.battery.dividerMaxVin);
     settings.battery.calibrationMultiplier = readFloat("bat_cal", settings.battery.calibrationMultiplier);
     settings.battery.adcPin = readUInt("bat_pin", settings.battery.adcPin);
     settings.battery.measuredVoltage = readFloat("bat_meas", settings.battery.measuredVoltage);
@@ -970,6 +986,9 @@ bool SettingsManager::save(const SettingsBundle& settings) {
     changed |= writeBoolIfChanged("ota_auto", sanitized.ota.autoCheck);
     changed |= writeBoolIfChanged("ota_upd", sanitized.ota.autoUpdate);
 
+    changed |= writeUIntIfChanged("bat_r1", sanitized.battery.dividerR1Ohms);
+    changed |= writeUIntIfChanged("bat_r2", sanitized.battery.dividerR2Ohms);
+    changed |= writeFloatIfChanged("bat_vmax", sanitized.battery.dividerMaxVin);
     changed |= writeFloatIfChanged("bat_cal", sanitized.battery.calibrationMultiplier);
     changed |= writeUIntIfChanged("bat_pin", sanitized.battery.adcPin);
     changed |= writeFloatIfChanged("bat_meas", sanitized.battery.measuredVoltage);
@@ -1107,6 +1126,9 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     ota["autoUpdate"] = settings.ota.autoUpdate;
 
     JsonObject battery = root["battery"].to<JsonObject>();
+    battery["dividerR1Ohms"] = settings.battery.dividerR1Ohms;
+    battery["dividerR2Ohms"] = settings.battery.dividerR2Ohms;
+    battery["dividerMaxVin"] = settings.battery.dividerMaxVin;
     battery["calibrationMultiplier"] = settings.battery.calibrationMultiplier;
     battery["adcPin"] = settings.battery.adcPin;
     battery["measuredVoltage"] = settings.battery.measuredVoltage;
@@ -1298,6 +1320,9 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 
     JsonObjectConst battery = object["battery"];
     if (!battery.isNull()) {
+        if (battery["dividerR1Ohms"].is<uint32_t>()) settings.battery.dividerR1Ohms = battery["dividerR1Ohms"].as<uint32_t>();
+        if (battery["dividerR2Ohms"].is<uint32_t>()) settings.battery.dividerR2Ohms = battery["dividerR2Ohms"].as<uint32_t>();
+        if (battery["dividerMaxVin"].is<float>()) settings.battery.dividerMaxVin = battery["dividerMaxVin"].as<float>();
         if (battery["calibrationMultiplier"].is<float>()) settings.battery.calibrationMultiplier = battery["calibrationMultiplier"].as<float>();
         if (battery["adcPin"].is<uint8_t>()) settings.battery.adcPin = battery["adcPin"].as<uint8_t>();
         if (battery["measuredVoltage"].is<float>()) settings.battery.measuredVoltage = battery["measuredVoltage"].as<float>();

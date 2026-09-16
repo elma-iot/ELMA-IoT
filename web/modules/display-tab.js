@@ -129,6 +129,7 @@ export function createDisplayTab({
     centerNode.dataset.scrollChars = String(maxChars);
 
     const drawFrame = () => {
+      if (document.hidden || !centerNode.closest(".tab-panel")?.classList.contains("active")) return;
       centerNode.textContent = oledScrollWindow(value, maxChars, state.oledPreviewScrollOffset);
       state.oledPreviewScrollOffset = (state.oledPreviewScrollOffset + 1) % (`${value}   `.length);
     };

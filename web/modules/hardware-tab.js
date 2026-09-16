@@ -136,8 +136,8 @@ export function createHardwareTab({
       chipTemperatureAvailable && Number.isFinite(chipTemperatureC) ? `${chipTemperatureC.toFixed(1)} C` : "Unavailable",
       chipTemperaturePercent,
       chipTemperatureAvailable && Number.isFinite(chipTemperatureC)
-        ? "Internal ESP32 die temperature sensor reading."
-        : "This build or target does not expose chip temperature telemetry."
+        ? `${system.chipTemperatureEstimated ? "Estimated internal die temperature; classic ESP32 is not factory-calibrated by this firmware." : "Internal die temperature sensor reading."} Last valid sample ${Math.floor(Math.max(0, Number(system.chipTemperatureAgeMs) || 0) / 1000)} s ago.`
+        : (system.chipTemperatureReason || "This build or target does not expose chip temperature telemetry.")
     );
 
     const sramUsedPercent = sram.totalBytes > 0 ? (Number(sram.usedBytes || 0) * 100) / Number(sram.totalBytes) : 0;

@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <Preferences.h>
@@ -154,26 +155,29 @@ unsigned long lastHeartbeatAt = 0;
 
 void setup() {
     Serial.begin(115200);
+    DebugLog.begin();
     waitForSerialConsole();
     delay(300);
     initializeStatusLed();
     writeStatusLed(false);
 
-    Serial.printf("\n[safe-boot] app=%s version=%s built=%s\n", APP_NAME, APP_VERSION, APP_BUILD_DATE);
-    Serial.printf("[safe-boot] reset reason=%s (%d)\n", resetReasonToString(esp_reset_reason()), static_cast<int>(esp_reset_reason()));
-    Serial.printf("[safe-boot] free heap=%u\n", ESP.getFreeHeap());
-    Serial.println("[safe-boot] minimal firmware is running");
+    DebugLog.printf("\n[safe-boot] app=%s version=%s built=%s\n", APP_NAME, APP_VERSION, APP_BUILD_DATE);
+    DebugLog.printf("[safe-boot] reset reason=%s (%d)\n", resetReasonToString(esp_reset_reason()), static_cast<int>(esp_reset_reason()));
+    DebugLog.printf("[safe-boot] free heap=%u\n", ESP.getFreeHeap());
+    DebugLog.println("[safe-boot] minimal firmware is running");
     Serial.flush();
+    DebugLog.service(true);
 }
 
 void loop() {
     static bool heartbeatLedOn = false;
+    DebugLog.service();
     const unsigned long now = millis();
     if (now - lastHeartbeatAt >= 1000UL) {
         lastHeartbeatAt = now;
         heartbeatLedOn = !heartbeatLedOn;
         writeStatusLed(heartbeatLedOn);
-        Serial.printf("[safe-boot] uptime=%lu free_heap=%u\n", now, ESP.getFreeHeap());
+        DebugLog.printf("[safe-boot] uptime=%lu free_heap=%u\n", now, ESP.getFreeHeap());
         Serial.flush();
     }
     delay(10);
@@ -225,6 +229,7 @@ class AudioPlayerStub {
     bool reconfigureOutputPins(uint8_t, uint8_t, uint8_t) { return false; }
     bool disableOutput() { return true; }
 
+    void releaseResourcesForUpdate() { stop(); }
     void stop() {
     state_ = "idle";
     type_ = "idle";
@@ -452,10 +457,12 @@ CloneProvisioningState cloneProvisioning;
 
 constexpr float kBatteryPercentEmptyVoltage = 3.2f;
 constexpr float kBatteryPercentFullVoltage = 4.2f;
+constexpr float kBatteryPolicyMinimumPlausibleVoltage = 0.5f;
 constexpr unsigned long kTouchFactoryResetHoldMs = 10000UL;
 constexpr unsigned long kFactoryResetLedBlinkIntervalMs = 500UL;
 constexpr unsigned long kFactoryResetLedSuccessWindowMs = 1500UL;
 constexpr unsigned long kLowBatteryWakeWindowMs = 30000UL;
+constexpr unsigned long kLowBatteryStartupGraceMs = 30000UL;
 constexpr unsigned long kVolumePersistDelayMs = 750UL;
 constexpr unsigned long kButtonDebounceMs = 30UL;
 constexpr unsigned long kTouchDebounceMs = 20UL;
@@ -502,6 +509,7 @@ constexpr char kOtaLastBadVersionKey[] = "bad_ver";
 constexpr char kOtaLastBadReasonKey[] = "bad_reason";
 constexpr char kPowerCycleNamespace[] = "boot_guard";
 constexpr char kPowerCycleCountKey[] = "pc_count";
+constexpr char kLowBatteryBootGuardFixKey[] = "lb_sleep_fix";
 
 bool playRequest(const String& url, const String& label, const String& type, const String& source, String& error, bool addToHistory);
 void flushPendingSettingsNow();
@@ -646,7 +654,7 @@ bool queueSavedPlaybackResume() {
     String error;
     const bool queued = playRequest(lastPlayback.url, lastPlayback.label, lastPlayback.type, lastPlayback.source, error, false);
     if (!queued && !error.isEmpty()) {
-        Serial.printf("[audio] saved playback resume skipped: %s\n", error.c_str());
+        DebugLog.printf("[audio] saved playback resume skipped: %s\n", error.c_str());
     }
     return queued;
 }
@@ -749,6 +757,16 @@ void applyCpuFrequencyPolicy() {
         }
     }
 
+    // Flash erase/write waits can look like low CPU load. Keep the clock
+    // stable throughout a firmware transfer instead of downshifting between
+    // upload chunks while the Wi-Fi and flash tasks are active.
+    if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) {
+        targetFrequencyMhz = kCpuFrequencyBurstMhz;
+        policyReason = "firmware-transfer";
+        cpuGovernorHighSamples = 0;
+        cpuGovernorLowSamples = 0;
+    }
+
     if (targetFrequencyMhz == activeCpuFrequencyMhz || policyReason == nullptr) {
         return;
     }
@@ -763,7 +781,7 @@ void applyCpuFrequencyPolicy() {
         cpuGovernorLowSamples = 0;
         lastCpuFrequencyChangeAt = now;
         lastCpuFrequencyFailureAt = 0;
-        Serial.printf("[power] cpu frequency set to %lu MHz reason=%s load=%u%% cores=%u/%u%%\n",
+        DebugLog.printf("[power] cpu frequency set to %lu MHz reason=%s load=%u%% cores=%u/%u%%\n",
                       static_cast<unsigned long>(activeCpuFrequencyMhz),
                       policyReason,
                       static_cast<unsigned>(peakLoadPercent),
@@ -771,7 +789,7 @@ void applyCpuFrequencyPolicy() {
                       static_cast<unsigned>(metrics.cpuLoadCoreCount > 1 ? metrics.cpuLoadCorePercent[1] : 0));
     } else {
         lastCpuFrequencyFailureAt = now;
-        Serial.printf("[power] cpu frequency change to %lu MHz failed reason=%s\n",
+        DebugLog.printf("[power] cpu frequency change to %lu MHz failed reason=%s\n",
                       static_cast<unsigned long>(targetFrequencyMhz),
                       policyReason);
     }
@@ -1232,7 +1250,7 @@ void triggerTouchHoldFactoryReset(PhysicalButtonState& button) {
     }
 
     button.holdResetTriggered = true;
-    Serial.printf("[input] %s held on GPIO%u for %lu ms, triggering factory reset\n",
+    DebugLog.printf("[input] %s held on GPIO%u for %lu ms, triggering factory reset\n",
                   button.label,
                   static_cast<unsigned>(button.pin),
                   static_cast<unsigned long>(kTouchFactoryResetHoldMs));
@@ -1375,7 +1393,7 @@ void maybeClearPowerCycleCounterAfterStableBoot() {
     }
     clearPowerCycleCounter();
     powerCycleCounterClearArmed = false;
-    Serial.println("[boot-guard] power-cycle counter cleared after stable uptime");
+    DebugLog.println("[boot-guard] power-cycle counter cleared after stable uptime");
 }
 
 void storeRollbackPendingInfo(const String& version, const String& reason) {
@@ -1405,6 +1423,19 @@ void persistRollbackOutcome(const String& version, const String& reason) {
     }
     prefs.putString(kOtaLastBadVersionKey, version);
     prefs.putString(kOtaLastBadReasonKey, reason);
+    prefs.end();
+}
+
+void repairLowBatteryBootCounterOnce() {
+    Preferences prefs;
+    if (!prefs.begin(kPowerCycleNamespace, false)) {
+        return;
+    }
+    if (!prefs.getBool(kLowBatteryBootGuardFixKey, false)) {
+        removePreferenceIfPresent(prefs, kPowerCycleCountKey);
+        prefs.putBool(kLowBatteryBootGuardFixKey, true);
+        DebugLog.println("[boot-guard] cleared legacy counter for low-battery sleep fix");
+    }
     prefs.end();
 }
 
@@ -1545,12 +1576,14 @@ void serviceWapeTriggerPulse() {
     storeRollbackPendingInfo(version, reason);
     persistRollbackOutcome(version, reason);
     motorController.prepareForRestart();
-    Serial.printf("[rollback] %s\n", reason.c_str());
+    DebugLog.printf("[rollback] %s\n", reason.c_str());
     Serial.flush();
+    DebugLog.service(true);
     const esp_err_t result = esp_ota_mark_app_invalid_rollback_and_reboot();
-    Serial.printf("[rollback] esp_ota_mark_app_invalid_rollback_and_reboot failed: %d\n", static_cast<int>(result));
+    DebugLog.printf("[rollback] esp_ota_mark_app_invalid_rollback_and_reboot failed: %d\n", static_cast<int>(result));
     Serial.flush();
     delay(1000);
+    DebugLog.service(true);
     ESP.restart();
     for (;;) {
         delay(1000);
@@ -1576,10 +1609,10 @@ void confirmOtaHealthIfReady() {
         clearRollbackPendingInfo();
         clearRollbackOutcome();
         refreshRollbackStateInOtaManager();
-        Serial.println("[rollback] OTA firmware marked healthy");
+        DebugLog.println("[rollback] OTA firmware marked healthy");
         Serial.flush();
     } else {
-        Serial.printf("[rollback] failed to confirm OTA app: %d\n", static_cast<int>(result));
+        DebugLog.printf("[rollback] failed to confirm OTA app: %d\n", static_cast<int>(result));
         Serial.flush();
     }
 }
@@ -2231,7 +2264,7 @@ bool resumeQueuedPreviewPlayback() {
         deferredActions->playResumePositionSeconds = resumePositionSeconds;
     }
     if (!queued && !error.isEmpty()) {
-        Serial.printf("[audio] preview resume skipped: %s\n", error.c_str());
+        DebugLog.printf("[audio] preview resume skipped: %s\n", error.c_str());
     }
     return queued;
 }
@@ -2455,7 +2488,7 @@ void pollPhysicalButton(PhysicalButtonState& button) {
     if (handled || action == "none") {
         showS3ButtonActionOnDisplay(action);
     }
-    Serial.printf("[input] %s on GPIO%u mode=%s action=%s handled=%s\n",
+    DebugLog.printf("[input] %s on GPIO%u mode=%s action=%s handled=%s\n",
                   button.label,
                   static_cast<unsigned>(button.pin),
                   button.touchSupported ? "touch" : (button.limitSwitch ? (button.normallyClosed ? "limit-nc" : "limit-no") : "gpio"),
@@ -2475,11 +2508,15 @@ void enterLowBatteryDeepSleep(uint8_t batteryPercent, float voltage, const char*
     }
 
     const uint16_t wakeIntervalMinutes = settings->device.lowBatteryWakeIntervalMinutes;
-    Serial.printf("[power] entering deep sleep reason=%s battery=%u%% voltage=%.3f wake_interval_min=%u\n",
+    DebugLog.printf("[power] entering deep sleep reason=%s battery=%u%% voltage=%.3f wake_interval_min=%u\n",
                   reason,
                   static_cast<unsigned>(batteryPercent),
                   voltage,
                   static_cast<unsigned>(wakeIntervalMinutes));
+    // A scheduled sleep is not a failed boot. Clear the rapid power-cycle
+    // counter so waking or updating cannot accidentally trigger a reset.
+    clearPowerCycleCounter();
+    powerCycleCounterClearArmed = false;
     Serial.flush();
 
     if (audioPlayer != nullptr) {
@@ -2499,7 +2536,13 @@ void enterLowBatteryDeepSleep(uint8_t batteryPercent, float voltage, const char*
     WiFi.disconnect(true, true);
     WiFi.mode(WIFI_OFF);
     delay(100);
+    DebugLog.service(true);
     esp_deep_sleep_start();
+}
+
+bool batteryReadingIsValidForSleepPolicy(const BatterySnapshot& battery) {
+    return battery.rawAdc > 0 && isfinite(battery.voltage) &&
+        battery.voltage >= kBatteryPolicyMinimumPlausibleVoltage;
 }
 
 void handleLowBatterySleepPolicy(const AppStateSnapshot& snapshot) {
@@ -2508,6 +2551,21 @@ void handleLowBatterySleepPolicy(const AppStateSnapshot& snapshot) {
             wokeFromDeepSleep = false;
             lowBatteryWakeStartedAt = 0;
         }
+        return;
+    }
+
+    // Keep the device reachable after boot/OTA so the desktop flasher can apply
+    // corrected settings and the power-cycle guard can clear after stable uptime.
+    if (millis() < kLowBatteryStartupGraceMs) {
+        return;
+    }
+
+    // Zero/implausible ADC readings mean the configured divider is absent,
+    // disconnected or assigned to the wrong pin. Treating that as a flat battery
+    // makes mains-powered devices disappear into an endless deep-sleep cycle.
+    if (!batteryReadingIsValidForSleepPolicy(snapshot.battery)) {
+        wokeFromDeepSleep = false;
+        lowBatteryWakeStartedAt = 0;
         return;
     }
 
@@ -2522,7 +2580,7 @@ void handleLowBatterySleepPolicy(const AppStateSnapshot& snapshot) {
     if (wokeFromDeepSleep) {
         if (lowBatteryWakeStartedAt == 0) {
             lowBatteryWakeStartedAt = millis();
-            Serial.printf("[power] low-battery wake window started battery=%u%% threshold=%u%%\n",
+            DebugLog.printf("[power] low-battery wake window started battery=%u%% threshold=%u%%\n",
                           static_cast<unsigned>(batteryPercent),
                           static_cast<unsigned>(thresholdPercent));
         }
@@ -2839,7 +2897,7 @@ void applyClonedConfiguration() {
         reinterpret_cast<const uint8_t*>(cloneProvisioning.payload.c_str()),
         cloneProvisioning.payload.length());
     if (actualCrc != cloneProvisioning.expectedCrc32) {
-        Serial.printf("[clone] error=configuration checksum mismatch expected=%08lX actual=%08lX\n",
+        DebugLog.printf("[clone] error=configuration checksum mismatch expected=%08lX actual=%08lX\n",
                       static_cast<unsigned long>(cloneProvisioning.expectedCrc32),
                       static_cast<unsigned long>(actualCrc));
         resetCloneProvisioningReceiver();
@@ -2856,7 +2914,7 @@ void applyClonedConfiguration() {
 #endif
     const DeserializationError parseError = deserializeJson(document, cloneProvisioning.payload);
     if (parseError || document.overflowed() || !document.is<JsonObject>()) {
-        Serial.printf("[clone] error=invalid configuration json detail=%s\n", parseError.c_str());
+        DebugLog.printf("[clone] error=invalid configuration json detail=%s\n", parseError.c_str());
         resetCloneProvisioningReceiver();
         return;
     }
@@ -2864,7 +2922,7 @@ void applyClonedConfiguration() {
     SettingsBundle cloned = settingsManager->defaults();
     String error;
     if (!settingsManager->updateFromJson(cloned, document.as<JsonVariantConst>(), error)) {
-        Serial.printf("[clone] error=configuration rejected detail=%s\n", error.c_str());
+        DebugLog.printf("[clone] error=configuration rejected detail=%s\n", error.c_str());
         resetCloneProvisioningReceiver();
         return;
     }
@@ -2879,11 +2937,11 @@ void applyClonedConfiguration() {
     settingsManager->save(cloned);
     *settings = settingsManager->load();
 
-    Serial.printf("[clone] configuration applied identity=%s mqttClientId=%s mqttBaseTopic=%s\n",
+    DebugLog.printf("[clone] configuration applied identity=%s mqttClientId=%s mqttBaseTopic=%s\n",
                   settings->device.deviceName.c_str(),
                   settings->mqtt.clientId.c_str(),
                   settings->mqtt.baseTopic.c_str());
-    Serial.println("[clone] restarting target");
+    DebugLog.println("[clone] restarting target");
     Serial.flush();
     resetCloneProvisioningReceiver();
     scheduleReboot(500);
@@ -2893,27 +2951,27 @@ void beginCloneProvisioningPayload(const String& command) {
     const String arguments = command.substring(strlen(kCloneConfigurationCommand));
     const int separator = arguments.indexOf(' ');
     if (separator <= 0) {
-        Serial.println("[clone] error=invalid provisioning header");
+        DebugLog.println("[clone] error=invalid provisioning header");
         return;
     }
 
     const size_t length = static_cast<size_t>(strtoul(arguments.substring(0, separator).c_str(), nullptr, 10));
     const uint32_t crc = static_cast<uint32_t>(strtoul(arguments.substring(separator + 1).c_str(), nullptr, 16));
     if (length == 0 || length > kCloneConfigurationMaxBytes) {
-        Serial.printf("[clone] error=configuration length must be 1..%u bytes\n",
+        DebugLog.printf("[clone] error=configuration length must be 1..%u bytes\n",
                       static_cast<unsigned>(kCloneConfigurationMaxBytes));
         return;
     }
 
     cloneProvisioning.payload = "";
     if (!cloneProvisioning.payload.reserve(length + 1U)) {
-        Serial.println("[clone] error=unable to allocate configuration buffer");
+        DebugLog.println("[clone] error=unable to allocate configuration buffer");
         return;
     }
     cloneProvisioning.expectedLength = length;
     cloneProvisioning.expectedCrc32 = crc;
     cloneProvisioning.receiving = true;
-    Serial.printf("[clone] receiving configuration bytes=%u\n", static_cast<unsigned>(length));
+    DebugLog.printf("[clone] receiving configuration bytes=%u\n", static_cast<unsigned>(length));
 }
 
 void serviceCloneProvisioningSerial() {
@@ -2944,8 +3002,13 @@ void serviceCloneProvisioningSerial() {
         if (command.startsWith(kCloneConfigurationCommand)) {
             beginCloneProvisioningPayload(command);
         } else if (command == "ELMA_CLONE_PING") {
-            Serial.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
+            DebugLog.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
             Serial.flush();
+        } else if (command == "ELMA_DIAGNOSTICS") {
+            DebugLog.printf("[health] uptime=%lu heap=%u min_heap=%u largest=%u wifi=%d rssi=%d mqtt=%d\n",
+                millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
+                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                static_cast<int>(WiFi.status()), WiFi.RSSI(), mqttManager != nullptr && mqttManager->isConnected());
         }
     }
 }
@@ -2994,6 +3057,10 @@ bool saveMotorRuntimeConfigFromJson(JsonVariantConst root, String& error) {
 }
 
 bool playRequest(const String& url, const String& label, const String& type, const String& source, String& error, bool addToHistory) {
+    if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) {
+        error = "Wait for the firmware update to finish before starting playback.";
+        return false;
+    }
     StorageTarget storageTarget = StorageTarget::Flash;
     String storagePath;
     const bool storageReference = parseStorageFileReference(url, storageTarget, storagePath);
@@ -3493,7 +3560,12 @@ void processDeferredActions() {
         mqttManager->publishState();
     }
 
-    if (deferredActions->playPending) {
+    if (deferredActions->playPending && otaManager != nullptr && otaManager->isFirmwareTransferActive()) {
+        deferredActions->playPending = false;
+    }
+    // A release check can already own TLS buffers when a manual play request
+    // arrives. Keep that request queued until the background task releases them.
+    if (deferredActions->playPending && (otaManager == nullptr || !otaManager->isBusy())) {
         const AppStateSnapshot playbackSnapshotBeforeStart = appState != nullptr ? appState->snapshot() : AppStateSnapshot{};
         bool started = false;
         if (deferredActions->playSource == "effect-ambient") {
@@ -3580,39 +3652,42 @@ void processDeferredActions() {
 
 void setup() {
     Serial.begin(115200);
+    DebugLog.begin();
     beginSystemMetrics();
     activeCpuFrequencyMhz = ESP.getCpuFreqMHz();
 
     const esp_reset_reason_t resetReason = esp_reset_reason();
     loadRollbackState();
     wokeFromDeepSleep = resetReason == ESP_RST_DEEPSLEEP;
-    Serial.printf("\n[boot] app=%s version=%s built=%s\n", APP_NAME, APP_VERSION, APP_BUILD_DATE);
-    Serial.printf("[boot] reset reason=%s (%d)\n", resetReasonToString(resetReason), static_cast<int>(resetReason));
+    DebugLog.printf("\n[boot] app=%s version=%s built=%s\n", APP_NAME, APP_VERSION, APP_BUILD_DATE);
+    DebugLog.printf("[boot] reset reason=%s (%d)\n", resetReasonToString(resetReason), static_cast<int>(resetReason));
     if (!lastRolledBackVersion.isEmpty()) {
-        Serial.printf("[rollback] previous OTA rollback detected: version=%s reason=%s\n", lastRolledBackVersion.c_str(), lastRollbackReason.c_str());
+        DebugLog.printf("[rollback] previous OTA rollback detected: version=%s reason=%s\n", lastRolledBackVersion.c_str(), lastRollbackReason.c_str());
     }
     if (otaPendingVerification) {
-        Serial.printf("[rollback] running pending-verify image %s\n", otaPendingVersion.c_str());
+        DebugLog.printf("[rollback] running pending-verify image %s\n", otaPendingVersion.c_str());
     }
     Serial.flush();
 
     if (!initializeRuntimeObjects()) {
-        Serial.println("[boot] failed to construct runtime objects");
+        DebugLog.println("[boot] failed to construct runtime objects");
         Serial.flush();
         if (otaPendingVerification) {
             rollbackAndReboot("Runtime objects failed to initialize during OTA health check.");
         }
         delay(1000);
+        DebugLog.service(true);
         ESP.restart();
     }
 
     if (!appState->begin()) {
-        Serial.println("[boot] failed to initialize app state mutex");
+        DebugLog.println("[boot] failed to initialize app state mutex");
         Serial.flush();
     }
 
     settingsManager->begin();
     *settings = settingsManager->load();
+    repairLowBatteryBootCounterOnce();
 
     // Take ownership of configured bridge inputs before storage, networking, or
     // the USB serial grace period can delay startup. Both inputs must stay LOW
@@ -3627,18 +3702,19 @@ void setup() {
     if (settings->device.powerCycleFactoryResetEnabled) {
         const uint8_t powerCycleCount = updatePowerCycleCounter(resetReason);
         if (powerCycleCount > 0) {
-            Serial.printf("[boot-guard] power-cycle count=%u/%u\n",
+            DebugLog.printf("[boot-guard] power-cycle count=%u/%u\n",
                           static_cast<unsigned>(powerCycleCount),
                           static_cast<unsigned>(kPowerCycleFactoryResetThreshold));
         }
         if (powerCycleCount >= kPowerCycleFactoryResetThreshold) {
-            Serial.println("[boot-guard] factory reset triggered by repeated power cycles");
+            DebugLog.println("[boot-guard] factory reset triggered by repeated power cycles");
             flashFactoryResetIndicator();
             settingsManager->reset();
             clearPowerCycleCounter();
             Serial.flush();
             motorController.prepareForRestart();
             delay(200);
+            DebugLog.service(true);
             ESP.restart();
         }
         if (powerCycleCount > 0) {
@@ -3648,6 +3724,7 @@ void setup() {
         clearPowerCycleCounter();
     }
     beginStorageBackends(*settings);
+    DebugLog.service(true);
     activeStatusLedPin = settings->device.statusLedPin;
     activeStatusLedIsNeoPixel = statusLedTypeIsNeoPixel(settings->device.statusLedType);
     activeWapeTriggerPin = settings->oled.displayType == "wape" ? settings->oled.wapeTriggerPin : 0;
@@ -3676,7 +3753,7 @@ void setup() {
 #if APP_AUDIO_DIAGNOSTIC_TEST
     if (activeAudioOutputEnabled) {
         audioPlayer->setDirectLibraryVolume(DefaultConfig::AUDIO_DIAGNOSTIC_LIBRARY_VOLUME);
-        Serial.printf("[audio-test] build enabled, waiting for Wi-Fi to start %s at library volume %u using BCLK=%u WS=%u DOUT=%u\n",
+        DebugLog.printf("[audio-test] build enabled, waiting for Wi-Fi to start %s at library volume %u using BCLK=%u WS=%u DOUT=%u\n",
                       DefaultConfig::AUDIO_DIAGNOSTIC_STREAM_URL,
                       static_cast<unsigned>(DefaultConfig::AUDIO_DIAGNOSTIC_LIBRARY_VOLUME),
                       static_cast<unsigned>(activeI2sBclkPin),
@@ -3806,8 +3883,9 @@ void setup() {
     }
 
     applyRuntimeSettings();
-    Serial.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
+    DebugLog.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
     Serial.flush();
+    DebugLog.service(true);
 }
 
 namespace {
@@ -3840,7 +3918,7 @@ void processSoundEffectTransitions(const AppStateSnapshot& snapshot) {
     String completedPlaybackSource;
     const bool playbackCompletionReported = audioPlayer != nullptr && audioPlayer->consumePlaybackCompletion(completedPlaybackSource);
     if (playbackCompletionReported) {
-        Serial.printf("[audio] completion source=%s\n", completedPlaybackSource.c_str());
+        DebugLog.printf("[audio] completion source=%s\n", completedPlaybackSource.c_str());
     }
     if (playbackCompletionReported && completedPlaybackSource == "effect-startup") {
         runtimeAudio.startupEffectActive = false;
@@ -3991,6 +4069,7 @@ void processSoundEffectTransitions(const AppStateSnapshot& snapshot) {
 }
 
 void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
+    if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) return;
     if (settings == nullptr) {
         return;
     }
@@ -4021,7 +4100,7 @@ void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
                     const bool retryableStorageFailure = storageReference && runtimeAudio.startupEffectAttempts < kStartupEffectMaxAttempts;
                     if (retryableStorageFailure) {
                         runtimeAudio.startupEffectEligibleAt = millis() + kStartupEffectRetryDelayMs;
-                        Serial.printf("[effect] startup retry %u/%u pending: %s\n",
+                        DebugLog.printf("[effect] startup retry %u/%u pending: %s\n",
                                       static_cast<unsigned>(runtimeAudio.startupEffectAttempts),
                                       static_cast<unsigned>(kStartupEffectMaxAttempts),
                                       startupEffectError.c_str());
@@ -4030,7 +4109,7 @@ void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
                         runtimeAudio.startupEffectActive = false;
                         runtimeAudio.startupEffectAttempts = 0;
                         if (!startupEffectError.isEmpty()) {
-                            Serial.printf("[effect] startup not played: %s\n", startupEffectError.c_str());
+                            DebugLog.printf("[effect] startup not played: %s\n", startupEffectError.c_str());
                             if (appState != nullptr) {
                                 appState->setLastError(startupEffectError);
                             }
@@ -4060,7 +4139,11 @@ void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
         }
     }
 
-    if (runtimeAudio.bootUpdateCheckQueued && wifiManager != nullptr && wifiManager->isConnected() && otaManager != nullptr && !snapshot.ota.busy) {
+    // Resuming radio and starting a TLS release check together exhausts the
+    // non-PSRAM ESP32 heap before the MP3 decoder can allocate its buffers.
+    if (runtimeAudio.bootUpdateCheckQueued && wifiManager != nullptr && wifiManager->isConnected() && otaManager != nullptr && !snapshot.ota.busy &&
+        !runtimeAudio.resumeSavedPlaybackPending && (deferredActions == nullptr || !deferredActions->playPending) &&
+        snapshot.playback.state != "playing" && snapshot.playback.state != "buffering") {
         runtimeAudio.bootUpdateCheckQueued = false;
         otaManager->triggerCheck(false);
     }
@@ -4075,14 +4158,15 @@ void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
         const bool storageReference = settings != nullptr && parseStorageFileReference(settings->audio.lastPlayback.url, storageTarget, storagePath);
         const bool resumeReady = storageReference || (wifiManager != nullptr && wifiManager->isConnected());
         if (resumeReady) {
-            Serial.printf("[audio] resuming saved playback after boot: %s\n", settings->audio.lastPlayback.url.c_str());
+            DebugLog.printf("[audio] resuming saved playback after boot: %s\n", settings->audio.lastPlayback.url.c_str());
             runtimeAudio.resumeSavedPlaybackPending = false;
             queueSavedPlaybackResume();
         }
     }
 
-    const uint8_t batteryPercent = estimateBatteryPercent(snapshot.battery.voltage);
-    if (batteryPercent > settings->device.lowBatterySleepThresholdPercent) {
+    const bool validBatteryReading = batteryReadingIsValidForSleepPolicy(snapshot.battery);
+    const uint8_t batteryPercent = validBatteryReading ? estimateBatteryPercent(snapshot.battery.voltage) : 100;
+    if (!validBatteryReading || batteryPercent > settings->device.lowBatterySleepThresholdPercent) {
         runtimeAudio.lowBatteryCueActive = false;
     } else if (!runtimeAudio.lowBatteryCueActive && !settings->effects.lowBatteryFile.isEmpty() && !runtimeAudio.alarmActive &&
         !runtimeAudio.restartPending && !runtimeAudio.startupEffectPending && !runtimeAudio.startupEffectActive) {
@@ -4134,7 +4218,7 @@ void serviceAudioDiagnosticTest() {
 
     audioPlayer->setDirectLibraryVolume(DefaultConfig::AUDIO_DIAGNOSTIC_LIBRARY_VOLUME);
     const AudioPlayer::DiagnosticsSnapshot diagnostics = audioPlayer->diagnostics();
-    Serial.printf("[audio-test] init driver=ESP32-audioI2S fmt=std-i2s preferred_rate=%lu stereo=%s bclk=%u ws=%u dout=%u lib_volume=%u url=%s\n",
+    DebugLog.printf("[audio-test] init driver=ESP32-audioI2S fmt=std-i2s preferred_rate=%lu stereo=%s bclk=%u ws=%u dout=%u lib_volume=%u url=%s\n",
                   static_cast<unsigned long>(diagnostics.requestedSampleRateHz),
                   diagnostics.stereoEnabled ? "on" : "off",
                   static_cast<unsigned>(activeI2sBclkPin),
@@ -4150,7 +4234,7 @@ void serviceAudioDiagnosticTest() {
     }
 
     diagnosticAudioRetryAt = millis() + 5000UL;
-    Serial.println("[audio-test] playback start failed, retrying in 5s");
+    DebugLog.println("[audio-test] playback start failed, retrying in 5s");
 #endif
 }
 
@@ -4164,6 +4248,16 @@ void loop() {
 
     const unsigned long now = millis();
     serviceCloneProvisioningSerial();
+    static bool audioReleasedForUpdate = false;
+    if (otaManager->isFirmwareTransferActive() && !audioReleasedForUpdate) {
+        audioReleasedForUpdate = true;
+        DebugLog.println("[ota] releasing playback buffers for firmware transfer");
+        audioPlayer->releaseResourcesForUpdate();
+        audioPlayer->setEqualizer(settings->audio.equalizerPreset, settings->audio.equalizerLowDb,
+                                  settings->audio.equalizerPresenceDb, settings->audio.equalizerHighDb);
+    } else if (!otaManager->isFirmwareTransferActive()) {
+        audioReleasedForUpdate = false;
+    }
     processDeferredActions();
     serviceWapeTriggerPulse();
     if (now - lastInputPollAt >= kInputPollIntervalMs) {
@@ -4188,6 +4282,7 @@ void loop() {
         }
     }
     pollStorageBackends();
+    DebugLog.service();
     const bool batteryUpdated = batteryMonitor->enabled() && batteryMonitor->loop(isBatterySamplingAllowed());
     otaManager->loop();
     mqttManager->loop();
@@ -4242,7 +4337,7 @@ void loop() {
 
     if (!otaTransferActive && !recoveryRebootScheduled && wifiManager->shouldRebootForRecovery()) {
         recoveryRebootScheduled = true;
-        Serial.printf("[recovery] scheduling reboot after %u failed Wi-Fi attempts\n",
+        DebugLog.printf("[recovery] scheduling reboot after %u failed Wi-Fi attempts\n",
                       static_cast<unsigned>(wifiManager->consecutiveFailureCount()));
         Serial.flush();
         requestRestartSequence("wifi_recovery", false);
@@ -4250,7 +4345,7 @@ void loop() {
 
     if (!otaTransferActive && !recoveryRebootScheduled && mqttManager->shouldRebootForRecovery()) {
         recoveryRebootScheduled = true;
-        Serial.printf("[recovery] scheduling reboot after %u failed MQTT attempts\n",
+        DebugLog.printf("[recovery] scheduling reboot after %u failed MQTT attempts\n",
                       static_cast<unsigned>(mqttManager->consecutiveFailureCount()));
         Serial.flush();
         requestRestartSequence("mqtt_recovery", false);
@@ -4260,12 +4355,14 @@ void loop() {
     // subsystem waits until OTA has completed or aborted.
     if (!otaTransferActive && rebootRequested && static_cast<long>(millis() - rebootAt) >= 0) {
         motorController.prepareForRestart();
+        DebugLog.service(true);
         ESP.restart();
     }
 
     const bool latencySensitive = runtimeStateSnapshotInitialized &&
         (runtimeStateSnapshot.playback.state == "playing" || runtimeStateSnapshot.playback.state == "buffering" ||
          runtimeStateSnapshot.ota.busy);
+    wifiManager->setLowLatencyMode(latencySensitive);
     delay(latencySensitive ? kActiveLoopDelayMs : kIdleLoopDelayMs);
 }
 

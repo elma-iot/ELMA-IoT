@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <AsyncMqttClient.h>
 #include <functional>
+#include <atomic>
 
 #include "app_state.h"
 #include "ha_bridge.h"
@@ -47,8 +48,19 @@ class MqttManager {
     bool configured_ = false;
     bool connectionEnabled_ = true;
     bool recoveryRebootRecommended_ = false;
-    bool discoveryPublishPending_ = false;
-    bool statePublishPending_ = false;
+    std::atomic<bool> discoveryPublishPending_{false};
+    std::atomic<bool> discoveryRestartPending_{false};
+    std::atomic<bool> statePublishPending_{false};
+    std::atomic<uint8_t> pendingPublishes_{0};
+    String clientHost_, clientId_, clientUsername_, clientPassword_, clientWillTopic_;
+    TaskHandle_t publisherTask_ = nullptr;
+    size_t discoveryCursor_ = 0;
+    size_t stateCursor_ = 0;
+    size_t statePassIndex_ = 0;
+    bool statePassActive_ = false;
+    bool statePassBlocked_ = false;
+    unsigned long lastDiscoveryStepAt_ = 0;
+    unsigned long lastStateAttemptAt_ = 0;
     bool discoveryPublishedForSession_ = false;
     bool wifiWasConnected_ = false;
     String lastOtaDiscoverySignature_;
@@ -64,6 +76,12 @@ class MqttManager {
     void handleDisconnected(AsyncMqttClientDisconnectReason reason);
     void handleMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
     void publishJson(const String& topic, const JsonDocument& doc, bool retained);
+    uint16_t publishPacket(const char* topic, uint8_t qos, bool retained, const char* payload, size_t length = 0);
+    void releasePublishSlot();
+    bool publishDiscoveryStep(size_t index, const std::function<uint16_t()>& send);
+    void publishDiscoveryNow();
+    void publishStateNow();
+    void publishChipTemperatureNow();
     String currentConfigUrl() const;
     void noteBrokerActivity();
     bool isCredentialFailureReason(AsyncMqttClientDisconnectReason reason) const;

@@ -61,6 +61,9 @@ struct OtaSettings {
 };
 
 struct BatterySettings {
+    uint32_t dividerR1Ohms = 220000;
+    uint32_t dividerR2Ohms = 220000;
+    float dividerMaxVin = 4.2f;
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
     float calibrationMultiplier = 2.0f;
     uint8_t adcPin = 0;

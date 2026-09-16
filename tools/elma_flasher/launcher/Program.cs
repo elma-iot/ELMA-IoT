@@ -31,11 +31,17 @@ internal static class Program
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr window);
 
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(int processId);
+
     [STAThread]
     private static int Main(string[] args)
     {
         string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
-        const string mutexName = "Local\\ELMA.IoT.Flasher.SingleInstance";
+        string mutexName = $"Local\\ELMA.IoT.Flasher.v{version}.SingleInstance";
         using var instanceMutex = new Mutex(true, mutexName, out bool ownsInstance);
         if (!ownsInstance)
         {
@@ -76,6 +82,15 @@ internal static class Program
             start.Environment["ELMA_PORTABLE_HOME"] = portableHome;
             start.Environment["ELMA_LAUNCHED_PORTABLY"] = "1";
             using Process child = Process.Start(start) ?? throw new InvalidOperationException("ELMA Flasher could not be started.");
+            bool isTestRun = args.Any(argument => argument.EndsWith("-test", StringComparison.OrdinalIgnoreCase));
+            if (!isTestRun)
+            {
+                // The launcher is the process Windows grants foreground rights to.
+                // Pass those rights to the Qt child, then raise its real window once
+                // it exists instead of leaving it behind the previously active app.
+                AllowSetForegroundWindow(child.Id);
+                ActivateExistingWindow();
+            }
             child.WaitForExit();
             return child.ExitCode;
         }
@@ -99,18 +114,26 @@ internal static class Program
     private static string? FindReadyPayload(string version)
     {
         string runtimeRoot = RuntimeRoot(version);
-        string corePath = Path.Combine(runtimeRoot, CoreExecutable);
-        string marker = Path.Combine(runtimeRoot, ".elma-runtime-ready");
         string expectedFingerprint = PayloadFingerprint();
-        if (!File.Exists(corePath) || !File.Exists(marker)) return null;
+        string parent = Path.GetDirectoryName(runtimeRoot)!;
+        var candidates = new[] { runtimeRoot }.Concat(Directory.Exists(parent)
+            ? Directory.EnumerateDirectories(parent, Path.GetFileName(runtimeRoot) + ".extracting-*")
+            : Array.Empty<string>());
+        foreach (string candidate in candidates)
+        {
+        string corePath = Path.Combine(candidate, CoreExecutable);
+        string marker = Path.Combine(candidate, ".elma-runtime-ready");
+        if (!File.Exists(corePath) || !File.Exists(marker)) continue;
         try
         {
-            return string.Equals(File.ReadAllText(marker).Trim(), expectedFingerprint, StringComparison.OrdinalIgnoreCase) ? corePath : null;
+            if (string.Equals(File.ReadAllText(marker).Trim(), expectedFingerprint, StringComparison.OrdinalIgnoreCase)) return corePath;
         }
-        catch (IOException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            return null;
+            // A locked old cache must not prevent trying another completed cache.
         }
+        }
+        return null;
     }
 
     private static string PayloadFingerprint()
@@ -130,11 +153,7 @@ internal static class Program
 
         string parent = Path.GetDirectoryName(runtimeRoot)!;
         Directory.CreateDirectory(parent);
-        string staging = runtimeRoot + $".extracting-{Environment.ProcessId}";
-        if (Directory.Exists(staging))
-        {
-            Directory.Delete(staging, true);
-        }
+        string staging = runtimeRoot + $".extracting-{Guid.NewGuid():N}";
         Directory.CreateDirectory(staging);
 
         progress.Report(new StartupProgress(1, "Reading embedded portable components"));
@@ -179,13 +198,11 @@ internal static class Program
             throw new InvalidDataException("The embedded ELMA runtime is incomplete.");
         }
         File.WriteAllText(Path.Combine(staging, ".elma-runtime-ready"), PayloadFingerprint());
-        progress.Report(new StartupProgress(99, "Activating the cached runtime"));
-        if (Directory.Exists(runtimeRoot))
-        {
-            Directory.Delete(runtimeRoot, true);
-        }
-        Directory.Move(staging, runtimeRoot);
-        return corePath;
+        // The ready marker commits this immutable generation. Antivirus/indexers
+        // can hold directory handles after extraction, making rename/delete fail.
+        // Run in place and retain older generations that may still be in use.
+        progress.Report(new StartupProgress(99, "Starting the verified runtime"));
+        return stagedCore;
     }
 
     private static void ActivateExistingWindow()
@@ -196,6 +213,7 @@ internal static class Program
             if (window != IntPtr.Zero)
             {
                 ShowWindow(window, SwRestore);
+                BringWindowToTop(window);
                 SetForegroundWindow(window);
                 return;
             }
@@ -210,7 +228,7 @@ internal static class Program
         {
             var title = new char[256];
             int length = GetWindowTextW(window, title, title.Length);
-            if (length > 0 && new string(title, 0, length).StartsWith("ELMA Flasher v", StringComparison.Ordinal))
+            if (length > 0 && new string(title, 0, length).Contains("ELMA Flasher v", StringComparison.Ordinal))
             {
                 match = window;
                 return false;

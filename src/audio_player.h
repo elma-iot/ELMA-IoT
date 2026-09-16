@@ -25,6 +25,7 @@ class AudioPlayer {
     bool playStorageFile(StorageTarget target, const String& path, const String& title, const String& mediaType, const String& source);
     bool playStorageOverlay(StorageTarget target, const String& path, uint8_t duckPercent = 35, uint8_t overlayPercent = 100);
     void stop();
+    void releaseResourcesForUpdate();
     bool overlayActive() const;
     bool consumeOverlayFinished();
     bool consumePlaybackCompletion(String& source);

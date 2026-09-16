@@ -1,4 +1,8 @@
+import {freePeripheralPin,occupiedPeripheralPins} from "./modules/peripheral-gpio-defaults.js";
+import {createVoltageDividerControls,voltageDividerMaximum,resistorLabel,resistorBands} from './modules/voltage-divider.js';
 import { createAudioTab } from "./modules/audio-tab.js";
+import { createLogsTab } from "./modules/logs-tab.js";
+import { boardChipFamily, chipPins, pinChoices } from "./modules/board-pin-policy.js";
 import { createBatteryTab } from "./modules/battery-tab.js";
 import { createConfigurationBackupModule } from "./modules/configuration-backup.js";
 import { createConfigurationGpioTab } from "./modules/configuration-gpio-tab.js";
@@ -150,6 +154,7 @@ const state = {
 };
 
 let tabNavigation = null;
+let logsTab = null;
 let audioTab = null;
 let batteryTab = null;
 let configurationBackupModule = null;
@@ -538,7 +543,6 @@ const GPIO_BOARD_ASSETS = {
   },
 };
 const OLED_PREVIEW_SCROLL_INTERVAL_MS = 300;
-const ESP32S3_I2S_GPIO_PINS = [9, 10, 11, 12];
 const DEFAULT_ESP32S3_AUDIO_PINS = {
   ws: 12,
   bclk: 11,
@@ -711,7 +715,7 @@ const GPIO_BOARD_LAYOUTS = {
     ],
     right: [
       { pin: null, label: "3V3" },
-      ...[22, 19, 23, 18, 5, 7, 6, 4, 0, 2, 15, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      ...[22, 19, 23, 18, 5, 17, 16, 4, 0, 2, 15, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
     ],
   },
   "esp32-s2-psram": {
@@ -1301,6 +1305,7 @@ firmwareTab = createFirmwareTab({
 const localBuilder = createLocalBuilder({
   elements,
   currentSettingsSnapshot,
+  validatePins: validateBoardPinAssignments,
   setMessage,
   toast,
 });
@@ -1459,6 +1464,7 @@ configurationGpioTab = createConfigurationGpioTab({
   loadStatus,
   handleError,
   isPcDesignerRuntime: PC_DESIGNER_RUNTIME,
+  renderAssignmentWarnings: renderBoardPinWarnings,
 });
 
 peripheralDiagramWiringModule = createPeripheralDiagramWiringModule({
@@ -1823,6 +1829,7 @@ statusRenderModule = createStatusRenderModule({
   renderDeviceResources,
   maybeRefreshVisibleStorageTab,
   isGpioUiInteracting,
+  isPeripheralUiInteracting,
   renderGpioOverview,
   renderPeripheralDiagram,
   renderMotorTab: () => motorTab?.render(),
@@ -2070,14 +2077,14 @@ function ensureBatteryDividerSensorSelection() {
 }
 
 function batteryAdcCapablePins(status = state.status) {
-  const chipFamily = String(status?.firmware?.chipFamily || "esp32s3").toLowerCase();
+  const chipFamily = activeChipFamily(status);
   if (chipFamily.includes("esp32s3") || chipFamily === "s3") {
     return Array.from({ length: 20 }, (_, index) => index + 1);
   }
   if (chipFamily === "esp32") {
     return [32, 33, 34, 35, 36, 39, 25, 26, 27, 14, 13, 12, 15, 4, 2, 0];
   }
-  return Array.from({ length: chipMaxPin() + 1 }, (_, index) => index);
+  return [0, 1, 2, 3, 4, 5];
 }
 
 function normalizedPeripheralInputProfiles() {
@@ -2498,7 +2505,7 @@ function removePeripheralHelperBindingsForIndex(groupKey, index) {
 function helperBindingSignalOptions() {
   const options = [];
   const roleMap = gpioRoleMap(state.settings, state.status);
-  for (let pin = 0; pin <= chipMaxPin(); pin += 1) {
+  for (const pin of validBoardPins(false)) {
     const roleLabels = roleMap.get(pin) || [];
     options.push({
       value: String(pin),
@@ -2529,6 +2536,7 @@ function boardProfileChipFamily(boardProfile = activeGpioBoardProfile()) {
 }
 
 function activeChipFamily(status = state.status) {
+  if (PC_DESIGNER_RUNTIME) return boardChipFamily(activeGpioBoardProfile(status));
   const chipFamily = String(status?.firmware?.chipFamily || "").trim().toLowerCase().replaceAll("-", "");
   if (chipFamily.includes("esp32s3") || chipFamily === "s3") {
     return "esp32s3";
@@ -2624,7 +2632,7 @@ function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
   const motorSignal = groupKey === "control";
   const allowedPins = touchSignal ? new Set(touchCapablePins()) : null;
   const blockedPins = motorSignal ? motorUnsafePins() : null;
-  for (let pin = 0; pin <= chipMaxPin(); pin += 1) {
+  for (const pin of validBoardPins(!["input", "sensor", "audioIn"].includes(groupKey))) {
     if (allowedPins && !allowedPins.has(pin)) {
       continue;
     }
@@ -2686,35 +2694,32 @@ function helperSignalLabels(groupKey, profileValue) {
   ].includes(label.toUpperCase()));
 }
 
-function batteryDividerResistorMarkup() {
+function batteryDividerResistorMarkup(ohms) {
   return `
     <span class="peripheral-diagram-divider-resistor" aria-hidden="true">
-      <span class="peripheral-diagram-divider-resistor-band peripheral-diagram-divider-resistor-band-red"></span>
-      <span class="peripheral-diagram-divider-resistor-band peripheral-diagram-divider-resistor-band-red"></span>
-      <span class="peripheral-diagram-divider-resistor-band peripheral-diagram-divider-resistor-band-black"></span>
-      <span class="peripheral-diagram-divider-resistor-band peripheral-diagram-divider-resistor-band-orange"></span>
-      <span class="peripheral-diagram-divider-resistor-band peripheral-diagram-divider-resistor-band-brown"></span>
+      ${resistorBands(ohms).map(color=>`<span class="peripheral-diagram-divider-resistor-band" style="background:${color}"></span>`).join('')}
     </span>
   `;
 }
 
 function peripheralDiagramBatteryDividerMarkup(node) {
+  const divider=voltageDividerMaximum(state.settings?.battery);
   return `
     <div class="peripheral-diagram-divider-block" aria-label="${escapeHtml(node.title || node.label)} placeholder">
-      <div class="peripheral-diagram-divider-title">Battery Divider</div>
-      <div class="peripheral-diagram-divider-ohms">220kOhms + 220kOhms</div>
+      <div class="peripheral-diagram-divider-title">Voltage Divider</div>
+      <div class="peripheral-diagram-divider-ohms">${resistorLabel(divider.dividerR1Ohms)} + ${resistorLabel(divider.dividerR2Ohms)}</div>
       <div class="peripheral-diagram-divider-schematic">
         <div class="peripheral-diagram-divider-node" aria-hidden="true"></div>
-        <div class="peripheral-diagram-divider-gpio-contact">GPIO</div>
+        <div class="peripheral-diagram-divider-gpio-contact">SIGNAL</div>
         <div class="peripheral-diagram-divider-row peripheral-diagram-divider-row-top">
           <span class="peripheral-diagram-divider-lead" aria-hidden="true"></span>
-          ${batteryDividerResistorMarkup()}
+          ${batteryDividerResistorMarkup(divider.dividerR1Ohms)}
           <span class="peripheral-diagram-divider-tail" aria-hidden="true"></span>
-          <span class="peripheral-diagram-divider-contact">Batt</span>
+          <span class="peripheral-diagram-divider-contact">VIN</span>
         </div>
         <div class="peripheral-diagram-divider-row peripheral-diagram-divider-row-bottom">
           <span class="peripheral-diagram-divider-lead" aria-hidden="true"></span>
-          ${batteryDividerResistorMarkup()}
+          ${batteryDividerResistorMarkup(divider.dividerR2Ohms)}
           <span class="peripheral-diagram-divider-tail" aria-hidden="true"></span>
           <span class="peripheral-diagram-divider-contact">GND</span>
         </div>
@@ -2918,6 +2923,7 @@ function appendRealPeripheralBindingControl(container, definition) {
       const cloned = document.createElement("option");
       cloned.value = option.value;
       cloned.textContent = option.textContent;
+      cloned.disabled = option.disabled;
       cloned.selected = option.selected;
       select.appendChild(cloned);
     }
@@ -2974,10 +2980,65 @@ function appendHelperPeripheralBindingControl(container, groupKey, index, signal
     select.appendChild(option);
   }
   select.disabled = noPinsAvailable;
+  if (selectedValue && ![...select.options].some(option => option.value === selectedValue)) {
+    const invalid = new Option(`GPIO${selectedValue} — invalid/reserved for this board (reassign)`, selectedValue);
+    invalid.disabled = true;
+    select.prepend(invalid);
+  }
   select.value = selectedValue;
 
   control.appendChild(select);
   container.appendChild(control);
+}
+
+const defaultedPeripheralProfiles = new Map();
+// Shared profile component identifies selection intent, separate from saved-data rendering.
+document.addEventListener('change',event=>{
+  const field=event.target,group=field?.dataset?.peripheralDefaultsGroup;
+  if(group&&!state.settingsLoading)defaultedPeripheralProfiles.set(`${activeGpioBoardProfile()}:${group}:${field.dataset.peripheralDefaultsIndex}`,'none');
+},true);
+let assigningPeripheralDefaults = false;
+function assignPeripheralDefaults(groupKey, profileValue, index, realDefinitions, helperSignals) {
+  if(assigningPeripheralDefaults)return;
+  const key=`${activeGpioBoardProfile()}:${groupKey}:${index}`,previous=defaultedPeripheralProfiles.get(key);
+  if(previous===profileValue)return;
+  defaultedPeripheralProfiles.set(key,profileValue);
+  if(profileValue==='none')return;
+  assigningPeripheralDefaults=true;
+  try{
+    const roles=gpioConfigRoleState(),own=new Set(realDefinitions.map(definition=>definition.key));
+    for(const signal of helperSignals)own.add(`ui.${groupKey}.${index}.${signal.toLowerCase()}`);
+    const occupied=occupiedPeripheralPins({roles:roles.roleToPin,ownRoles:own,bindings:state.peripheralHelperBindings,ownSlot:`${groupKey}:${index}`});
+    if(Number(state.settings?.battery?.chargingSensePin)>0)occupied.add(Number(state.settings.battery.chargingSensePin));
+    const blocked=motorUnsafePins();
+    const layout=GPIO_BOARD_LAYOUTS[activeGpioBoardProfile()];
+    const exposed=new Set([...(layout?.left||[]),...(layout?.right||[])].filter(entry=>entry.pin!==null&&entry.pin!==undefined).map(entry=>Number(entry.pin)));
+    const selectPin=(candidates,preferred)=>freePeripheralPin({candidates:candidates.filter(pin=>exposed.has(Number(pin))),occupied,blocked,preferred});
+    for(const definition of realDefinitions){
+      const field=definition.element;if(!field||/reset|trigger/i.test(definition.key))continue;
+      const current=String(field.value||'');
+      // Saved assignments stay intact; newly enabled peripherals receive free defaults.
+      if((previous===undefined||state.settingsLoading)&&current!==''&&Number(current)>=0){occupied.add(Number(current));continue;}
+      const output=definition.key!=='sd.misoPin';
+      const value=selectPin(validBoardPins(output),current);
+      if(value===''){
+        if(![...field.options].some(option=>option.value==='-1'))field.prepend(new Option('No supported free GPIOs','-1'));
+        field.value='-1';
+      }else{field.value=value;occupied.add(Number(value));}
+    }
+    for(const signal of helperSignals){
+      if(['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE'].includes(signal))continue;
+      const current=peripheralHelperBindingValue(groupKey,index,signal);
+      if(current!==''&&(previous===undefined||state.settingsLoading)){occupied.add(Number(current));continue;}
+      const options=helperBindingSignalOptionsFor(groupKey,index,signal);
+      const value=selectPin(options.map(option=>option.value),current);
+      if(value!==''){
+        if(groupKey==='sensor'&&profileValue===BATTERY_DIVIDER_SENSOR_PROFILE)elements.batteryAdcPin.value=value;
+        else setPeripheralHelperBindingValue(groupKey,index,signal,value);
+        occupied.add(Number(value));
+      }
+    }
+  }finally{assigningPeripheralDefaults=false;}
 }
 
 function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue, index = 0) {
@@ -3002,6 +3063,7 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
     ? []
     : helperSignalLabels(groupKey, profileValue).filter((signalLabel) => !realDefinitions.some((definition) => definition.label.replace(/^OLED\s+/i, "").replace(/^I2S\s+/i, "") === signalLabel));
 
+  assignPeripheralDefaults(groupKey,profileValue,index,realDefinitions,helperSignalsForProfile);
   container.hidden = realDefinitions.length === 0 && helperSignalsForProfile.length === 0;
   if (container.hidden) {
     return;
@@ -3036,6 +3098,7 @@ function updatePrimaryPeripheralIndexLabel(element, baseLabel, total) {
 }
 
 function buildPeripheralProfileComposite(groupKey, selectedValue, index, select, rowLabel = "") {
+  select.dataset.peripheralDefaultsGroup=groupKey;select.dataset.peripheralDefaultsIndex=String(index);
   const stack = document.createElement("div");
   stack.className = "peripheral-profile-stack";
   ensureDynamicFieldIdentity(
@@ -3075,6 +3138,13 @@ function buildPeripheralProfileComposite(groupKey, selectedValue, index, select,
     composite.appendChild(buildPeripheralSelectionBindingGroup(groupKey, selectedValue, index));
   }
   stack.appendChild(composite);
+  if(groupKey==='sensor'&&selectedValue===BATTERY_DIVIDER_SENSOR_PROFILE){
+    stack.append(createVoltageDividerControls({battery:state.settings?.battery,onChange:(values,resistorsChanged)=>{
+      state.settings ||= {};state.settings.battery={...state.settings.battery,...values};
+      if(resistorsChanged){const multiplier=voltageDividerMaximum(values).ratio;state.settings.battery.calibrationMultiplier=multiplier;state.settings.battery.measuredVoltage=0;state.batteryMeasuredVoltageInput='';if(elements.batteryMeasuredVoltage)elements.batteryMeasuredVoltage.value='';const field=elements.settingsForm.elements.namedItem('battery.calibrationMultiplier');if(field)field.value=String(multiplier);}
+      renderPeripheralDiagram();queueSettingsSave(150);
+    }}));
+  }
   return stack;
 }
 
@@ -4501,19 +4571,54 @@ function populateAudioI2sPinOptions(settings = state.settings) {
     dout: String(elements.audioDoutPin.value || settings?.audio?.doutPin || DEFAULT_ESP32S3_AUDIO_PINS.dout),
   };
 
-  for (const field of audioFields) {
-    field.innerHTML = "";
-    for (const pin of ESP32S3_I2S_GPIO_PINS) {
-      const option = document.createElement("option");
-      option.value = String(pin);
-      option.textContent = `GPIO${pin}`;
-      field.append(option);
-    }
+  for (const [field, selected] of [[elements.audioWsPin, selectedPins.ws], [elements.audioBclkPin, selectedPins.bclk], [elements.audioDoutPin, selectedPins.dout]]) {
+    fillBoardPinSelect(field, selected, true);
   }
+}
 
-  elements.audioWsPin.value = selectedPins.ws;
-  elements.audioBclkPin.value = selectedPins.bclk;
-  elements.audioDoutPin.value = selectedPins.dout;
+function validBoardPins(output = false) {
+  return chipPins(activeChipFamily(), output, activeGpioBoardProfile());
+}
+
+function fillBoardPinSelect(field, selected, output = true, blocked = new Set(), disabledValue = null) {
+  const choices = pinChoices(validBoardPins(output), selected === String(disabledValue) ? "" : selected, blocked);
+  field.innerHTML = "";
+  if (disabledValue !== null) field.append(new Option("Disabled", String(disabledValue)));
+  for (const choice of choices) {
+    const option = new Option(choice.label, choice.value);
+    option.disabled = choice.disabled;
+    field.append(option);
+  }
+  field.value = String(selected ?? disabledValue ?? "");
+}
+
+function boardPinAssignmentIssues() {
+  const inputs = new Set(validBoardPins(false));
+  const outputs = new Set(validBoardPins(true));
+  const issues = [];
+  for (const [pin, roles] of gpioRoleMap(state.settings, state.status)) {
+    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} — invalid or reserved on the selected board`);
+  }
+  const roleState = gpioConfigRoleState(state.settings);
+  for (const definition of roleState.definitions) {
+    const pin = roleState.roleToPin.get(definition.key);
+    const input = definition.key.startsWith("battery.") || definition.key.startsWith("ui.input.") || definition.key === "sd.misoPin";
+    if (pin !== null && !input && inputs.has(pin) && !outputs.has(pin)) issues.push(`GPIO${pin}: ${definition.label} requires an output-capable pin`);
+  }
+  return [...new Set(issues)];
+}
+
+function renderBoardPinWarnings() {
+  const panel = document.getElementById("gpioAssignmentWarnings");
+  if (!panel) return;
+  const issues = boardPinAssignmentIssues();
+  panel.hidden = true;
+  panel.textContent = "";
+}
+
+function validateBoardPinAssignments() {
+  const issues = boardPinAssignmentIssues();
+  if (issues.length) throw new Error(issues.join("; "));
 }
 
 function populateBatteryAdcPinOptions(settings = state.settings) {
@@ -4556,12 +4661,7 @@ function populateBatteryAdcPinOptions(settings = state.settings) {
 }
 
 function availableStatusLedPins() {
-  const chipFamily = String(state.status?.firmware?.chipFamily || "esp32s3").toLowerCase();
-  if (chipFamily.includes("c3")) {
-    return [...Array.from({ length: 11 }, (_, index) => index), 20, 21];
-  }
-  const maxPin = chipFamily === "esp32" ? 39 : 48;
-  return Array.from({ length: maxPin + 1 }, (_, index) => index);
+  return validBoardPins(true);
 }
 
 function activeGpioBoardProfile(status = state.status) {
@@ -4609,7 +4709,7 @@ function isPeripheralUiInteracting() {
   if (state.peripheralUiInteractionDepth > 0 || state.peripheralMenuOpen) {
     return true;
   }
-  return isTopPeripheralSelect(document.activeElement);
+  return isTopPeripheralSelect(document.activeElement) || Boolean(document.activeElement?.closest?.(".voltage-divider-controls"));
 }
 
 function statusLedRoleLabel(settings = state.settings, status = state.status) {
@@ -4665,30 +4765,16 @@ function populateStatusLedPinOptions(settings = state.settings) {
   for (const pin of currentSdPins(settings)) {
     reservedPins.add(pin);
   }
-  elements.statusLedPin.innerHTML = "";
-
-  for (const pin of availableStatusLedPins()) {
-    if (reservedPins.has(pin)) {
-      continue;
-    }
-    const option = document.createElement("option");
-    option.value = String(pin);
-    option.textContent = statusLedPinLabel(pin);
-    elements.statusLedPin.append(option);
-  }
-
-  if (selectedPin && [...elements.statusLedPin.options].some((option) => option.value === selectedPin)) {
-    elements.statusLedPin.value = selectedPin;
-  }
+  fillBoardPinSelect(elements.statusLedPin, selectedPin, true, reservedPins);
 }
 
 function chipMaxPin() {
-  const chipFamily = String(state.status?.firmware?.chipFamily || "esp32s3").toLowerCase();
+  const chipFamily = activeChipFamily();
   return chipFamily === "esp32" ? 39 : 48;
 }
 
 function currentButtonPins() {
-  const chipFamily = String(state.status?.firmware?.chipFamily || "esp32s3").toLowerCase();
+  const chipFamily = activeChipFamily();
   return chipFamily === "esp32" ? [5, 18] : [5, 6];
 }
 
@@ -4947,53 +5033,11 @@ function reservedSdPins(settings = state.settings) {
 }
 
 function populateSdPinOptions(settings = state.settings, syncBindings = true) {
-  const sdFields = [elements.sdCsPin, elements.sdSckPin, elements.sdMosiPin, elements.sdMisoPin];
-  if (sdFields.some((field) => !field)) {
-    return;
+  const reserved = reservedSdPins(settings);
+  for (const [field, key] of [[elements.sdCsPin, "csPin"], [elements.sdSckPin, "sckPin"], [elements.sdMosiPin, "mosiPin"], [elements.sdMisoPin, "misoPin"]]) {
+    if (field) fillBoardPinSelect(field, field.value || settings?.sd?.[key] || 0, key !== "misoPin", reserved);
   }
-
-  const selectedPins = {
-    cs: String(elements.sdCsPin.value || settings?.sd?.csPin || DEFAULT_SD_GPIO_PINS.cs),
-    sck: String(elements.sdSckPin.value || settings?.sd?.sckPin || DEFAULT_SD_GPIO_PINS.sck),
-    mosi: String(elements.sdMosiPin.value || settings?.sd?.mosiPin || DEFAULT_SD_GPIO_PINS.mosi),
-    miso: String(elements.sdMisoPin.value || settings?.sd?.misoPin || DEFAULT_SD_GPIO_PINS.miso),
-  };
-  const reservedPins = reservedSdPins(settings);
-
-  for (const field of sdFields) {
-    field.innerHTML = "";
-    for (let pin = 0; pin <= chipMaxPin(); pin += 1) {
-      if (reservedPins.has(pin)) {
-        continue;
-      }
-      const option = document.createElement("option");
-      option.value = String(pin);
-      option.textContent = `GPIO${pin}`;
-      field.append(option);
-    }
-  }
-
-  const applySelectedOrFallback = (field, selectedValue, fallbackPin) => {
-    if ([...field.options].some((option) => option.value === selectedValue)) {
-      field.value = selectedValue;
-      return;
-    }
-    const fallbackValue = String(fallbackPin);
-    if ([...field.options].some((option) => option.value === fallbackValue)) {
-      field.value = fallbackValue;
-      return;
-    }
-    field.value = field.options[0]?.value || "0";
-  };
-
-  applySelectedOrFallback(elements.sdCsPin, selectedPins.cs, DEFAULT_SD_GPIO_PINS.cs);
-  applySelectedOrFallback(elements.sdSckPin, selectedPins.sck, DEFAULT_SD_GPIO_PINS.sck);
-  applySelectedOrFallback(elements.sdMosiPin, selectedPins.mosi, DEFAULT_SD_GPIO_PINS.mosi);
-  applySelectedOrFallback(elements.sdMisoPin, selectedPins.miso, DEFAULT_SD_GPIO_PINS.miso);
-
-  if (syncBindings) {
-    syncPeripheralBindingGroups();
-  }
+  if (syncBindings) syncPeripheralBindingGroups();
 }
 
 function reservedOledPins(settings = state.settings) {
@@ -5048,52 +5092,15 @@ function choosePreferredOledPins(settings = state.settings) {
 }
 
 function populateOledPinOptions(settings = state.settings) {
-  const oledFields = [elements.oledSdaPin, elements.oledSclPin, elements.oledResetPin];
-  if (oledFields.some((field) => !field)) {
-    return;
-  }
-
-  const reservedPins = reservedOledPins(settings);
-  const defaults = choosePreferredOledPins(settings);
-  const selectedReset = String(elements.oledResetPin.value || settings?.oled?.resetPin || -1);
-
-  elements.oledSdaPin.innerHTML = "";
-  elements.oledSclPin.innerHTML = "";
-  elements.oledResetPin.innerHTML = "";
-
-  for (let pin = 0; pin <= chipMaxPin(); pin += 1) {
-    if (reservedPins.has(pin)) {
-      continue;
-    }
-
-    for (const field of [elements.oledSdaPin, elements.oledSclPin, elements.oledResetPin]) {
-      const option = document.createElement("option");
-      option.value = String(pin);
-      option.textContent = `GPIO${pin}`;
-      field.append(option.cloneNode(true));
-    }
-  }
-
-  const resetDisabledOption = document.createElement("option");
-  resetDisabledOption.value = "-1";
-  resetDisabledOption.textContent = "Disabled";
-  elements.oledResetPin.prepend(resetDisabledOption);
-
-  if ([...elements.oledSdaPin.options].some((option) => option.value === String(defaults.sda))) {
-    elements.oledSdaPin.value = String(defaults.sda);
-  }
-  if ([...elements.oledSclPin.options].some((option) => option.value === String(defaults.scl))) {
-    elements.oledSclPin.value = String(defaults.scl);
-  }
-  if ([...elements.oledResetPin.options].some((option) => option.value === selectedReset)) {
-    elements.oledResetPin.value = selectedReset;
-  } else {
-    elements.oledResetPin.value = "-1";
-  }
+  if (!elements.oledSdaPin || !elements.oledSclPin || !elements.oledResetPin) return;
+  const reserved = reservedOledPins(settings);
+  fillBoardPinSelect(elements.oledSdaPin, elements.oledSdaPin.value || settings?.oled?.sdaPin || 4, true, reserved);
+  fillBoardPinSelect(elements.oledSclPin, elements.oledSclPin.value || settings?.oled?.sclPin || 5, true, reserved);
+  fillBoardPinSelect(elements.oledResetPin, elements.oledResetPin.value || settings?.oled?.resetPin || -1, true, reserved, -1);
 }
 
 function availableWapeTriggerPins(settings = state.settings) {
-  const chipFamily = String(state.status?.firmware?.chipFamily || "esp32s3").toLowerCase();
+  const chipFamily = activeChipFamily();
   const maxPin = chipFamily === "esp32" ? 39 : 48;
   const reservedPins = new Set(currentI2sPins());
   const batteryAdcPin = Number(elements.batteryAdcPin?.value || settings?.battery?.adcPin || 0);
@@ -5110,7 +5117,7 @@ function availableWapeTriggerPins(settings = state.settings) {
   if (chipFamily === "esp32s3") {
     reservedPins.add(21);
   }
-  return Array.from({ length: maxPin + 1 }, (_, index) => index)
+  return validBoardPins(true)
     .filter((pin) => pin === 0 || !reservedPins.has(pin));
 }
 
@@ -7773,7 +7780,7 @@ function gpioRoleMap(settings = state.settings, status = state.status) {
     }
     const profileLabel = peripheralHelperProfileLabel(groupKey, profileValue, index);
     for (const [signalLabel, pinValue] of Object.entries(slotBindings)) {
-      if (String(signalLabel || "").trim().toUpperCase() === "CONTACT") {
+      if (["CONTACT", "MAIN_CONTROL", "SOURCE", "INPUT_VOLTAGE", "OUTPUT_VOLTAGE"].includes(String(signalLabel || "").trim().toUpperCase())) {
         continue;
       }
       const numericPin = Number(pinValue);
@@ -7920,6 +7927,8 @@ function gpioConfigRoleState(settings = state.settings) {
 
 function gpioConfigOptions(pin, currentRoleKey, roleState) {
   return roleState.definitions.filter((definition) => {
+    const input = definition.key.startsWith("battery.") || definition.key.startsWith("ui.input.") || definition.key === "sd.misoPin";
+    if (!validBoardPins(!input).includes(Number(pin))) return definition.key === currentRoleKey;
     const assignedPin = roleState.roleToPin.get(definition.key);
     if (definition.key === currentRoleKey) {
       return true;
@@ -7937,6 +7946,7 @@ function setGpioExtraExpanded(expanded) {
 
 function renderGpioOverview() {
   configurationGpioTab?.renderGpioOverview();
+  renderBoardPinWarnings();
 }
 
 function syncGpioMappingControls() {
@@ -8848,10 +8858,13 @@ function updatePlaybackActionButton() {
 }
 
 function setupTabs() {
+  logsTab ||= createLogsTab({ request });
   tabNavigation = initTabNavigation({
     storageKey: ACTIVE_TAB_STORAGE_KEY,
     onActivate(resolvedTabName) {
+      logsTab.setActive(resolvedTabName === "logs");
       if (resolvedTabName === "gpio") {
+        renderGpioOverview();
         refreshVisiblePeripheralDiagram();
       } else {
         stopTouchLivePolling();
@@ -8860,6 +8873,9 @@ function setupTabs() {
       if (resolvedTabName === "firmware" && !desktopFlashView && !document.body.classList.contains("local-builder-mode")) {
         refreshFirmwareInfo(true).catch(handleError);
       }
+
+      if (resolvedTabName === "motor") motorTab?.render();
+      if (resolvedTabName === "oled") renderOledPreview();
 
       if (resolvedTabName === "effects" && state.settings) {
         syncEffectsPage(state.settings);
@@ -8922,11 +8938,17 @@ function startStatusPolling(intervalMs = 2000) {
     return;
   }
 
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !document.body.classList.contains("local-builder-mode")) {
+      loadStatus().catch((error) => console.error(error));
+    }
+  });
+
   state.statusPollTimer = window.setInterval(() => {
     // The PC Designer represents a future device and its loopback status is
     // static. Polling it rebuilt GPIO diagrams, previews, and motor controls
     // every two seconds, interrupting focused inputs and open dropdowns.
-    if (document.body.classList.contains("local-builder-mode")) {
+    if (document.hidden || document.body.classList.contains("local-builder-mode")) {
       return;
     }
     loadStatus().catch((error) => console.error(error));

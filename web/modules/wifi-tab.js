@@ -207,6 +207,12 @@ export function createWifiTab({
       await saveSettings({ silent: true });
       setMessage(`Wi-Fi settings saved for ${ssid}`);
 
+      if (document.body.classList.contains("android-designer")) {
+        window.ElmaAndroidConfig?.openWifiSettings();
+        setScanStatus(`Settings saved for ${ssid}. Select that network in Android Wi-Fi settings to connect the phone.`);
+        return;
+      }
+
       if (document.body.classList.contains("local-builder-mode")) {
         setScanStatus(`Testing ${ssid} through this PC's Wi-Fi adapter...`);
         const selectedOption = elements.wifiNetworkList?.selectedOptions?.[0];

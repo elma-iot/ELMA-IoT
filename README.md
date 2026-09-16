@@ -11,12 +11,34 @@ Project story and current device write-up:
 
 ## Current Release
 
-- Firmware version: `v0.1.41`
+- Firmware version: `v0.1.43`
 - Primary release repository: `elma-iot/ELMA-IoT`
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
-- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.41.bin`
+- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.43.bin`
 
-The firmware images and portable Windows flasher are available from the [v0.1.41 release](https://github.com/elma-iot/ELMA-IoT/releases/tag/v0.1.41).
+The firmware images and portable Windows flasher are available from the [v0.1.43 release](https://github.com/elma-iot/ELMA-IoT/releases/tag/v0.1.43).
+
+### v0.1.43 highlights
+
+- Classic ESP32 internal temperature monitoring rejects the invalid raw-128 conversion (53.3 C), retains valid samples for at most 30 seconds, and displays sample age. Values are labelled estimates because the legacy API has no factory-calibrated accuracy guarantee. No smoothing hides temperature changes; expired readings become unavailable. Other targets retain their sensor driver.
+- Last saved desktop configurations autoload, and legacy settings without peripheral-profile metadata restore audio/display/storage selections from their enabled hardware settings. Explicitly saved selections remain authoritative.
+- Idle station mode enables Wi-Fi modem sleep again; playback and OTA retain low-latency operation. The Logs viewer polls only while visible and does not keep the radio permanently awake.
+- Device-specific Full builds embed only the selected board's HTML option, JavaScript metadata and SVG. All peripheral definitions and illustrations remain available; the desktop Designer retains the full board catalogue.
+- Flash assets stream directly from immutable flash through a bounded TCP window. Non-PSRAM audio uses a 16 KiB input allocation to preserve contiguous Wi-Fi memory. AsyncTCP 3.5.0 and ESPAsyncWebServer 3.7.6 are pinned for reproducible builds.
+- Playback waits for an already-running release check to free its TLS buffers. Background release checks defer while playback is active; requested firmware installs still release playback resources before starting.
+- Logs retain current/previous boot tails internally, shrinking checkpoints if configuration fills NVS. With SD available, `/rebootlog.txt` rotates at 10 MiB. The Logs tab provides a scrollable text view and Copy button.
+- MQTT state changes are coalesced onto the main loop, discovery is paced, and at most four QoS1 publishes can await acknowledgement. Client connection strings have persistent ownership, and low-memory publishes wait instead of exhausting the heap.
+- JSON web responses use one checked allocation instead of a repeatedly growing stream buffer. Upload-status routing returns the correct resume offset. Firmware transfers release audio decoder/network buffers and temporarily prevent playback; automatic startup release checks wait while saved radio playback starts.
+- The low-battery deep-sleep checkbox, threshold and wake interval are now visible in the Battery tab in both ELMA Flasher and the full on-device configurator. Deep sleep remains disabled by default.
+- A missing, disconnected or implausible battery ADC reading can no longer put the device into a sleep loop. Firmware keeps a 30-second post-boot configuration window and clears the power-cycle guard before deliberate sleep.
+- The upgrade performs a one-time cleanup of the legacy power-cycle counter, protecting devices that accumulated resets while older firmware repeatedly entered low-battery sleep.
+- LAN discovery uses a more tolerant timeout for weak Wi-Fi devices while remaining off the UI thread.
+
+### v0.1.42 highlights
+
+- ELMA Flasher detects classic ESP32 devices running ELMA v0.1.10/v0.1.11 and automatically compiles a legacy-partition-compatible image for their 0x190000-byte OTA slot instead of attempting an oversized normal image.
+- The compatibility image preserves NVS settings and operational audio, MQTT, GPIO, display and control code, while replacing the large illustrated browser configurator with a compact recovery page. The flasher reapplies the selected configuration after the device restarts.
+- LAN discovery gives the manually entered IP a longer direct probe before the parallel subnet scan, improving detection of weak or slow devices. The new application version can also start independently while an older flasher is still open.
 
 ### v0.1.41 highlights
 
@@ -599,22 +621,23 @@ Current OTA and rollback behavior:
 The Firmware tab checks GitHub Releases by default and matches the expected asset name to the running build variant.
 
 
-Release asset names for `v0.1.41`:
+Release asset names for `v0.1.43`:
 
-- `esp32-notifier-v0.1.41.bin`
-- `esp32-notifier-hacs-v0.1.41.bin`
-- `esp32-notifier-hacs-slim-v0.1.41.bin`
-- `esp32s3-notifier-v0.1.41.bin`
-- `esp32s3-notifier-hacs-v0.1.41.bin`
-- `esp32s3-notifier-hacs-slim-v0.1.41.bin`
-- `esp32c3-notifier-hacs-v0.1.41.bin`
-- `esp32-ota-bridge-v0.1.41.bin`
-- `esp32s3-ota-bridge-v0.1.41.bin`
-- `esp32c3-ota-bridge-v0.1.41.bin`
-- `ELMA-Flasher-v0.1.41.exe`
+- `esp32-notifier-v0.1.43.bin`
+- `esp32-notifier-hacs-v0.1.43.bin`
+- `esp32-notifier-hacs-slim-v0.1.43.bin`
+- `esp32-notifier-hacs-legacy-ota-v0.1.43.bin`
+- `esp32s3-notifier-v0.1.43.bin`
+- `esp32s3-notifier-hacs-v0.1.43.bin`
+- `esp32s3-notifier-hacs-slim-v0.1.43.bin`
+- `esp32c3-notifier-hacs-v0.1.43.bin`
+- `esp32-ota-bridge-v0.1.43.bin`
+- `esp32s3-ota-bridge-v0.1.43.bin`
+- `esp32c3-ota-bridge-v0.1.43.bin`
+- `ELMA-Flasher-v0.1.43.exe`
 - `SHA256SUMS.txt`
 
-GitHub release publishing is automated by [.github/workflows/platformio.yml](.github/workflows/platformio.yml): publishing a release triggers CI to build seven full firmware variants, three minimal recovery variants and the Windows flasher. Existing manually verified assets are not overwritten. Full release images use ESP32-WROOM, ESP32-S3 Super Mini and ESP32-C3 board defaults respectively; use the EXE to build for another supported board. Binaries and the EXE are release attachments, not Git source files.
+GitHub release publishing is automated by [.github/workflows/platformio.yml](.github/workflows/platformio.yml): publishing a release triggers CI to build eight operating firmware variants (including the legacy-slot build), three minimal recovery variants and the Windows flasher. Existing manually verified assets are not overwritten. Full release images use ESP32-WROOM, ESP32-S3 Super Mini and ESP32-C3 board defaults respectively; use the EXE to build for another supported board. Binaries and the EXE are release attachments, not Git source files.
 
 ## Battery Monitoring
 
@@ -693,6 +716,8 @@ Key files and directories:
 
 Current release notes live here:
 
+- [release-assets/v0.1.43/release-notes.md](release-assets/v0.1.43/release-notes.md)
+- [release-assets/v0.1.42/release-notes.md](release-assets/v0.1.42/release-notes.md)
 - [release-assets/v0.1.41/release-notes.md](release-assets/v0.1.41/release-notes.md)
 - [release-assets/v0.1.39/release-notes.md](release-assets/v0.1.39/release-notes.md)
 - [release-assets/v0.1.38/release-notes.md](release-assets/v0.1.38/release-notes.md)

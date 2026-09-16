@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipInstall
+    [switch]$SkipInstall,
+    [string]$OutputDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,27 +16,28 @@ $releaseVersion = $Matches[1]
 $releaseTag = "v$releaseVersion"
 $assetName = "ELMA-Flasher-$releaseTag"
 $releaseRoot = Join-Path $projectRoot "release-assets\$releaseTag"
+if ($OutputDirectory) { $releaseRoot = [IO.Path]::GetFullPath($OutputDirectory) }
 
 $requiredFirmwareFiles = @(
-    '.pio\build\esp32_notifier\bootloader.bin',
-    '.pio\build\esp32_notifier\partitions.bin',
-    '.pio\build\esp32s3_notifier\bootloader.bin',
-    '.pio\build\esp32s3_notifier\partitions.bin',
+    '.pio\build\esp32_notifier_hacs\bootloader.bin',
+    '.pio\build\esp32_notifier_hacs\partitions.bin',
+    '.pio\build\esp32s3_notifier_hacs\bootloader.bin',
+    '.pio\build\esp32s3_notifier_hacs\partitions.bin',
     '.pio\build\esp32c3_designer_hacs\bootloader.bin',
     '.pio\build\esp32c3_designer_hacs\partitions.bin'
 )
 foreach ($relativePath in $requiredFirmwareFiles) {
     $fullPath = Join-Path $projectRoot $relativePath
     if (-not (Test-Path -LiteralPath $fullPath)) {
-        throw "Missing $relativePath. Build the ESP32 and ESP32-S3 PlatformIO environments first."
+        throw "Missing $relativePath. Build the ESP32, ESP32-S3 and C3 HACS PlatformIO environments first."
     }
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $assetRoot 'esp32'), (Join-Path $assetRoot 'esp32s3'), (Join-Path $assetRoot 'esp32c3'), $releaseRoot | Out-Null
-Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32_notifier\bootloader.bin') -Destination (Join-Path $assetRoot 'esp32\bootloader.bin') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32_notifier\partitions.bin') -Destination (Join-Path $assetRoot 'esp32\partitions.bin') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32s3_notifier\bootloader.bin') -Destination (Join-Path $assetRoot 'esp32s3\bootloader.bin') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32s3_notifier\partitions.bin') -Destination (Join-Path $assetRoot 'esp32s3\partitions.bin') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32_notifier_hacs\bootloader.bin') -Destination (Join-Path $assetRoot 'esp32\bootloader.bin') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32_notifier_hacs\partitions.bin') -Destination (Join-Path $assetRoot 'esp32\partitions.bin') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32s3_notifier_hacs\bootloader.bin') -Destination (Join-Path $assetRoot 'esp32s3\bootloader.bin') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32s3_notifier_hacs\partitions.bin') -Destination (Join-Path $assetRoot 'esp32s3\partitions.bin') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32c3_designer_hacs\bootloader.bin') -Destination (Join-Path $assetRoot 'esp32c3\bootloader.bin') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot '.pio\build\esp32c3_designer_hacs\partitions.bin') -Destination (Join-Path $assetRoot 'esp32c3\partitions.bin') -Force
 
@@ -134,6 +136,7 @@ try {
         --add-data "$(Join-Path $projectRoot 'scripts');builder_project\scripts" `
         --add-data "$(Join-Path $projectRoot 'partitions');builder_project\partitions" `
         --add-data "$(Join-Path $projectRoot 'web');builder_project\web" `
+        --add-data "$(Join-Path (Split-Path -Parent $projectRoot) 'Android\web\mobile.css');android_preview" `
         --add-data "$(Join-Path $projectRoot 'platformio.ini');builder_project" `
         --add-data "$(Join-Path $projectRoot 'sdkconfig.defaults');builder_project" `
         --add-data "$(Join-Path $projectRoot 'package.json');builder_project" `

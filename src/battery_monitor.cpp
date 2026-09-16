@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "battery_monitor.h"
 
 namespace {
@@ -104,7 +105,7 @@ BatteryReading BatteryMonitor::sampleNow() {
     }
 
     if (batteryDebugEnabled()) {
-        Serial.printf("[battery] raw=%u raw_v=%.3f corrected_v=%.3f filtered_v=%.3f window=%u pin=%u charge_pin=%u charging=%s\n",
+        DebugLog.printf("[battery] raw=%u raw_v=%.3f corrected_v=%.3f filtered_v=%.3f window=%u pin=%u charge_pin=%u charging=%s\n",
                       raw,
                       rawVoltage,
                       correctedVoltage,

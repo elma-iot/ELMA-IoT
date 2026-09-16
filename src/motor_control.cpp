@@ -1,3 +1,4 @@
+#include "device_log.h"
 #include "motor_control.h"
 
 #include <ArduinoJson.h>
@@ -116,7 +117,7 @@ int8_t validatedMotorPin(int8_t pin, const char* signalKey) {
         return pin;
     }
     if (pin >= 0) {
-        Serial.printf("[motor] ignoring unsafe %s assignment on GPIO%d\n", signalKey != nullptr ? signalKey : "signal", static_cast<int>(pin));
+        DebugLog.printf("[motor] ignoring unsafe %s assignment on GPIO%d\n", signalKey != nullptr ? signalKey : "signal", static_cast<int>(pin));
     }
     return -1;
 }
@@ -307,14 +308,14 @@ bool MotorController::runChannel(uint8_t channelIndex, bool forward, uint32_t du
     if (digitalRead(activePin) != HIGH) {
         digitalWrite(activePin, LOW);
         error = String("Motor GPIO") + String(activePin) + " did not reach HIGH; check wiring or a short circuit.";
-        Serial.printf("[motor] rejected channel=%u direction=%s: GPIO%d remained LOW\n",
+        DebugLog.printf("[motor] rejected channel=%u direction=%s: GPIO%d remained LOW\n",
                       static_cast<unsigned>(channelIndex),
                       directionName(forward),
                       static_cast<int>(activePin));
         return false;
     }
 
-    Serial.printf("[motor] channel=%u direction=%s active=GPIO%d inactive=GPIO%d duration=%lu ms\n",
+    DebugLog.printf("[motor] channel=%u direction=%s active=GPIO%d inactive=GPIO%d duration=%lu ms\n",
                   static_cast<unsigned>(channelIndex),
                   directionName(forward),
                   static_cast<int>(activePin),

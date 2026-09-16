@@ -22,6 +22,7 @@ class WiFiManager {
     void begin(const SettingsBundle& settings, AppState& appState);
     void applySettings(const SettingsBundle& settings);
     void loop();
+    void setLowLatencyMode(bool enabled);
 
     bool isConnected() const;
     bool isApMode() const;
@@ -62,6 +63,7 @@ class WiFiManager {
     bool initialized_ = false;
     bool dnsStarted_ = false;
     bool apMode_ = false;
+    bool lowLatencyMode_ = false;
     bool stationAttemptActive_ = false;
     bool userScanActive_ = false;
     bool resumeStationAfterScan_ = false;
@@ -97,5 +99,6 @@ class WiFiManager {
     void finishUserScan();
     PreferredAccessPoint findPreferredAccessPoint();
     void updateRadioModeAndSleep();
+    void applyRadioSleep();
     void applyRadioTxPower();
 };

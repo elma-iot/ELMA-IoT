@@ -1,3 +1,4 @@
+import {voltageDividerSettings,resistorLabel} from './voltage-divider.js';
 export function createBatteryTab({
   state,
   elements,
@@ -96,8 +97,9 @@ export function createBatteryTab({
   function updateBatteryUi() {
     const adcPin = Number(elements.batteryAdcPin?.value || state.settings?.battery?.adcPin || 0);
     const chargingSensePin = Number(state.settings?.battery?.chargingSensePin || 0);
+    const divider = voltageDividerSettings(state.settings?.battery);
     const exampleSuffix = adcPin > 0
-      ? ` Example Li-ion divider for GPIO${adcPin}: BAT+ --- 220K - GPIO${adcPin} - 220K ---- GND.`
+      ? ` Example Li-ion divider for GPIO${adcPin}: BAT+ --- ${resistorLabel(divider.dividerR1Ohms)} - GPIO${adcPin} - ${resistorLabel(divider.dividerR2Ohms)} ---- GND.`
       : " Select the Battery Voltage Divider sensor and choose an ADC-capable GPIO to enable battery reading.";
     if (elements.batteryPinSummary) {
       elements.batteryPinSummary.textContent = adcPin > 0 ? `GPIO${adcPin}` : "-";
@@ -122,7 +124,7 @@ export function createBatteryTab({
     const savedMeasuredVoltage = Number(settings?.battery?.measuredVoltage || 0);
     const measuredVoltage = state.batteryMeasuredVoltageInput
       || (savedMeasuredVoltage > 0 ? savedMeasuredVoltage.toFixed(3) : "")
-      || (derivedMeasuredVoltage ? Number(derivedMeasuredVoltage).toFixed(3) : "");
+      || "4.2";
 
     state.batteryMeasuredVoltageInput = measuredVoltage;
     if (elements.batteryMeasuredVoltage) {
@@ -130,6 +132,7 @@ export function createBatteryTab({
     }
 
     updateDerivedBatteryCalibration();
+    updateLowBatterySleepUi();
     updateBatteryUi();
   }
 

@@ -1,4 +1,6 @@
-export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessage, toast }) {
+import { boardChipFamily, applyBoardFilter } from "./board-pin-policy.js";
+
+export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessage, toast, validatePins = () => {} }) {
   let active = false;
   let jobId = "";
   let timer = null;
@@ -70,7 +72,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     if (deviceHeading) deviceHeading.textContent = "Identity & Startup";
     document.querySelector("#tab-device .device-summary-grid")?.setAttribute("hidden", "");
     document.querySelector('[name="device.savedVolumePercent"]')?.closest("label")?.setAttribute("hidden", "");
-    ["lowBatterySleepToggle", "powerCycleFactoryResetToggle", "touchHoldFactoryResetToggle", "lowBatterySleepThreshold", "lowBatteryWakeIntervalMinutes"].forEach((id) => {
+    ["powerCycleFactoryResetToggle", "touchHoldFactoryResetToggle"].forEach((id) => {
       document.getElementById(id)?.closest("label")?.setAttribute("hidden", "");
     });
     document.getElementById("factoryResetButton")?.setAttribute("hidden", "");
@@ -203,6 +205,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
       const payload = await api("/api/builder/network-devices/scan", {
         method: "POST",
         body: JSON.stringify({
+          hintIp: elements.localBuilderIpAddress.value.trim(),
           username: elements.localBuilderIpUsername.value,
           password: elements.localBuilderIpPassword.value,
         }),
@@ -241,19 +244,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
       elements.localBuilderAudio.checked = false;
     }
     const board = document.getElementById("gpioBoardSelector");
-    if (board && chip !== "auto") {
-      for (const option of board.options) {
-        const value = option.value.toLowerCase();
-        option.disabled = chip === "esp32c3" ? !value.includes("c3")
-          : chip === "esp32s3" ? !value.includes("s3")
-          : (value.includes("s3") || value.includes("c3") || value.includes("c6") || value.includes("s2"));
-      }
-      const usable = [...board.options].find((option) => !option.disabled);
-      if (board.selectedOptions[0]?.disabled && usable) {
-        board.value = usable.value;
-        board.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }
+    if (board) applyBoardFilter(board, chip, Boolean(document.getElementById("gpioBoardAutodetect")?.checked));
     elements.localBuilderCompatibility.textContent = c3
       ? "ESP32-C3 keeps the compatible web configurator, Wi-Fi, MQTT/HACS, OTA, GPIO/motor, displays, sensors, controls, storage and communications. Audio-only choices are unavailable."
       : "Maximum-fit mode retains every compatible feature that fits the detected chip and flash. Nothing is removed silently.";
@@ -320,7 +311,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
         return;
       }
       const boardValue = document.getElementById("gpioBoardSelector")?.value || "";
-      const boardChip = boardValue.includes("c3") ? "esp32c3" : (boardValue.includes("s3") ? "esp32s3" : "esp32");
+      const boardChip = boardChipFamily(boardValue);
       if (boardChip !== networkTarget.chip) {
         window.alert(`Destination chip mismatch. The selected board (${boardValue}) targets ${boardChip.toUpperCase()}, while the device reports ${networkTarget.chip.toUpperCase()}. Select the correct board before flashing.`);
         return;
@@ -337,6 +328,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     // at click time so a second WebEngine view cannot flash a stale snapshot.
     const desktopFlashView = new URLSearchParams(window.location.search).get("elmaView") === "flash";
     const settings = desktopFlashView ? await api("/api/settings") : currentSettingsSnapshot();
+    if (!usesMinimalFirmware()) validatePins(settings);
     const payload = {
       transport,
       port,
@@ -414,6 +406,14 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     });
     elements.localBuilderFirmwareMode.addEventListener("change", updateFirmwareModeUi);
     elements.localBuilderChip.addEventListener("change", applyTargetPolicy);
+    const board = document.getElementById("gpioBoardSelector");
+    const autodetect = document.getElementById("gpioBoardAutodetect");
+    const syncManualBoard = () => {
+      if (board && !autodetect?.checked) elements.localBuilderChip.value = boardChipFamily(board.value);
+      applyTargetPolicy();
+    };
+    board?.addEventListener("change", syncManualBoard);
+    autodetect?.addEventListener("change", syncManualBoard);
     elements.localBuilderMaximum.addEventListener("change", applyTargetPolicy);
     elements.localBuilderCompileFlash.addEventListener("click", () => primaryAction().catch((error) => {
       cancelRequested = false;

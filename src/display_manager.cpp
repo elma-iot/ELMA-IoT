@@ -42,6 +42,8 @@ void DisplayManager::applySettings(const OledSettings& settings) {
     settings_ = settings;
     ssd1306_.reset();
     sh1106_.reset();
+    dimmed_ = false;
+    scrollOffset_ = 0;
     lastActivityAt_ = millis();
     if (!settings_.enabled || !isOledMode()) {
         return;
@@ -50,18 +52,25 @@ void DisplayManager::applySettings(const OledSettings& settings) {
     Wire.begin(settings_.sdaPin, settings_.sclPin);
     if (settings_.driver == "sh1106") {
         sh1106_.reset(new Adafruit_SH1106G(settings_.width, settings_.height, &Wire, settings_.resetPin));
-        sh1106_->begin(settings_.i2cAddress, true);
+        if (!sh1106_->begin(settings_.i2cAddress, true)) {
+            sh1106_.reset();
+            return;
+        }
         sh1106_->setRotation(rotationIndex());
         sh1106_->clearDisplay();
         sh1106_->display();
     } else {
         ssd1306_.reset(new Adafruit_SSD1306(settings_.width, settings_.height, &Wire, settings_.resetPin));
-        ssd1306_->begin(SSD1306_SWITCHCAPVCC, settings_.i2cAddress);
+        if (!ssd1306_->begin(SSD1306_SWITCHCAPVCC, settings_.i2cAddress)) {
+            ssd1306_.reset();
+            return;
+        }
         ssd1306_->setRotation(rotationIndex());
         ssd1306_->clearDisplay();
         ssd1306_->display();
     }
     lastSignature_ = "";
+    lastCenterText_ = "";
 }
 
 void DisplayManager::setBootMessage(const String& message) {
@@ -129,8 +138,17 @@ void DisplayManager::flushDisplay() {
 }
 
 void DisplayManager::setDimmed(bool dimmed) {
+    if (dimmed_ == dimmed) {
+        return;
+    }
+    dimmed_ = dimmed;
     if (ssd1306_) {
         ssd1306_->dim(dimmed);
+    }
+    if (sh1106_) {
+        // Match the SSD1306 whole-panel dim policy; restore SH1106's
+        // library initialization contrast when activity resumes.
+        sh1106_->setContrast(dimmed ? 0 : 0xFF);
     }
 }
 
@@ -213,6 +231,7 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     if (now - lastDrawAt_ < 300) {
         return;
     }
+    lastDrawAt_ = now;
 
     if (state.playback.state == "playing" || state.network.wifiConnected || state.network.apMode) {
         lastActivityAt_ = now;
@@ -226,15 +245,21 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
                           String(state.battery.voltage, 2) + "V " +
                           (state.network.mqttConnected ? "MQTT" : "noMQTT");
 
-    const String signature = top + "|" + center + "|" + bottom + "|" + String(scrollOffset_);
-    if (signature == lastSignature_ && now - lastDrawAt_ < 800) {
+    Adafruit_GFX* display = gfx();
+    const bool scrolling = !state.ota.busy && center.length() > charsForWidth(display->width(), 2);
+    const String signature = top + "|" + center + "|" + bottom + "|" +
+                             String(state.ota.busy) + "|" + String(state.ota.progressPercent);
+    if (signature == lastSignature_ && !scrolling) {
         return;
     }
+    if (center != lastCenterText_) {
+        scrollOffset_ = 0;
+    } else if (scrolling) {
+        scrollOffset_++;
+    }
     lastSignature_ = signature;
-    lastDrawAt_ = now;
-    scrollOffset_++;
+    lastCenterText_ = center;
 
-    Adafruit_GFX* display = gfx();
     const int16_t displayWidth = display->width();
     const int16_t displayHeight = display->height();
     const uint8_t topChars = charsForWidth(displayWidth, 1);
@@ -244,6 +269,7 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     const int16_t lowerDivider = bottomDividerY(displayHeight);
     const int16_t centerY = max<int16_t>(upperDivider + 12, (displayHeight / 2) - 8);
     clearDisplay();
+    display->setTextWrap(false);
     display->setTextColor(SSD1306_WHITE);
     display->setTextSize(1);
     drawWrappedLine(*display, top, 2, topChars, false);

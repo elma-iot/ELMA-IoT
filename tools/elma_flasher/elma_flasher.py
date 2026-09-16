@@ -44,9 +44,10 @@ from serial.tools import list_ports
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
 from migration_importer import import_device
+from gpio_validation import validate_gpio_settings
 
 
-APP_VERSION = "0.1.41"
+APP_VERSION = "0.1.43"
 WINDOWS_APP_USER_MODEL_ID = "ELMA.IoT.Flasher"
 FLASH_BAUD = 460800
 CONSOLE_BAUD = 115200
@@ -427,7 +428,17 @@ class DesignerServer:
         self.thread: threading.Thread | None = None
         self.url = ""
         self.settings_lock = threading.RLock()
-        default_path = self.settings_path()
+        default_path = self.last_configuration_path() or self.settings_path()
+        self.migrated_configuration_source: pathlib.Path | None = None
+        if not default_path.is_file() and self.settings_persistence_enabled():
+            legacy_path = self.find_legacy_configuration()
+            if legacy_path is not None:
+                migrated = self.load_designer_settings(legacy_path)
+                default_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = default_path.with_suffix(".tmp")
+                temporary.write_text(json.dumps(migrated, indent=2), encoding="utf-8")
+                temporary.replace(default_path)
+                self.migrated_configuration_source = legacy_path
         self.active_settings_path: pathlib.Path | None = default_path if default_path.is_file() else None
         self.settings = self.load_designer_settings(self.active_settings_path)
         self.jobs: dict[str, DesignerJob] = {}
@@ -462,9 +473,83 @@ class DesignerServer:
     def application_state_path() -> pathlib.Path:
         return DesignerServer.portable_home() / "ELMA-Flasher.state.json"
 
+    @classmethod
+    def last_configuration_path(cls) -> pathlib.Path | None:
+        if not cls.settings_persistence_enabled():
+            return None
+        try:
+            state = json.loads(cls.application_state_path().read_text(encoding="utf-8"))
+            filename = state.get("lastConfigurationPath")
+            if filename:
+                path = pathlib.Path(filename).expanduser().resolve()
+                if cls.configuration_from_document(json.loads(path.read_text(encoding="utf-8"))) is not None:
+                    return path
+            # Older builds remembered only the folder. Recover the newest named
+            # document there, excluding application state and build caches.
+            directory = state.get("lastConfigurationDirectory")
+            if directory:
+                candidates = sorted(pathlib.Path(directory).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+                for path in candidates:
+                    if path.name.startswith("ELMA-Flasher."):
+                        continue
+                    try:
+                        if cls.configuration_from_document(json.loads(path.read_text(encoding="utf-8"))) is not None:
+                            return path.resolve()
+                    except (OSError, ValueError):
+                        continue
+        except (OSError, TypeError, ValueError, AttributeError):
+            pass
+        return None
+
     @staticmethod
     def settings_persistence_enabled() -> bool:
         return not any(argument.endswith("-test") for argument in sys.argv[1:])
+
+    @staticmethod
+    def configuration_from_document(payload: object) -> dict | None:
+        if not isinstance(payload, dict):
+            return None
+        candidate = payload.get("settings") if isinstance(payload.get("settings"), dict) else payload
+        defaults = default_designer_settings()
+        settings = {key: value for key, value in candidate.items() if key in defaults}
+        return settings if settings else None
+
+    @classmethod
+    def find_legacy_configuration(cls) -> pathlib.Path | None:
+        """Find the combined state/config document written by older portable builds."""
+        home = cls.portable_home()
+        candidates: list[pathlib.Path] = [cls.application_state_path()]
+        try:
+            state = json.loads(cls.application_state_path().read_text(encoding="utf-8"))
+            previous_directory = pathlib.Path(str(state.get("lastConfigurationDirectory", ""))).expanduser()
+            if previous_directory.is_dir():
+                candidates.append(previous_directory / "ELMA-Flasher.state.json")
+                candidates.append(previous_directory / "ELMA-Flasher.config.json")
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
+        try:
+            sibling_states = sorted(
+                (path for path in home.parent.glob("*/ELMA-Flasher.state.json") if path.parent != home),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+            candidates.extend(sibling_states)
+        except OSError:
+            pass
+
+        seen: set[pathlib.Path] = set()
+        for path in candidates:
+            try:
+                resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                payload = json.loads(resolved.read_text(encoding="utf-8"))
+                if cls.configuration_from_document(payload) is not None:
+                    return resolved
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+        return None
 
     @staticmethod
     def merge_settings(target: dict, source: dict) -> None:
@@ -474,20 +559,58 @@ class DesignerServer:
             else:
                 target[key] = value
 
+    @staticmethod
+    def restore_legacy_peripheral_ui(settings: dict, source: dict) -> None:
+        """Recreate the fixed legacy Notifier profile when old state omitted UI metadata."""
+        if "ui" in source:
+            return
+        audio = settings.get("audio", {})
+        oled = settings.get("oled", {})
+        battery = settings.get("battery", {})
+        signature = (
+            (audio.get("doutPin"), audio.get("wsPin"), audio.get("bclkPin")) == (25, 26, 27)
+            and (oled.get("sdaPin"), oled.get("sclPin")) == (23, 19)
+            and battery.get("adcPin") == 36
+        )
+        if not signature:
+            return
+        settings["usingSavedSettings"] = True
+        audio["enabled"] = True
+        oled["enabled"] = True
+        oled["displayType"] = "oled"
+        ui = settings["ui"]
+        ui["gpioBoardAutodetect"] = False
+        ui["gpioBoardSelection"] = "wemos-lolin32-mini"
+        ui["peripheralProfiles"] = {
+            "audioProfile": "pcm5102-i2s-dac",
+            "audioProfiles": ["pcm5102-i2s-dac"],
+            "audioInProfile": "none",
+            "audioInProfiles": ["none"],
+            "displayProfile": "i2c-oled",
+            "displayProfiles": ["i2c-oled"],
+            "sensors": ["battery-voltage-divider-220k"],
+            "inputs": ["none"],
+            "controls": ["none"],
+            "expansions": ["none"],
+            "storage": ["none"],
+            "communication": ["none"],
+            "power": ["none"],
+        }
+
     def load_designer_settings(self, path: pathlib.Path | None = None) -> dict:
         defaults = default_designer_settings()
         if not self.settings_persistence_enabled() or path is None:
             return defaults
         try:
             saved = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(saved, dict) and isinstance(saved.get("settings"), dict):
-                saved = saved["settings"]
-            if not isinstance(saved, dict):
+            saved = self.configuration_from_document(saved)
+            if saved is None:
                 return defaults
         except (OSError, json.JSONDecodeError):
             return defaults
 
         self.merge_settings(defaults, saved)
+        self.restore_legacy_peripheral_ui(defaults, saved)
         return defaults
 
     def open_configuration(self, path: pathlib.Path) -> None:
@@ -504,6 +627,7 @@ class DesignerServer:
             raise ValueError("Configuration file must contain a JSON object.")
         settings = default_designer_settings()
         self.merge_settings(settings, raw)
+        self.restore_legacy_peripheral_ui(settings, raw)
         with self.settings_lock:
             self.settings = settings
             self.active_settings_path = resolved
@@ -564,6 +688,8 @@ class DesignerServer:
         except (OSError, json.JSONDecodeError):
             pass
         payload["lastConfigurationDirectory"] = str(directory.resolve())
+        if self.active_settings_path is not None:
+            payload["lastConfigurationPath"] = str(self.active_settings_path.resolve())
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
         temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -786,17 +912,28 @@ class DesignerServer:
 
         def inspect(address: str) -> dict | None:
             try:
-                with socket.create_connection((address, 80), timeout=0.18):
+                with socket.create_connection((address, 80), timeout=0.45):
                     pass
             except OSError:
                 return None
             try:
-                return self.probe_network_device({**payload, "ip": address}, timeout=0.7)
+                return self.probe_network_device({**payload, "ip": address}, timeout=1.0)
             except (RuntimeError, ValueError, OSError):
                 return None
 
         devices: list[dict] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=48, thread_name_prefix="elma-lan-scan") as executor:
+        # A manually entered address is a strong hint. Probe it with a normal
+        # timeout before the broad ARP burst, which can make small/weak Wi-Fi
+        # devices miss the scanner's short per-address connection window.
+        hint = str(payload.get("hintIp", "")).strip()
+        if hint:
+            try:
+                hinted = self.probe_network_device({**payload, "ip": hint}, timeout=2.5)
+                devices.append(hinted)
+                candidates.discard(str(hinted.get("ip", hint)))
+            except (RuntimeError, ValueError, OSError):
+                pass
+        with concurrent.futures.ThreadPoolExecutor(max_workers=32, thread_name_prefix="elma-lan-scan") as executor:
             for result in executor.map(inspect, sorted(candidates)):
                 if result:
                     devices.append(result)
@@ -804,6 +941,13 @@ class DesignerServer:
         devices.extend(device for address, device in esphome_devices.items() if address not in known_ips)
         self.network_device_cache = {str(item["ip"]): dict(item) for item in devices}
         return sorted(devices, key=lambda item: tuple(int(part) for part in str(item["ip"]).split(".")))
+
+    @staticmethod
+    def legacy_ota_capacity(chip: str, kind: str, version: str) -> int | None:
+        numbers = tuple(int(value) for value in re.findall(r"\d+", str(version))[:3])
+        if chip == "esp32" and kind == "elma" and numbers and numbers < (0, 1, 12):
+            return 0x190000
+        return None
 
     def import_network_configuration(self, payload: dict) -> dict:
         host = str(payload.get("ip", "")).strip()
@@ -911,6 +1055,26 @@ class DesignerServer:
                 raise RuntimeError(f"Legacy ELMA OTA HTTP {response.status}: {body[:240]}")
         finally:
             connection.close()
+
+    def apply_settings_after_legacy_ota(self, job: DesignerJob, client: HttpDeviceClient, settings: dict) -> None:
+        """Wait for the compatibility firmware, then apply the Designer document."""
+        job.status = "Legacy firmware installed — waiting to apply configuration"
+        for attempt in range(30):
+            if attempt:
+                time.sleep(2)
+            try:
+                status = client.json("/api/status")
+                firmware = status.get("firmware", {}) if isinstance(status, dict) else {}
+                if str(firmware.get("version", "")) == APP_VERSION:
+                    client.json_request("/api/settings", value=settings)
+                    job.append("The new legacy-compatible firmware accepted the configured GPIO and peripheral settings.")
+                    return
+            except (OSError, RuntimeError, urllib.error.URLError):
+                continue
+        raise RuntimeError(
+            "Firmware upload completed, but the updated device did not return in time to apply its configuration. "
+            "Reconnect to the device and load the saved configuration without reflashing."
+        )
 
     def upload_tasmota_ota(
         self,
@@ -1094,6 +1258,9 @@ class DesignerServer:
                         handler_self.json_response({"error": str(error)}, 409)
                 elif path == "/api/status":
                     handler_self.json_response(owner.mock_status())
+                elif path == "/api/logs":
+                    handler_self.json_response({"source": "designer", "revision": "designer", "text": "",
+                                                "notice": "Device logs are available in the flashed device's web interface."})
                 elif path.startswith("/api/"):
                     handler_self.json_response({"error": "This runtime action is unavailable while designing a future device."}, 409)
                 else:
@@ -1192,7 +1359,7 @@ class DesignerServer:
 
     def mock_status(self) -> dict:
         selected = str(self.settings.get("ui", {}).get("gpioBoardSelection", "esp32-c3"))
-        chip = "esp32s3" if "s3" in selected else ("esp32c3" if "c3" in selected else "esp32")
+        chip = BOARD_PROFILES.get(selected, (0, "esp32s3"))[1]
         return {
             "firmware": {"version": APP_VERSION, "channel": "designer", "chipFamily": chip, "audioEnabled": True},
             "device": {"friendlyName": "ELMA Device Designer", "deviceName": "hardware-id-assigned-after-flash", "ipAddress": "PC configuration", "connected": False},
@@ -1488,6 +1655,14 @@ class DesignerServer:
                     f"Verified {job.target_kind.upper()} target at {job.ip_address}: {CHIP_FAMILIES[detected]}"
                 )
             profile = self.resolve_profile(detected, payload.get("capabilities", {}), payload.get("settings", {}), job, firmware_mode)
+            legacy_capacity = self.legacy_ota_capacity(detected, job.target_kind, job.target_version) if transport == "ip" else None
+            if firmware_mode == "full" and legacy_capacity:
+                profile = "esp32_notifier_hacs_legacy_ota"
+                job.compatibility = (
+                    f"Legacy ELMA OTA profile: runtime audio, MQTT/HACS, GPIO, display, controls and OTA APIs are retained; "
+                    f"the illustrated on-device frontend is replaced by a small recovery page to fit the {legacy_capacity:,}-byte OTA slot."
+                )
+                job.append(f"Legacy OTA slot detected from ELMA {job.target_version}: maximum application size {legacy_capacity:,} bytes")
             job.profile = profile
             supplied_settings = payload.get("settings", {})
             supplied_ui = supplied_settings.get("ui", {}) if isinstance(supplied_settings, dict) else {}
@@ -1500,6 +1675,7 @@ class DesignerServer:
                     f"Selected board {selected_board} is not compatible with the {CHIP_FAMILIES[detected]} compile target."
                 )
             if firmware_mode == "full":
+                validate_gpio_settings(supplied_settings, detected, selected_board)
                 job.append(f"Fixed firmware board: {selected_board} (other board illustrations excluded)")
             else:
                 job.append("Minimal bridge does not contain board illustrations or peripheral modules; existing NVS settings are read-only and preserved.")
@@ -1577,6 +1753,11 @@ class DesignerServer:
                 job.ram_total_bytes = int(ram_match.group(2))
             if len(application) > min(MAX_APPLICATION_SIZE, flash_mb * 1024 * 1024):
                 raise RuntimeError(f"Generated application is {len(application):,} bytes and does not fit this target safely.")
+            if legacy_capacity and len(application) > legacy_capacity:
+                raise RuntimeError(
+                    f"Legacy-compatible application is {len(application):,} bytes but this device's OTA slot is only {legacy_capacity:,} bytes. "
+                    "Nothing was uploaded; use USB once to install the current partition table."
+                )
             job.append(f"Generated application: {len(application):,} bytes")
             output_path.parent.mkdir(parents=True, exist_ok=True)
             temporary_output = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
@@ -1603,6 +1784,8 @@ class DesignerServer:
                     version_numbers = tuple(int(value) for value in re.findall(r"\d+", job.target_version)[:3])
                     if version_numbers and version_numbers < (0, 1, 40):
                         self.upload_elma_legacy_ota(job, client, application, output_path.name)
+                        if legacy_capacity:
+                            self.apply_settings_after_legacy_ota(job, client, supplied_settings)
                     else:
                         try:
                             self.upload_elma_ota(job, client, application, output_path.name)
@@ -1684,7 +1867,7 @@ def run_native_designer_window(
 ) -> bool:
     """Render the PC designer, compiler and USB flasher in one native ELMA window."""
     from PySide6.QtCore import QByteArray, Qt, QTimer, QUrl, QUrlQuery
-    from PySide6.QtGui import QAction, QIcon, QKeySequence
+    from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
     from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
     from PySide6.QtWebEngineWidgets import QWebEngineView
     from PySide6.QtWidgets import (
@@ -1697,6 +1880,10 @@ def run_native_designer_window(
     )
 
     origin = urllib.parse.urlparse(url)
+    mobile_css_path = resource_path("android_preview/mobile.css")
+    if not mobile_css_path.is_file():
+        mobile_css_path = pathlib.Path(__file__).resolve().parents[1] / "elma_android" / "web" / "mobile.css"
+    mobile_preview_css = mobile_css_path.read_text(encoding="utf-8")
 
     class LocalDesignerPage(QWebEnginePage):
         def acceptNavigationRequest(self, target: QUrl, navigation_type, is_main_frame: bool) -> bool:
@@ -1720,6 +1907,24 @@ def run_native_designer_window(
         def __init__(self, parent=None):
             super().__init__(parent)
             self._resize_pending = False
+            self.mobile_preview = False
+            self.mobile_theme = "light"
+            self.loadFinished.connect(lambda _ok: self.applyMobileStyles())
+
+        def applyMobileStyles(self) -> None:
+            self.page().runJavaScript(
+                "(()=>{const enabled=" + json.dumps(self.mobile_preview) + ";"
+                "let style=document.getElementById('elma-desktop-mobile-preview');"
+                "if(enabled){if(!style){style=document.createElement('style');style.id='elma-desktop-mobile-preview';document.head.append(style);"
+                "document.documentElement.dataset.elmaPreviousTheme=document.documentElement.dataset.elmaTheme||'';}"
+                "style.textContent=" + json.dumps(mobile_preview_css) + ";"
+                "document.documentElement.dataset.elmaTheme=" + json.dumps(self.mobile_theme) + ";"
+                "}else if(style){style.remove();const old=document.documentElement.dataset.elmaPreviousTheme;"
+                "if(old)document.documentElement.dataset.elmaTheme=old;else delete document.documentElement.dataset.elmaTheme;"
+                "delete document.documentElement.dataset.elmaPreviousTheme;}"
+                "document.body.classList.toggle('android-designer',enabled);"
+                "window.dispatchEvent(new Event('resize'));})()"
+            )
 
         def resizeEvent(self, event) -> None:
             super().resizeEvent(event)
@@ -1732,6 +1937,8 @@ def run_native_designer_window(
             self._resize_pending = False
             available_width = max(1, self.width())
             zoom = min(1.0, max(self.MINIMUM_ZOOM, available_width / self.DESIGN_WIDTH))
+            if self.mobile_preview:
+                zoom = 1.0  # Exercise the actual narrow CSS viewport, not desktop scaling.
             if abs(self.zoomFactor() - zoom) > 0.005:
                 self.setZoomFactor(zoom)
             # A wide diagram or transient menu must never expand the document
@@ -1818,6 +2025,57 @@ def run_native_designer_window(
             self.exit_action.setShortcut(QKeySequence.StandardKey.Quit)
             self.exit_action.triggered.connect(self.close)
             file_menu.addAction(self.exit_action)
+
+            self._desktop_geometry = None
+            mobile_menu = self.menuBar().addMenu("&Mobile")
+            self.preview_group = QActionGroup(self)
+            self.preview_group.setExclusive(True)
+            self.desktop_view_action = QAction("&Desktop", self)
+            self.mobile_view_action = QAction("&Single", self)
+            self.fold_view_action = QAction("&Fold", self)
+            for action, preset in ((self.desktop_view_action, "desktop"), (self.mobile_view_action, "single"), (self.fold_view_action, "fold")):
+                action.setCheckable(True)
+                self.preview_group.addAction(action)
+                mobile_menu.addAction(action)
+                action.triggered.connect(lambda checked, mode=preset: self._set_mobile_view(mode))
+            self.desktop_view_action.setChecked(True)
+            self.mobile_view_action.setShortcut(QKeySequence("Ctrl+Shift+M"))
+            self.mobile_view_action.setToolTip("390-pixel phone viewport for responsive layout debugging")
+            self.fold_view_action.setToolTip("740-pixel unfolded phone viewport for responsive layout debugging")
+            mobile_menu.addSeparator()
+            self.theme_group = QActionGroup(self)
+            self.theme_group.setExclusive(True)
+            for label, theme in (("Light theme", "light"), ("Dark theme", "dark")):
+                action = QAction(label, self)
+                action.setCheckable(True)
+                action.setChecked(theme == "light")
+                self.theme_group.addAction(action)
+                mobile_menu.addAction(action)
+                action.triggered.connect(lambda checked, value=theme: self._set_mobile_theme(value))
+
+        def _set_mobile_theme(self, theme: str) -> None:
+            view = self.centralWidget()
+            view.mobile_theme = theme
+            view.applyMobileStyles()
+
+        def _set_mobile_view(self, preset: str) -> None:
+            view = self.centralWidget()
+            enabled = preset != "desktop"
+            if enabled:
+                if not view.mobile_preview:
+                    self._desktop_geometry = self.saveGeometry()
+                self.showNormal()
+                self.setMinimumSize(360, 420)
+                screen = self.screen().availableGeometry()
+                self.resize(390 if preset == "single" else min(740, screen.width() - 40), min(844, screen.height() - 60))
+                self.move(screen.center() - self.rect().center())
+            else:
+                self.setMinimumSize(420, 420)
+                if self._desktop_geometry is not None:
+                    self.restoreGeometry(self._desktop_geometry)
+            view.mobile_preview = enabled
+            view.applyMobileStyles()
+            view.applyResponsiveZoom()
 
         def _dialog_directory(self) -> pathlib.Path:
             if designer_server is None:
@@ -2065,6 +2323,8 @@ def run_native_designer_window(
         def _save_geometry(self) -> None:
             if smoke_test:
                 return
+            if not self.desktop_view_action.isChecked():
+                return  # Debug preview must not replace the saved desktop size.
             payload = {
                 "geometry": base64.b64encode(bytes(self.saveGeometry())).decode("ascii"),
                 "maximized": self.isMaximized(),
@@ -2201,6 +2461,16 @@ def run_native_designer_window(
             designer_zoom = designer_view.zoomFactor()
             def verify_designer_zoom() -> None:
                 result["responsive_ok"] = ResponsiveWebView.MINIMUM_ZOOM <= designer_zoom < 0.85
+                desktop_geometry = window.geometry()
+                window.mobile_view_action.trigger()
+                designer_view.applyResponsiveZoom()
+                mobile_ok = designer_view.zoomFactor() == 1.0 and window.width() == 390
+                window.fold_view_action.trigger()
+                designer_view.applyResponsiveZoom()
+                mobile_ok = mobile_ok and designer_view.zoomFactor() == 1.0 and window.width() == min(740, window.screen().availableGeometry().width() - 40)
+                window.desktop_view_action.trigger()
+                designer_view.applyResponsiveZoom()
+                result["responsive_ok"] = result["responsive_ok"] and mobile_ok and window.geometry() == desktop_geometry and designer_view.zoomFactor() < 0.85
                 if not result["responsive_ok"]:
                     print(f"Responsive zoom smoke test failed: designer={designer_zoom:.3f}, window={window.width()}")
                 finish_smoke_test()
@@ -2308,6 +2578,11 @@ def run_native_designer_window(
         result["designer_loaded"] = bool(ok)
         if ok:
             designer_view.applyResponsiveZoom()
+            if not smoke_test:
+                # Activation is repeated after WebEngine finishes loading because
+                # initialization can otherwise return focus to the previous app.
+                QTimer.singleShot(0, activate_startup_window)
+                QTimer.singleShot(250, activate_startup_window)
             QTimer.singleShot(0, window.prompt_for_initial_configuration)
         maybe_finish_smoke_test()
         if not ok and not smoke_test:
@@ -2330,6 +2605,28 @@ def run_native_designer_window(
         QTimer.singleShot(15000, finish_smoke_test)
     else:
         window.showMaximized() if was_maximized else window.show()
+
+    def activate_startup_window() -> None:
+        # Never pull focus away from the initial Open Configuration dialog (or
+        # any later confirmation/file dialog) while a delayed activation retry
+        # is pending.
+        if smoke_test or not window.isVisible() or qt_app.activeModalWidget() is not None:
+            return
+        window.raise_()
+        window.activateWindow()
+        if sys.platform == "win32":
+            user32 = ctypes.windll.user32
+            handle = int(window.winId())
+            if user32.IsIconic(handle):
+                user32.ShowWindow(handle, 9)  # SW_RESTORE
+            user32.BringWindowToTop(handle)
+            user32.SetForegroundWindow(handle)
+        window.raise_()
+        window.activateWindow()
+
+    if not smoke_test:
+        QTimer.singleShot(0, activate_startup_window)
+        QTimer.singleShot(150, activate_startup_window)
     designer_url = QUrl(url)
     designer_query = QUrlQuery(designer_url)
     designer_query.addQueryItem("elmaRuntime", "pc-designer")
@@ -3196,6 +3493,9 @@ def self_test() -> int:
 
 
 def main() -> int:
+    if "--android-build-server" in sys.argv:
+        from android_build_server import run_window
+        return run_window(DesignerServer, BOARD_PROFILES, sanitize_clone_configuration)
     configure_windows_identity()
     if "--designer-only" in sys.argv:
         server = DesignerServer(None)  # Native flash is unavailable only in this test/server mode.
@@ -3208,6 +3508,9 @@ def main() -> int:
         return 0
     if "--self-test" in sys.argv:
         return self_test()
+    if "--board-gpio-smoke-test" in sys.argv:
+        from board_gpio_smoke_test import run_board_gpio_smoke_test
+        return run_board_gpio_smoke_test(DesignerServer(None))
     if "--ui-smoke-test" in sys.argv:
         result = self_test()
         if result:
@@ -3263,11 +3566,12 @@ def main() -> int:
         compiler_environment["ELMA_PORTABLE_BUILDER"] = "1"
         creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         profiles = (
-            ("esp32c3_designer_hacs", "esp32c3", "esp32-c3"),
-            ("esp32s3_notifier_hacs", "esp32s3", "esp32-s3-super-mini"),
-            ("esp32_notifier_hacs", "esp32", "esp32-wroom"),
+            ("esp32c3_designer_hacs", "esp32c3", "esp32-c3", True, None),
+            ("esp32s3_notifier_hacs", "esp32s3", "esp32-s3-super-mini", True, None),
+            ("esp32_notifier_hacs", "esp32", "esp32-wroom", True, None),
+            ("esp32_notifier_hacs_legacy_ota", "esp32", "wemos-lolin32-mini", False, 0x190000),
         )
-        for profile, expected_family, board_profile in profiles:
+        for profile, expected_family, board_profile, expects_board_asset, maximum_size in profiles:
             board_id, _ = BOARD_PROFILES[board_profile]
             compiler_environment["ELMA_SELECTED_BOARD_PROFILE"] = board_profile
             compiler_environment["ELMA_SELECTED_BOARD_PROFILE_ID"] = str(board_id)
@@ -3291,10 +3595,12 @@ def main() -> int:
                 firmware_bytes = firmware.read_bytes()
                 if chip_family_from_image(firmware_bytes[:24]) != expected_family:
                     return 9
-                selected_asset = BOARD_ASSET_FILES[board_profile].encode()
-                if selected_asset not in firmware_bytes:
+                if maximum_size is not None and len(firmware_bytes) > maximum_size:
                     return 9
-                if any(
+                selected_asset = BOARD_ASSET_FILES[board_profile].encode()
+                if expects_board_asset and selected_asset not in firmware_bytes:
+                    return 9
+                if expects_board_asset and any(
                     asset.encode() in firmware_bytes
                     for profile_name, asset in BOARD_ASSET_FILES.items()
                     if profile_name != board_profile

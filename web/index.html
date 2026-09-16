@@ -134,9 +134,19 @@
           <button class="tab-button tab-button-icon tab-firmware" type="button" role="tab" aria-label="Firmware" data-tooltip="Firmware" title="Firmware" aria-selected="false" aria-controls="tab-firmware" data-tab="firmware">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10"></path><path d="m8 9 4 4 4-4"></path><path d="M5 17v2h14v-2"></path></svg>
           </button>
+          <button class="tab-button tab-button-icon tab-logs" type="button" role="tab" aria-label="Logs" data-tooltip="Logs" title="Logs" aria-selected="false" aria-controls="tab-logs" data-tab="logs">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m6 8 3 3-3 3M12 15h6"></path></svg>
+          </button>
           <button class="tab-button tab-button-icon tab-info" type="button" role="tab" aria-label="Info" data-tooltip="Info" title="Info" aria-selected="false" aria-controls="tab-info" data-tab="info">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v6"></path><path d="M12 7h.01"></path></svg>
           </button>
+        </div>
+
+        <div id="tab-logs" class="tab-panel" role="tabpanel" aria-label="Logs">
+          <div class="device-log-heading"><h2>Logs</h2><button id="deviceLogCopy" type="button" class="secondary">Copy</button></div>
+          <p id="deviceLogStatus" role="status">Open this tab to load device logs.</p>
+          <pre id="deviceLogText" class="device-log-terminal" tabindex="0" aria-label="Device debug log">Waiting for device logs...</pre>
+          <p class="field-note">Application serial output and ESP-IDF logs, starting when the firmware launches. Earliest ROM boot output and final panic output may be unavailable; each boot includes its reset reason.</p>
         </div>
 
         <div id="tab-info" class="tab-panel" role="tabpanel">
@@ -426,7 +436,7 @@
           <form>
             <div class="row">
               <label>MQTT Host
-                <input form="settingsForm" name="mqtt.host" type="text" autocomplete="off">
+                <input form="settingsForm" name="mqtt.host" type="text" autocomplete="off" placeholder="mqtt.example.com">
               </label>
               <label>MQTT Port
                 <input form="settingsForm" name="mqtt.port" type="number" min="1" max="65535">
@@ -434,11 +444,11 @@
             </div>
             <div class="row">
               <label>MQTT Username
-                <input form="settingsForm" name="mqtt.username" type="text" autocomplete="off">
+                <input form="settingsForm" name="mqtt.username" type="text" autocomplete="off" placeholder="Your broker username">
               </label>
               <label>MQTT Password
                 <div class="password-field">
-                  <input form="settingsForm" name="mqtt.password" type="password" autocomplete="new-password">
+                  <input form="settingsForm" name="mqtt.password" type="password" autocomplete="new-password" placeholder="Your broker password">
                   <button class="password-toggle" type="button" data-target-name="mqtt.password" aria-label="Show MQTT password">
                     <span class="eye-icon" aria-hidden="true"></span>
                   </button>
@@ -484,6 +494,19 @@
             <label>Update Interval (ms)
               <input form="settingsForm" name="battery.updateIntervalMs" type="number" min="500">
             </label>
+            <fieldset class="settings-group battery-sleep-settings">
+              <legend>Low-battery protection</legend>
+              <label class="check"><input id="lowBatterySleepToggle" form="settingsForm" name="device.lowBatterySleepEnabled" type="checkbox"> Enable low-battery deep sleep</label>
+              <div class="row">
+                <label>Sleep Threshold <span id="lowBatterySleepThresholdValue">20%</span>
+                  <input id="lowBatterySleepThreshold" form="settingsForm" name="device.lowBatterySleepThresholdPercent" type="range" min="1" max="100" step="1">
+                </label>
+                <label>Wake Every (minutes)
+                  <input id="lowBatteryWakeIntervalMinutes" form="settingsForm" name="device.lowBatteryWakeIntervalMinutes" type="number" min="0" max="1440">
+                </label>
+              </div>
+              <p class="note">Disabled by default. When enabled, sleep is allowed only after the 30-second startup/configuration window and only when the battery ADC reports a plausible non-zero voltage. Set wake interval to 0 to stay asleep until a manual wake or power cycle.</p>
+            </fieldset>
             <p id="batteryNote" class="note">Measure the real voltage with a multimeter, enter it here, and save. The UI converts that value into the stored calibration multiplier using the live raw ADC voltage on the selected GPIO. Example Li-ion divider for GPIO3: BAT+ --- 220K - GPIO3 - 220K ---- GND.</p>
             <div class="firmware-summary compact-summary">
               <div class="firmware-card"><span>ADC Pin</span><strong id="batteryPinSummary">-</strong></div>
@@ -525,9 +548,6 @@
                   <option value="neopixel">RGB NeoPixel / WS2812</option>
                 </select>
               </label>
-              <label class="gpio-remap-source">Status LED GPIO
-                <select id="statusLedPin" form="settingsForm" name="device.statusLedPin"></select>
-              </label>
             </div>
             <div class="row gpio-remap-source">
               <label>SD CS
@@ -546,16 +566,8 @@
               </label>
             </div>
             <p class="note">The status LED indicates network state: steady blue when connected, blinking blue in AP mode, and fast flashing while disconnected. Select Regular LED for a single-color GPIO LED or RGB NeoPixel / WS2812 for an addressable onboard LED.</p>
-            <label class="check"><input id="lowBatterySleepToggle" form="settingsForm" name="device.lowBatterySleepEnabled" type="checkbox"> Deep sleep on low battery</label>
             <label class="check"><input id="powerCycleFactoryResetToggle" form="settingsForm" name="device.powerCycleFactoryResetEnabled" type="checkbox"> Factory reset after 7 power cycles</label>
             <label class="check"><input id="touchHoldFactoryResetToggle" form="settingsForm" name="device.touchHoldFactoryResetEnabled" type="checkbox"> Factory reset after 10-second touch hold</label>
-            <label>Sleep Threshold <span id="lowBatterySleepThresholdValue">20%</span>
-              <input id="lowBatterySleepThreshold" form="settingsForm" name="device.lowBatterySleepThresholdPercent" type="range" min="1" max="100" step="1">
-            </label>
-            <label>Wake Every (minutes)
-              <input id="lowBatteryWakeIntervalMinutes" form="settingsForm" name="device.lowBatteryWakeIntervalMinutes" type="number" min="0" max="1440">
-            </label>
-            <p class="note">When enabled, the notifier estimates charge from battery voltage, enters deep sleep at or below the threshold, turns the OLED off, then wakes on the configured timer to briefly reconnect and check network activity before sleeping again while battery remains low. Set wake interval to 0 to stay asleep until a manual wake or power cycle.</p>
             <label class="check"><input form="settingsForm" name="webAuth.enabled" type="checkbox"> Require login</label>
             <div class="row">
               <label>Web Username
@@ -746,6 +758,7 @@
 
         <div id="tab-gpio" class="tab-panel active" role="tabpanel">
           <h2>Configuration</h2>
+          <p id="gpioAssignmentWarnings" class="gpio-assignment-warning" role="status" hidden></p>
           <div class="gpio-controls-strip" aria-label="Peripheral profiles">
             <div class="gpio-controls-field gpio-controls-field-board">
               <span class="gpio-controls-field-label">Board</span>
@@ -770,6 +783,13 @@
                 </label>
               </div>
             </div>
+            <label class="gpio-controls-field">
+              <span class="gpio-controls-field-label">Status LED GPIO</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedPin" form="settingsForm" name="device.statusLedPin" aria-label="Status LED GPIO"></select>
+                <small>Saved status output, including assignments not shown on the board diagram. Choose a valid pin matching your wiring.</small>
+              </div>
+            </label>
             <label class="gpio-controls-field gpio-controls-field-audio">
               <span class="gpio-controls-field-label">Audio Out</span>
               <div class="gpio-controls-field-main">

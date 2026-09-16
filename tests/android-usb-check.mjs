@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {zipSync,unzipSync,strToU8} from 'fflate';
+import {loadFirmwareBundle,validateTarget} from '../../Android/web/firmware-bundle.js';
+import {AndroidSerialPort,nativeRpcBridge,encode64,decode64} from '../../Android/web/native-serial.js';
+const bytes=fs.readFileSync('.elma-flasher-build/android-service-test.zip');
+const bundle=loadFirmwareBundle(bytes);validateTarget(bundle,5,4*1048576);
+assert.throws(()=>validateTarget(bundle,0,4*1048576),/chip/);
+assert.throws(()=>validateTarget(bundle,5,1048576),/capacity/);
+assert.throws(()=>validateTarget(bundle,5,NaN),/capacity/);
+let files=unzipSync(bytes);files['firmware.bin'][100]^=1;
+assert.throws(()=>loadFirmwareBundle(zipSync(files)),/checksum/);
+files=unzipSync(bytes);let manifest=JSON.parse(new TextDecoder().decode(files['manifest.json']));manifest.parts[0].address=0x9000;files['manifest.json']=strToU8(JSON.stringify(manifest));
+assert.throws(()=>loadFirmwareBundle(zipSync(files)),/region/);
+const raw=Uint8Array.from({length:65536},(_,i)=>i%256);assert.deepEqual(decode64(encode64(raw)),raw);
+const scope={};const rpc=nativeRpcBridge({request(id,json){queueMicrotask(()=>scope.elmaNativeReply(id,JSON.parse(json).op==='usbRead'?encode64(raw):null,null));}},scope);
+const serial=new AndroidSerialPort(rpc,{id:1,port:0});await serial.open({baudRate:115200});const reader=serial.readable.getReader();assert.deepEqual((await reader.read()).value,raw);await reader.cancel();reader.releaseLock();const writer=serial.writable.getWriter();await writer.write(raw);writer.releaseLock();await serial.setSignals({dataTerminalReady:false,requestToSend:true});await serial.close();
+console.log('PASS firmware checksum/chip/capacity/region rejection, base64 and serial stream adapter');

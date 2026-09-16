@@ -11,6 +11,7 @@ $profiles = @(
     @('esp32_notifier', 'esp32-notifier', 0, 8),
     @('esp32_notifier_hacs', 'esp32-notifier-hacs', 0, 8),
     @('esp32_notifier_hacs_slim', 'esp32-notifier-hacs-slim', 0, 8),
+    @('esp32_notifier_hacs_legacy_ota', 'esp32-notifier-hacs-legacy-ota', 0, 8, 0x190000),
     @('esp32s3_notifier', 'esp32s3-notifier', 9, 1),
     @('esp32s3_notifier_hacs', 'esp32s3-notifier-hacs', 9, 1),
     @('esp32s3_notifier_hacs_slim', 'esp32s3-notifier-hacs-slim', 9, 1),
@@ -40,7 +41,10 @@ try {
         if ($firmwareBytes.Length -lt 80 -or $firmwareBytes[0] -ne 0xE9) { throw "Invalid image: $environment" }
         $chipId = [int]$firmwareBytes[12] + 256 * [int]$firmwareBytes[13]
         if ($chipId -ne [int]$profile[2]) { throw "Wrong chip in $environment" }
-        if ($firmwareBytes.Length -gt 0x1F0000) { throw "Image exceeds the OTA partition: $environment" }
+        $maximumImageSize = if ($profile.Count -ge 5) { [int]$profile[4] } else { 0x1F0000 }
+        if ($firmwareBytes.Length -gt $maximumImageSize) {
+            throw "Image exceeds the $maximumImageSize-byte OTA partition: $environment"
+        }
         # Arduino's prebuilt IDF descriptor identifies arduino-lib-builder, not
         # APP_VERSION. Verify the application's own null-terminated version.
         $hasVersion = [Text.Encoding]::ASCII.GetString($firmwareBytes).Contains($releaseVersion + [char]0)

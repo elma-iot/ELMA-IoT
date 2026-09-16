@@ -30,6 +30,7 @@ struct SystemMetricsSnapshot {
     uint8_t cpuLoadCorePercent[2] = {0, 0};
     bool chipTemperatureAvailable = false;
     float chipTemperatureC = 0.0f;
+    uint32_t chipTemperatureSampledAt = 0;
     uint32_t freeHeapBytes = 0;
     uint32_t minFreeHeapBytes = 0;
     uint32_t largestHeapBlockBytes = 0;

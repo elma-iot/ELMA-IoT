@@ -15,6 +15,7 @@ ASSET_PREFIXES = (
     "esp32-notifier",
     "esp32-notifier-hacs",
     "esp32-notifier-hacs-slim",
+    "esp32-notifier-hacs-legacy-ota",
     "esp32s3-notifier",
     "esp32s3-notifier-hacs",
     "esp32s3-notifier-hacs-slim",

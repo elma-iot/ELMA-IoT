@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "device_log.h"
 
 #ifdef APP_DISABLE_WEB_UI
 
@@ -45,6 +46,7 @@ void WebServerManager::begin(
 #include <esp_ota_ops.h>
 
 #include "generated_web_assets.h"
+#include "json_buffer_response.h"
 #include "storage_backend.h"
 #include "system_metrics.h"
 #include "version.h"
@@ -1029,23 +1031,59 @@ bool WebServerManager::redirectCaptivePortalIfNeeded(AsyncWebServerRequest* requ
 }
 
 void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocument& doc, int statusCode) {
-    AsyncResponseStream* response = request->beginResponseStream("application/json");
-    response->setCode(statusCode);
-    serializeJson(doc, *response);
+    const size_t length = measureJson(doc);
+    // Keep room for TCP and the response object's send buffer. Failed JSON
+    // allocations must return a retryable response, never reset the device.
+    char* data = nullptr;
+    if (!doc.overflowed() && ESP.getFreeHeap() > length + 12000 &&
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > length + 1) {
+        data = static_cast<char*>(malloc(length + 1));
+    }
+    if (data == nullptr) {
+        request->send(503, "application/json", "{\"error\":\"Memory busy; retry shortly.\"}");
+        return;
+    }
+    if (serializeJson(doc, data, length + 1) != length) {
+        free(data);
+        request->send(503, "application/json", "{\"error\":\"JSON response unavailable.\"}");
+        return;
+    }
+    auto* response = new (std::nothrow) JsonBufferResponse(data, length, statusCode);
+    if (response == nullptr) {
+        free(data);
+        request->send(503, "application/json", "{\"error\":\"Memory busy; retry shortly.\"}");
+        return;
+    }
     request->send(response);
 }
 
 void WebServerManager::registerApiRoutes() {
+    server_.on("/api/logs", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;
+        JsonDocument doc;
+        const String since = request->hasParam("since") ? request->getParam("since")->value() : String();
+        if (!DebugLog.snapshot(doc.to<JsonObject>(), since)) {
+            doc.clear();
+            doc["error"] = "Log storage is busy; retry shortly.";
+            sendJson(request, doc, 503);
+            return;
+        }
+        sendJson(request, doc);
+    });
     server_.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
         }
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
+#ifndef APP_LEGACY_OTA_FIT
         appState_->toJson(root);
         wifiManager_->appendTxPowerStatus(root["network"].as<JsonObject>());
         appendSystemMetricsJson(root);
         root["system"]["webUiLocked"] = webUiLocked_;
+#else
+        root["system"]["deviceName"] = settingsGetter_().device.friendlyName;
+#endif
         JsonObject firmware = doc["firmware"].to<JsonObject>();
         firmware["version"] = APP_VERSION;
         firmware["buildDate"] = APP_BUILD_DATE;
@@ -1063,14 +1101,17 @@ void WebServerManager::registerApiRoutes() {
     #else
         firmware["audioEnabled"] = true;
     #endif
+#ifndef APP_LEGACY_OTA_FIT
         firmware["buttonEventTopic"] = settingsGetter_().mqtt.baseTopic + "/event/button_action";
         otaManager_->appendStatusJson(doc["otaManager"].to<JsonObject>());
         if (motorStatusAppender_) {
             motorStatusAppender_(doc["motor"].to<JsonObject>());
         }
+#endif
         sendJson(request, doc);
     });
 
+#ifndef APP_LEGACY_OTA_FIT
     server_.on("/api/settings", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
@@ -1079,7 +1120,9 @@ void WebServerManager::registerApiRoutes() {
         settingsManager_->toJson(settingsGetter_(), doc.to<JsonObject>());
         sendJson(request, doc);
     });
+#endif
 
+#ifndef APP_LEGACY_OTA_FIT
     server_.on("/api/wifi/scan", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
@@ -1122,6 +1165,8 @@ void WebServerManager::registerApiRoutes() {
         doc["accessPointWillStop"] = shutdownDelayMs > 0;
         sendJson(request, doc);
     });
+
+#endif
 
     server_.on(
         "/api/settings",
@@ -1190,6 +1235,7 @@ void WebServerManager::registerApiRoutes() {
             memcpy(static_cast<uint8_t*>(request->_tempObject) + index, data, len);
         });
 
+#ifndef APP_LEGACY_OTA_FIT
     server_.on(
         "/api/motor/config",
         HTTP_POST,
@@ -1457,8 +1503,6 @@ void WebServerManager::registerApiRoutes() {
             sendJson(request, response);
         });
 
-    registerFirmwareRoutes();
-
     server_.on("/api/usb-flasher/manifest", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
@@ -1569,6 +1613,8 @@ void WebServerManager::registerApiRoutes() {
             sendJson(request, response);
         });
 
+#endif
+
     auto* localUploadStartHandler = new AsyncCallbackJsonWebHandler(
         "/api/firmware/upload/start",
         [this](AsyncWebServerRequest* request, JsonVariant& json) {
@@ -1604,6 +1650,9 @@ void WebServerManager::registerApiRoutes() {
         otaManager_->appendLocalUploadStatus(response["upload"].to<JsonObject>());
         sendJson(request, response);
     });
+    // The library also matches child paths of plain URI routes. Register the
+    // upload status route before /api/firmware so resume gets its byte offset.
+    registerFirmwareRoutes();
 
     server_.on(
         "/api/firmware/upload/chunk", HTTP_PUT,
@@ -1689,6 +1738,7 @@ void WebServerManager::registerApiRoutes() {
     localUploadCancelHandler->setMethod(HTTP_POST);
     server_.addHandler(localUploadCancelHandler);
 
+#ifndef APP_LEGACY_OTA_FIT
     server_.on(
         "/api/firmware/upload", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -2116,9 +2166,31 @@ void WebServerManager::registerApiRoutes() {
         factoryResetHandler_();
         request->send(200, "application/json", "{\"ok\":true}");
     });
+#endif
 }
 
 void WebServerManager::registerWebRoutes() {
+#ifdef APP_LEGACY_OTA_FIT
+    static const char kLegacyPage[] =
+        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>ELMA Legacy OTA</title><style>body{font:16px system-ui;max-width:680px;margin:40px auto;padding:20px}"
+        "a{color:#b65f00}</style><h1>ELMA IoT</h1><p>This legacy-partition build keeps audio, MQTT, GPIO, display, "
+        "controls and OTA services. Use ELMA Flasher on the same LAN for configuration and firmware updates.</p>"
+        "<p><a href='/api/status'>Device status (JSON)</a></p>";
+    auto serveLegacyPage = [this](AsyncWebServerRequest* request) {
+        if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;
+        AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=utf-8", kLegacyPage);
+        response->addHeader("Cache-Control", "no-store");
+        request->send(response);
+    };
+    server_.on("/", HTTP_GET, serveLegacyPage);
+    server_.on("/index.html", HTTP_GET, serveLegacyPage);
+    server_.on("/generate_204", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
+    server_.on("/hotspot-detect.html", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
+    server_.on("/connecttest.txt", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
+    server_.on("/ncsi.txt", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
+    server_.onNotFound([](AsyncWebServerRequest* request) { request->send(404, "text/plain", "Not found"); });
+#else
     // This intentionally bypasses web authentication and captive-portal redirects.
     // The setup page loads it from the newly assigned station address to determine
     // when the browser has rejoined the home network. It exposes no device data.
@@ -2153,7 +2225,12 @@ void WebServerManager::registerWebRoutes() {
             request->send(notModified);
             return;
         }
-        AsyncWebServerResponse* response = request->beginResponse(200, asset->contentType, asset->data, asset->size);
+        AsyncWebServerResponse* response = new (std::nothrow) BoundedBufferResponse(
+            reinterpret_cast<const char*>(asset->data), asset->size, asset->contentType, 200, true);
+        if (!response) {
+            request->send(503, "text/plain", "Device busy; retry shortly.");
+            return;
+        }
         response->addHeader("ETag", tag);
         if (asset->gzip) {
             response->addHeader("Content-Encoding", "gzip");
@@ -2189,6 +2266,7 @@ void WebServerManager::registerWebRoutes() {
         }
         request->send(404, "text/plain", "Not found");
     });
+#endif
 }
 
 #endif

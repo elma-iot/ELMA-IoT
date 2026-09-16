@@ -1,3 +1,4 @@
+import {voltageDividerMaximum} from './voltage-divider.js';
 import {
   peripheralDiagramLabelPalette,
   peripheralDiagramLabelId,
@@ -745,6 +746,7 @@ function renderSignalLabels(layer, labelEntries) {
     pill.style.background = entry.palette.badge;
     pill.style.color = entry.palette.text;
     element.appendChild(pill);
+    if(entry.dividerMaximum){const maximum=document.createElement('small');maximum.className='voltage-divider-pin-maximum';maximum.textContent=`MAX: ${entry.dividerMaximum.output.toFixed(2)} V`;maximum.classList.toggle('voltage-divider-unsafe',entry.dividerMaximum.unsafe);element.append(maximum);}
     layer.appendChild(element);
   });
 }
@@ -2174,6 +2176,7 @@ export function createPeripheralDiagramWiringModule({
           nodeSignalLabels.set(labelId, {
             id: labelId,
             label: normalizeSignalLabel(connection.signalLabel),
+            dividerMaximum:node.groupKey==='sensor'&&String(node.profileValue||'').includes('battery-voltage-divider')&&signalKey(connection.signalLabel)==='SIGNAL'?voltageDividerMaximum(state.settings?.battery):null,
             palette: classifyWireColor(connection),
             defaultLayout: signalLabelDefaultLayout(visualRect, defaultAnchor, connection.signalLabel),
           });
@@ -2206,6 +2209,7 @@ export function createPeripheralDiagramWiringModule({
           nodeId: node.id,
           label: entry.label,
           palette: peripheralDiagramLabelPalette(entry.label, source?.palette),
+          dividerMaximum:source?.dividerMaximum,
           nodeRect: visualRect,
           layout,
         };
