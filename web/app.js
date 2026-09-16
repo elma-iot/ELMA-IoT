@@ -1,3 +1,4 @@
+import {diagramRect,canvasClientPoint,setupDiagramViewport} from './modules/diagram-viewport.js';
 import {freePeripheralPin,occupiedPeripheralPins} from "./modules/peripheral-gpio-defaults.js";
 import {createVoltageDividerControls,voltageDividerMaximum,resistorLabel,resistorBands} from './modules/voltage-divider.js';
 import { createAudioTab } from "./modules/audio-tab.js";
@@ -3792,7 +3793,7 @@ function peripheralDiagramNodeMarkup(node) {
 }
 
 function clampPeripheralDiagramPosition(nodeElement, x, y) {
-  const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+  const stageRect = diagramRect(elements.peripheralDiagramStage);
   if (!stageRect) {
     return { x, y };
   }
@@ -3841,8 +3842,8 @@ function handlePeripheralDiagramPointerDown(event) {
     return;
   }
 
-  const stageRect = elements.peripheralDiagramStage.getBoundingClientRect();
-  const nodeRect = nodeElement.getBoundingClientRect();
+  const stageRect = diagramRect(elements.peripheralDiagramStage);
+  const nodeRect = diagramRect(nodeElement);
   const nodeId = String(nodeElement.dataset.nodeId || "");
   if (!nodeId) {
     return;
@@ -3853,8 +3854,8 @@ function handlePeripheralDiagramPointerDown(event) {
   state.peripheralDiagramDrag = {
     nodeId,
     pointerId: event.pointerId,
-    offsetX: event.clientX - nodeRect.left,
-    offsetY: event.clientY - nodeRect.top,
+    offsetX: canvasClientPoint(event,elements.peripheralDiagramStage).clientX - nodeRect.left,
+    offsetY: canvasClientPoint(event,elements.peripheralDiagramStage).clientY - nodeRect.top,
   };
   nodeElement.classList.add("is-dragging");
   state.peripheralDiagramPositions[nodeId] = {
@@ -3878,11 +3879,11 @@ function handlePeripheralDiagramPointerMove(event) {
     return;
   }
 
-  const stageRect = elements.peripheralDiagramStage.getBoundingClientRect();
+  const stageRect = diagramRect(elements.peripheralDiagramStage);
   const position = applyPeripheralDiagramNodePosition(
     nodeElement,
-    event.clientX - stageRect.left - dragState.offsetX,
-    event.clientY - stageRect.top - dragState.offsetY,
+    canvasClientPoint(event,elements.peripheralDiagramStage).clientX - stageRect.left - dragState.offsetX,
+    canvasClientPoint(event,elements.peripheralDiagramStage).clientY - stageRect.top - dragState.offsetY,
   );
   state.peripheralDiagramPositions[dragState.nodeId] = {
     ...(state.peripheralDiagramPositions?.[dragState.nodeId] || {}),
@@ -3955,7 +3956,7 @@ function peripheralDiagramStageRelativeRect(element, stageRect) {
   if (!element || !stageRect) {
     return null;
   }
-  const rect = element.getBoundingClientRect();
+  const rect = diagramRect(element);
   if (!rect.width || !rect.height) {
     return null;
   }
@@ -4047,7 +4048,7 @@ function choosePeripheralDiagramControlDock(ownerRect, labelRects, stageRect, is
 }
 
 function updatePeripheralDiagramControlDocks() {
-  const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+  const stageRect = diagramRect(elements.peripheralDiagramStage);
   if (!stageRect) {
     return;
   }
@@ -4171,6 +4172,7 @@ function setupPeripheralDiagramInteractions() {
     return;
   }
 
+  setupDiagramViewport(elements.peripheralDiagramStage);
   elements.peripheralDiagramItems.dataset.interactionsReady = "true";
   elements.peripheralDiagramItems.addEventListener("pointerdown", handlePeripheralDiagramPointerDown);
   elements.peripheralDiagramStage.addEventListener("click", handlePeripheralDiagramClick);

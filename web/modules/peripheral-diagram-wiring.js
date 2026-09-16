@@ -1,3 +1,4 @@
+import {diagramRect,canvasClientPoint} from './diagram-viewport.js';
 import {voltageDividerMaximum} from './voltage-divider.js';
 import {
   peripheralDiagramLabelPalette,
@@ -469,7 +470,7 @@ function ensureLabelLayer(stage) {
 }
 
 function relativeRectForElement(element, stageRect) {
-  const rect = element?.getBoundingClientRect();
+  const rect = diagramRect(element);
   if (!rect?.width || !rect?.height) {
     return null;
   }
@@ -757,7 +758,7 @@ function renderedLabelRects(layer, stageRect) {
     return rects;
   }
   layer.querySelectorAll(".peripheral-diagram-floating-label[data-node-id][data-label-key]").forEach((element) => {
-    const rect = element.getBoundingClientRect();
+    const rect = diagramRect(element);
     if (!rect.width || !rect.height) {
       return;
     }
@@ -1106,13 +1107,13 @@ export function createPeripheralDiagramWiringModule({
     if (labelConnectDragState.pointerId !== event.pointerId || !labelConnectDragState.previewPath || !labelConnectDragState.sourceAnchor) {
       return;
     }
-    const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+    const stageRect = diagramRect(elements.peripheralDiagramStage);
     if (!stageRect?.width || !stageRect?.height) {
       return;
     }
     const pointerPoint = {
-      x: clampValue(event.clientX - stageRect.left, 0, stageRect.width),
-      y: clampValue(event.clientY - stageRect.top, 0, stageRect.height),
+      x: clampValue(canvasClientPoint(event,elements.peripheralDiagramStage).clientX - stageRect.left, 0, stageRect.width),
+      y: clampValue(canvasClientPoint(event,elements.peripheralDiagramStage).clientY - stageRect.top, 0, stageRect.height),
     };
     labelConnectDragState.previewPath.setAttribute("d", previewConnectionPath(labelConnectDragState.sourceAnchor, pointerPoint));
     event.preventDefault();
@@ -1236,12 +1237,12 @@ export function createPeripheralDiagramWiringModule({
       }
       const centerX = rect.left + (rect.width / 2);
       const centerY = rect.top + (rect.height / 2);
-      const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+      const stageRect = diagramRect(elements.peripheralDiagramStage);
       if (!stageRect) {
         continue;
       }
-      const deltaX = clientX - stageRect.left - centerX;
-      const deltaY = clientY - stageRect.top - centerY;
+      const deltaX = canvasClientPoint({clientX,clientY},elements.peripheralDiagramStage).clientX - stageRect.left - centerX;
+      const deltaY = canvasClientPoint({clientX,clientY},elements.peripheralDiagramStage).clientY - stageRect.top - centerY;
       const distance = Math.hypot(deltaX, deltaY);
       if (distance < nearestDistance) {
         nearestDistance = distance;
@@ -1478,13 +1479,13 @@ export function createPeripheralDiagramWiringModule({
     if (boardEndpointDragState.pointerId !== event.pointerId || !boardEndpointDragState.previewPath || !boardEndpointDragState.connectionGroup) {
       return;
     }
-    const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+    const stageRect = diagramRect(elements.peripheralDiagramStage);
     if (!stageRect?.width || !stageRect?.height) {
       return;
     }
     const boardAnchor = {
-      x: clampValue(event.clientX - stageRect.left, 0, stageRect.width),
-      y: clampValue(event.clientY - stageRect.top, 0, stageRect.height),
+      x: clampValue(canvasClientPoint(event,elements.peripheralDiagramStage).clientX - stageRect.left, 0, stageRect.width),
+      y: clampValue(canvasClientPoint(event,elements.peripheralDiagramStage).clientY - stageRect.top, 0, stageRect.height),
       side: String(boardEndpointDragState.connectionGroup.dataset.boardAnchorSide || "left"),
     };
     const geometry = boardEndpointGeometry(boardEndpointDragState.connectionGroup, boardAnchor, boardEndpointDragState.sourceRoutePoints);
@@ -1565,7 +1566,7 @@ export function createPeripheralDiagramWiringModule({
     }
     routePoints.splice(pointIndex, 1);
     updateCurveGroupPath(group, overlay, connectionKey, routePoints);
-    const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+    const stageRect = diagramRect(elements.peripheralDiagramStage);
     if (stageRect?.width && stageRect?.height) {
       writeStoredWireCurve(state, connectionKey, routePoints, stageRect);
       savePeripheralDiagramPositions?.();
@@ -1640,7 +1641,7 @@ export function createPeripheralDiagramWiringModule({
     if (curveDragState.pointerId !== event.pointerId || !curveDragState.key || !curveDragState.group) {
       return;
     }
-    const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+    const stageRect = diagramRect(elements.peripheralDiagramStage);
     if (!stageRect?.width || !stageRect?.height) {
       return;
     }
@@ -1657,8 +1658,8 @@ export function createPeripheralDiagramWiringModule({
     };
     const routePoints = cloneCurvePoints(JSON.parse(group.dataset.routePoints || "[]"));
     const pointerPoint = {
-      x: clampValue(event.clientX - stageRect.left, 0, stageRect.width),
-      y: clampValue(event.clientY - stageRect.top, 0, stageRect.height),
+      x: clampValue(canvasClientPoint(event,elements.peripheralDiagramStage).clientX - stageRect.left, 0, stageRect.width),
+      y: clampValue(canvasClientPoint(event,elements.peripheralDiagramStage).clientY - stageRect.top, 0, stageRect.height),
     };
     let nextRoutePoints = routePoints;
     if (curveDragState.pointIndex < 0) {
@@ -1677,7 +1678,7 @@ export function createPeripheralDiagramWiringModule({
     if (curveDragState.pointerId !== event.pointerId || !curveDragState.key || !curveDragState.group) {
       return;
     }
-    const stageRect = elements.peripheralDiagramStage?.getBoundingClientRect();
+    const stageRect = diagramRect(elements.peripheralDiagramStage);
     if (stageRect?.width && stageRect?.height) {
       writeStoredWireCurve(
         state,
@@ -2022,8 +2023,8 @@ export function createPeripheralDiagramWiringModule({
       return;
     }
 
-    const stageRect = stage.getBoundingClientRect();
-    const boardClientRect = boardImage.getBoundingClientRect();
+    const stageRect = diagramRect(stage);
+    const boardClientRect = diagramRect(boardImage);
     if (!stageRect.width || !stageRect.height || !boardClientRect.width || !boardClientRect.height) {
       overlay.innerHTML = "";
       labelLayer.innerHTML = "";

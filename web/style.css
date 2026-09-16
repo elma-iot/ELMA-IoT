@@ -5146,3 +5146,22 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
 .device-log-heading #deviceLogCopy { flex: 0 0 auto; width: auto; min-width: 88px; margin-left: auto; }
 .device-log-terminal { height: min(60vh, 600px); min-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #101820; color: #d5f5df; padding: 16px; border: 1px solid #34434c; border-radius: 10px; font: 13px/1.55 Consolas, "Courier New", monospace; tab-size: 4; user-select: text; }
 .device-log-terminal:focus-visible { outline: 2px solid #e99500; outline-offset: 2px; }
+
+/* Shared configuration layout: profile/action row, then its GPIO bindings. */
+.peripheral-profile-row { display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:start;gap:10px; }
+.peripheral-profile-stack,.peripheral-field-composite { display:contents; }
+.peripheral-profile-heading { grid-column:1 / -1;grid-row:1; }
+.peripheral-field-composite > select { grid-column:1;grid-row:1;min-width:0;width:100%; }
+.peripheral-profile-row > .peripheral-profile-action { grid-column:2;grid-row:1;margin:0;width:44px;min-height:44px; }
+.peripheral-profile-row:has(.peripheral-profile-heading) .peripheral-field-composite > select,
+.peripheral-profile-row:has(.peripheral-profile-heading) > .peripheral-profile-action { grid-row:2; }
+.peripheral-binding-group { grid-column:1 / -1;grid-row:2;display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:8px; }
+.peripheral-profile-row:has(.peripheral-profile-heading) .peripheral-binding-group { grid-row:3; }
+.peripheral-profile-row .voltage-divider-controls { grid-column:1 / -1; }
+.peripheral-binding-label { white-space:nowrap; }
+
+/* The viewport clips the view only; component positions stay in canvas units. */
+.diagram-viewport { position:relative;width:calc(100% + 36px);margin:-18px;overflow:hidden;touch-action:none;cursor:grab; }
+.diagram-viewport > .peripheral-diagram-stage { width:100%;margin:0;transform-origin:0 0; }
+.diagram-viewport.is-panning { cursor:grabbing;user-select:none; }
+.diagram-viewport .peripheral-diagram-node { cursor:move; }

@@ -1,3 +1,4 @@
+import {diagramRect} from './diagram-viewport.js';
 export function createConfigurationBackupModule({
   state,
   elements,
@@ -551,7 +552,7 @@ export function createConfigurationBackupModule({
       throw new Error("Dynamic peripheral diagram is not available.");
     }
 
-    const rect = stage.getBoundingClientRect();
+    const rect = diagramRect(stage);
     const width = Math.max(1, Math.ceil(rect.width));
     const height = Math.max(1, Math.ceil(rect.height));
     if (width < 2 || height < 2) {
@@ -559,6 +560,7 @@ export function createConfigurationBackupModule({
     }
 
     const clone = stage.cloneNode(true);
+    clone.style.transform = "none";
     clone.style.width = `${width}px`;
     clone.style.height = `${height}px`;
     clone.style.margin = "0";

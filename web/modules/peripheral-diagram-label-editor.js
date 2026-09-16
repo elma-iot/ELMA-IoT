@@ -1,3 +1,4 @@
+import {diagramRect} from './diagram-viewport.js';
 export const PERIPHERAL_DIAGRAM_LABEL_LAYOUTS_KEY = "__diagramLabelLayouts";
 export const CUSTOM_PERIPHERAL_DIAGRAM_LABEL_VALUE = "__custom__";
 
@@ -439,8 +440,8 @@ export function createPeripheralDiagramLabelEditorModule({
     const visual = nodeElement?.querySelector(".peripheral-diagram-node-visual");
     const visualSurface = visual?.firstElementChild || visual;
     return {
-      nodeRect: nodeElement?.getBoundingClientRect() || null,
-      visualRect: visualSurface?.getBoundingClientRect() || visual?.getBoundingClientRect() || null,
+      nodeRect: diagramRect(nodeElement) || null,
+      visualRect: diagramRect(visualSurface) || diagramRect(visual) || null,
     };
   }
 
