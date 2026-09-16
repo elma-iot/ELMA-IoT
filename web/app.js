@@ -563,30 +563,34 @@ const DEFAULT_SD_GPIO_PINS = {
 };
 const DOCUMENTED_BUZZER_PIN = 7;
 const GPIO_BOARD_LAYOUTS = {
+  "custom-board": {
+    left: [0,1,2,3,4,5,12,13,14,15,16].map(pin=>({pin,label:`GPIO${pin}`})),
+    right: [17,18,19,21,22,23,25,26,27,32,33,34,35,36,39].map(pin=>({pin,label:`GPIO${pin}`})),
+  },
   "esp32-s3-super-mini": {
     left: [
-      { pin: 43, label: "TX / GPIO43" },
-      { pin: 44, label: "RX / GPIO44" },
-      ...[1, 2, 3, 4, 5, 6, 7].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      ...[8, 9, 10, 11, 12, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: null, label: "3V3" },
+      { pin: null, label: "GND" },
+      { pin: null, label: "5V" },
     ],
     right: [
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "3V3" },
-      ...[13, 12, 11, 10, 9, 8].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      ...[7, 6, 5, 4, 3, 2, 1].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: 44, label: "RX / GPIO44" },
+      { pin: 43, label: "TX / GPIO43" },
     ],
   },
   "esp32-s3-zero": {
     left: [
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "3V3" },
-      ...[1, 2, 3, 4, 5, 6].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      ...[14, 15, 16, 7, 8, 9, 10, 11, 12, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: 44, label: "RX / GPIO44" },
+      { pin: 43, label: "TX / GPIO43" },
     ],
     right: [
-      { pin: 43, label: "TX / GPIO43" },
-      { pin: 44, label: "RX / GPIO44" },
-      ...[13, 12, 11, 10, 9, 8, 7, 16, 15, 14].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      ...[6, 5, 4, 3, 2, 1].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: null, label: "3V3" },
+      { pin: null, label: "GND" },
+      { pin: null, label: "5V" },
     ],
   },
   "esp32-s3-psram": {
@@ -680,11 +684,11 @@ const GPIO_BOARD_LAYOUTS = {
     })),
   },
   "esp32-wroom": {
-    left: [36, 39, 34, 35, 32, 33, 25, 26, 27, 14, 12, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [23, 22, 1, 3, 21, 19, 18, 5, 17, 16, 4, 0, 2, 15].map((pin) => ({
+    left: [15, 2, 0, 4, 16, 17, 5, 18, 19, 21, 3, 1, 22, 23].map((pin) => ({
       pin,
       label: pin === 1 ? "TX / GPIO1" : (pin === 3 ? "RX / GPIO3" : `GPIO${pin}`),
     })),
+    right: [13, 12, 14, 27, 26, 25, 33, 32, 35, 34, 39, 36].map((pin) => ({ pin, label: `GPIO${pin}` })),
   },
   "esp32-mini": {
     left: [
@@ -710,16 +714,20 @@ const GPIO_BOARD_LAYOUTS = {
   },
   "wemos-lolin32-mini": {
     left: [
-      { pin: 36, label: "VP / GPIO36" },
-      { pin: 39, label: "VN / GPIO39" },
-      { pin: null, label: "EN" },
-      ...[34, 35, 32, 33, 25, 26, 27, 14, 12].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "GND" },
+      ...[13, 15, 2, 0, 4, 16, 17, 5, 18, 23, 19, 22].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: null, label: "3V3" },
     ],
     right: [
-      { pin: null, label: "3V3" },
-      ...[22, 19, 23, 18, 5, 17, 16, 4, 0, 2, 15, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: null, label: "GND" },
+      ...[12, 14, 27, 26, 25, 33, 32, 35, 34].map((pin) => ({ pin, label: `GPIO${pin}` })),
+      { pin: null, label: "EN" },
+      { pin: 39, label: "VN / GPIO39" },
+      { pin: 36, label: "VP / GPIO36" },
     ],
+  },
+  "wemos-d1-mini-esp32": {
+    left: [{pin:null,label:"RST"},36,26,18,19,23,5,{pin:null,label:"3V3"},13,15].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+    right: [1,3,22,21,17,16,{pin:null,label:"GND"},{pin:null,label:"5V"},12,7].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
   },
   "esp32-s2-psram": {
     left: [
@@ -759,46 +767,46 @@ const GPIO_BOARD_LAYOUTS = {
       { pin: 15, label: "GPIO15" },
     ],
   },
+  "esp32-s2-wemos-mini": {
+    left: [{pin:1,label:"GPIO1"},{pin:null,label:"EN"},...[2,3,4,5,6,7,8,9,10,11,13,12,14].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}],
+    right: [39,40,37,38,35,36,33,34,18,21,16,17].map(pin=>({pin,label:`GPIO${pin}`})).concat([{pin:null,label:"GND"},{pin:null,label:"GND"},{pin:null,label:"VBUS"},{pin:15,label:"GPIO15"}]),
+  },
   "esp32-c6": {
-    left: [
-      { pin: 16, label: "TX / GPIO16" },
-      { pin: 17, label: "RX / GPIO17" },
-      ...[0, 1, 2, 3, 4, 5, 6, 7].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    ],
-    right: [
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "3.3V" },
-      ...[20, 19, 18, 15, 14, 9, 8].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    ],
+    // The source artwork has USB at the top and is displayed rotated 180°.
+    left: [...[8,9,14,15,18,19,20].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3.3V"},{pin:null,label:"GND"},{pin:null,label:"5V"}],
+    right: [7,6,5,4,3,2,1,0,{pin:17,label:"RX / GPIO17"},{pin:16,label:"TX / GPIO16"}].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+  },
+  "esp32-c2-esp8684": {
+    left: [{pin:null,label:"GND"},{pin:null,label:"3V3"},{pin:null,label:"3V3"},2,3,{pin:null,label:"GND"},{pin:null,label:"RST"},{pin:null,label:"GND"},0,1,10,{pin:null,label:"GND"},{pin:null,label:"5V"},{pin:null,label:"5V"},{pin:null,label:"GND"}].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+    right: [9,8,7,6,5,4,20,19,18,17,16,15,14,13,12,11].map(pin=>({pin,label:pin===20?"TX / GPIO20":pin===19?"RX / GPIO19":`GPIO${pin}`})),
   },
   "esp32-c3": {
-    // Physical top-to-bottom order on the supplied ESP32-C3 Super Mini
-    // breadboard artwork (USB-C at the bottom).
-    left: [5, 6, 7, 8, 9, 10, 20, 21].map((pin) => ({
-      pin,
-      label: `GPIO${pin}`,
-    })),
-    right: [
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "3.3V" },
-      { pin: 4, label: "GPIO4" },
-      { pin: 3, label: "GPIO3" },
-      { pin: 2, label: "GPIO2" },
-      { pin: 1, label: "GPIO1" },
-      { pin: 0, label: "GPIO0" },
-    ],
+    // The source artwork has USB at the top and is displayed rotated 180°.
+    left: [0,1,2,3,4].map(pin=>({pin,label:`GPIO${pin}`})).concat([{pin:null,label:"3.3V"},{pin:null,label:"GND"},{pin:null,label:"5V"}]),
+    right: [21,20,10,9,8,7,6,5].map(pin=>({pin,label:`GPIO${pin}`})),
   },
+  "esp8266-esp01": { left:[{pin:null,label:"3V3"},{pin:null,label:"RST"},{pin:null,label:"EN / CH_PD"},{pin:3,label:"RX / GPIO3"}], right:[{pin:null,label:"GND"},{pin:2,label:"GPIO2"},{pin:0,label:"BOOT / GPIO0"},{pin:1,label:"TX / GPIO1"}] },
+  "esp8266-esp01s": { left:[{pin:null,label:"3V3"},{pin:null,label:"RST"},{pin:null,label:"EN / CH_PD"},{pin:3,label:"RX / GPIO3"}], right:[{pin:null,label:"GND"},{pin:2,label:"GPIO2"},{pin:0,label:"BOOT / GPIO0"},{pin:1,label:"TX / GPIO1"}] },
+  "esp8266-wemos-d1-mini-lite": {
+    left: [{pin:null,label:"RST"},{pin:null,label:"A0"},{pin:16,label:"D0 / GPIO16"},{pin:14,label:"D5 / GPIO14"},{pin:12,label:"D6 / GPIO12"},{pin:13,label:"D7 / GPIO13"},{pin:15,label:"D8 / GPIO15"},{pin:null,label:"3V3"}],
+    right: [{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},{pin:5,label:"D1 / GPIO5"},{pin:4,label:"D2 / GPIO4"},{pin:0,label:"D3 / GPIO0"},{pin:2,label:"D4 / GPIO2"},{pin:null,label:"GND"},{pin:null,label:"5V"}],
+  },
+  "esp8266-esp12e": { left:[{pin:null,label:"RST"},{pin:null,label:"ADC"},{pin:null,label:"EN / CH_PD"},...[16,14,12,13].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}], right:[{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},...[5,4,0,2,15].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"GND"}] },
+  "esp8266-esp12f": { left:[{pin:null,label:"RST"},{pin:null,label:"ADC"},{pin:null,label:"EN / CH_PD"},...[16,14,12,13].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}], right:[{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},...[5,4,0,2,15].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"GND"}] },
+  "esp8285-generic": { left:[16,14,12,13,15,2].map(pin=>({pin,label:`GPIO${pin}`})), right:[0,4,5,3,1].map(pin=>({pin,label:pin===3?"RX / GPIO3":pin===1?"TX / GPIO1":`GPIO${pin}`})) },
 };
 const GPIO_BOARD_EXTRA_LAYOUTS = {
+  "wemos-d1-mini-esp32": {
+    left: [{pin:null,label:"GND"},{pin:null,label:"NC"},39,35,33,34,14,{pin:null,label:"NC"},9,11].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+    right: [{pin:null,label:"GND"},27,25,32,12,4,0,2,8,6].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+  },
   "esp32-s3-super-mini": {
-    left: [48, 47, 46, 45, 42, 41, 40, 39].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [34, 33, 21, 18, 17, 16, 15, 14].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    left: [14, 15, 16, 17, 18, 21, 33, 34].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    right: [39, 40, 41, 42, 45, 46, 47, 48].map((pin) => ({ pin, label: `GPIO${pin}` })),
   },
   "esp32-s3-zero": {
-    left: [39, 40, 41, 42, 43, 44, 45, 46, 47, 48].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [38, 37, 36, 35, 34, 33, 21, 18, 17].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    left: [17, 18, 21, 33, 34, 35, 36, 37, 38].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    right: [48, 47, 46, 45, 44, 43, 42, 41, 40, 39].map((pin) => ({ pin, label: `GPIO${pin}` })),
   },
   "esp32-c6": {
     left: [15, 8, 23].map((pin) => ({ pin, label: `GPIO${pin}` })),
@@ -806,6 +814,36 @@ const GPIO_BOARD_EXTRA_LAYOUTS = {
   },
 };
 const GPIO_BOARD_RESERVED_PINS = {
+  "wemos-d1-mini-esp32": {
+    0:{label:"BOOT",warning:"GPIO0 is a boot strap pin.",kind:"strap"},
+    1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},
+    3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},
+    6:{label:"Flash CLK",warning:"GPIO6 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
+    7:{label:"Flash SD0",warning:"GPIO7 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
+    8:{label:"Flash SD1",warning:"GPIO8 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
+    9:{label:"Flash SD2",warning:"GPIO9 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
+    10:{label:"Flash SD3",warning:"GPIO10 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
+    11:{label:"Flash CMD",warning:"GPIO11 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
+    12:{label:"BOOT strap",warning:"GPIO12 affects flash voltage during boot; use only when the attached circuit preserves a safe boot level.",kind:"strap"},
+  },
+  "esp8266-wemos-d1-mini-lite": {0:{label:"BOOT",warning:"GPIO0 must be high for normal boot and low during reset to program.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
+  "esp32-s2-wemos-mini": {
+    15:{label:"LED",warning:"GPIO15 drives the onboard LED on this Wemos S2 Mini.",kind:"onboard"},
+    19:{label:"USB D-",warning:"GPIO19 is used by native USB.",kind:"usb"},
+    20:{label:"USB D+",warning:"GPIO20 is used by native USB.",kind:"usb"},
+  },
+  "esp32-c2-esp8684": {
+    0:{label:"RGB red",warning:"GPIO0 drives the onboard RGB LED red channel.",kind:"onboard"},
+    1:{label:"RGB green",warning:"GPIO1 drives the onboard RGB LED green channel.",kind:"onboard"},
+    8:{label:"ROM log",warning:"GPIO8 is used for ROM-stage serial log output on some ESP8684 configurations.",kind:"serial"},
+    19:{label:"U0RXD",warning:"GPIO19 is the primary UART download receive pin.",kind:"serial"},
+    20:{label:"U0TXD",warning:"GPIO20 is the primary UART download transmit pin.",kind:"serial"},
+  },
+  "esp8266-esp01": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"}},
+  "esp8266-esp01s": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"}},
+  "esp8266-esp12e": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
+  "esp8266-esp12f": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
+  "esp8285-generic": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
   "esp32-c6": {
     8: { label: "WS2812", warning: "Reserved onboard LED pin: GPIO8 drives the built-in WS2812 RGB LED (DIN).", kind: "onboard" },
     9: { label: "BOOT", warning: "Reserved strap pin: GPIO9 is tied to the BOOT function on this ESP32-C6 board.", kind: "strap" },
@@ -2544,11 +2582,20 @@ function activeChipFamily(status = state.status) {
   if (chipFamily.includes("esp32c3") || chipFamily === "c3") {
     return "esp32c3";
   }
+  if (chipFamily.includes("esp32c2") || chipFamily === "c2" || chipFamily.includes("esp8684")) {
+    return "esp32c2";
+  }
   if (chipFamily.includes("esp32c6") || chipFamily === "c6") {
     return "esp32c6";
   }
   if (chipFamily.includes("esp32")) {
     return "esp32";
+  }
+  if (chipFamily.includes("esp8266")) {
+    return "esp8266";
+  }
+  if (chipFamily.includes("esp8285")) {
+    return "esp8285";
   }
   return boardProfileChipFamily();
 }
@@ -2607,6 +2654,44 @@ function peripheralGpioOptions(group, profile, signal, ownKey, selected="") {
   const pins=safePeripheralPins({chip:activeChipFamily(),inputPins:validBoardPins(false),outputPins:validBoardPins(true),exposedPins,blocked:motorUnsafePins(),touchPins:touchCapablePins(),requirement:peripheralPinRequirement(group,profile,signal)});
   return occupiedPinChoices(pins,peripheralGpioAssignments(),ownKey,selected);
 }
+
+// Update choices without rebuilding rows or changing saved GPIO assignments.
+function refreshPeripheralGpioChoices(select) {
+  const roleKey=select.dataset.peripheralBindingKey;
+  let choices,selected=select.value;
+  if(roleKey){
+    const definition=gpioConfigRoleState().byKey.get(roleKey);
+    if(!definition?.element)return;
+    selected=definition.element.value;
+    const container=select.closest('[data-peripheral-binding-group]');
+    if(!container)return;
+    const group=container.dataset.peripheralBindingGroup;
+    const profile=peripheralHelperProfileValue(group,Number(container.dataset.peripheralBindingIndex||0),state.settings||{});
+    const signal=roleKey==='battery.adcPin'?'SIGNAL':roleKey.split('.').pop().replace(/Pin$/,'').toUpperCase();
+    choices=peripheralGpioOptions(group,profile,signal,roleKey,Number(selected)<0?'':selected);
+  }else{
+    const group=select.dataset.peripheralHelperGroup,index=Number(select.dataset.peripheralHelperIndex||0),signal=select.dataset.peripheralHelperSignal;
+    if(!group||['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE'].includes(signal))return;
+    selected=peripheralHelperBindingValue(group,index,signal);
+    choices=helperBindingSignalOptionsFor(group,index,signal);
+  }
+  const sentinels=[...select.options].filter(option=>option.value===''||Number(option.value)<0||(roleKey==='battery.adcPin'&&option.value==='0')).map(option=>option.cloneNode(true));
+  select.replaceChildren(...sentinels);
+  for(const choice of choices){
+    if(roleKey==='battery.adcPin'&&choice.value==='0')continue;
+    const option=new Option(choice.label,choice.value);option.disabled=Boolean(choice.disabled);select.append(option);
+  }
+  select.value=selected;
+}
+function refreshPeripheralGpioChoicesAll(){
+  document.querySelectorAll('select[data-peripheral-binding-key],select[data-peripheral-helper-signal]').forEach(refreshPeripheralGpioChoices);
+}
+for(const type of ['pointerdown','focusin'])document.addEventListener(type,event=>{
+  if(event.target.matches?.('select[data-peripheral-binding-key],select[data-peripheral-helper-signal]'))refreshPeripheralGpioChoices(event.target);
+},true);
+document.addEventListener('change',event=>{
+  if(event.target.closest?.('#tab-gpio'))queueMicrotask(refreshPeripheralGpioChoicesAll);
+});
 
 function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
@@ -3294,6 +3379,7 @@ function syncPeripheralBindingGroups(options = {}) {
       );
     }
   }
+  refreshPeripheralGpioChoicesAll();
 }
 
 function loadPeripheralDiagramPositions() {

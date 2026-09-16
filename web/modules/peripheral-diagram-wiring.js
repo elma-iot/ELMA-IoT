@@ -1,5 +1,5 @@
-import {obstacleAwareRoute} from './diagram-routing-layout.js';
 import {diagramRect,canvasClientPoint} from './diagram-viewport.js';
+import {powerRailTree,obstacleAwareRoute} from './diagram-routing-layout.js';
 import {voltageDividerMaximum} from './voltage-divider.js';
 import {
   peripheralDiagramLabelPalette,
@@ -7,8 +7,26 @@ import {
   peripheralDiagramBoardNodeId,
   peripheralDiagramBoardLabelEntryId,
   peripheralDiagramBoardLabelDefaultLayout,
+  readPeripheralDiagramNodeLabels,
   resolvePeripheralDiagramNodeLabels,
 } from "./peripheral-diagram-label-editor.js";
+import {
+  automaticPinLabelRotation,
+  boardRailForPeripheral,
+  canonicalSignalKey,
+  isGroundSignal as modelIsGroundSignal,
+  isPositivePowerSignal as modelIsPositivePowerSignal,
+  isBoardGpio,
+  normalizeBoardRails,
+  shouldShowBoardLabel,
+  validateElectricalConnection,
+  signalWireColor,
+} from "./peripheral-pin-model.js";
+import {
+  contactLabelLayout,
+  peripheralColumnLabelLayout,
+  peripheralAssetPinContact,
+} from "./peripheral-asset-pin-layout.js";
 
 const PERIPHERAL_DIAGRAM_WIRE_CURVES_KEY = "__wireCurves";
 const PERIPHERAL_DIAGRAM_CUSTOM_LABEL_WIRES_KEY = "__customLabelWires";
@@ -25,7 +43,7 @@ function normalizeSignalLabel(label) {
 }
 
 function signalKey(label) {
-  return normalizeSignalLabel(label).toUpperCase();
+  return canonicalSignalKey(normalizeSignalLabel(label));
 }
 
 function labelReferenceKey(nodeId, labelKey) {
@@ -60,42 +78,21 @@ function limitSwitchBoardLabelForSource(node, sourceValue) {
 }
 
 function isPositivePowerSignal(label) {
-  const key = signalKey(label);
-  return ["VCC", "VIN", "PWR", "VBUS", "5V", "12V", "3V3", "3.3V", "3VO"].includes(key)
-    || key.startsWith("VCC ")
-    || key.startsWith("VIN ")
-    || key.startsWith("5V ")
-    || key.startsWith("12V ")
-    || key.startsWith("3V3 ")
-    || key.startsWith("3.3V ");
+  return modelIsPositivePowerSignal(label);
 }
 
 function isGroundSignal(label) {
-  const key = signalKey(label);
-  return key === "GND" || key === "GROUND" || key.startsWith("GND ") || key.startsWith("GROUND ");
+  return modelIsGroundSignal(label);
 }
 
 function powerRailLabelForNode(node, label) {
+  const sharedRail = boardRailForPeripheral(node?.groupKey, label);
+  if (sharedRail) return sharedRail;
   const key = signalKey(label);
-  if (key === "GND" || key === "GROUND" || key.startsWith("GND ") || key.startsWith("GROUND ")) {
-    return "GND";
-  }
   if (key === "12V" || key.startsWith("12V ")) {
     return "12V";
   }
-  if (key === "5V" || key === "VIN" || key === "VBUS" || key.startsWith("5V ") || key.startsWith("VIN ")) {
-    return "5V";
-  }
-  if (key === "3V3" || key === "3.3V" || key === "3VO" || key.startsWith("3V3 ") || key.startsWith("3.3V ")) {
-    return "3V3";
-  }
-  if (!["VCC", "PWR"].includes(key) && !key.startsWith("VCC ")) {
-    return null;
-  }
-  if (String(node?.groupKey || "") === "power") {
-    return "5V";
-  }
-  return ["audio", "control"].includes(String(node?.groupKey || "")) ? "5V" : "3V3";
+  return null;
 }
 
 function classifyWireColor(connection) {
@@ -111,19 +108,8 @@ function classifyWireColor(connection) {
   if (board === "3V3" || signal === "3V3" || signal === "3.3V" || signal === "VCC" || signal === "PWR" || signal.startsWith("VCC ") || signal.startsWith("3V3 ") || signal.startsWith("3.3V ")) {
     return { stroke: "#ea580c", glow: "rgba(234, 88, 12, 0.18)", badge: "#ea580c", text: "#ffffff" };
   }
-  if (["SDA", "MOSI", "DIN", "DOUT", "DATA", "DQ", "RX", "NO"].includes(signal)) {
-    return { stroke: "#0284c7", glow: "rgba(2, 132, 199, 0.18)", badge: "#0284c7", text: "#ffffff" };
-  }
-  if (["SCL", "SCK", "CLK", "BCLK", "WS", "PCLK", "TX"].includes(signal)) {
-    return { stroke: "#ca8a04", glow: "rgba(202, 138, 4, 0.18)", badge: "#ca8a04", text: "#ffffff" };
-  }
-  if (["CS", "RST", "RESET", "DC", "BL", "INT", "EN", "STBY", "TRIG", "TRIGGER", "CTRL", "CMD", "NC"].includes(signal)) {
-    return { stroke: "#16a34a", glow: "rgba(22, 163, 74, 0.18)", badge: "#16a34a", text: "#ffffff" };
-  }
-  if (["PWM", "PWM1", "PWM2", "OUT", "IN", "SIG", "COM", "GPIO", "A", "B", "SW", "BUS"].includes(signal)) {
-    return { stroke: "#7c3aed", glow: "rgba(124, 58, 237, 0.18)", badge: "#7c3aed", text: "#ffffff" };
-  }
-  return { stroke: "#0f766e", glow: "rgba(15, 118, 110, 0.18)", badge: "#0f766e", text: "#ffffff" };
+  const stroke = signalWireColor(signal);
+  return { stroke, glow: colorWithAlpha(stroke), badge: stroke, text: "#ffffff" };
 }
 
 function colorWithAlpha(color, alpha = 0.18) {
@@ -152,7 +138,7 @@ function normalizeWirePalette(palette) {
 function boardTargetKey(connection) {
   return connection.type === "gpio"
     ? `gpio:${connection.pin}`
-    : `rail:${String(connection.boardLabel || "").toUpperCase()}`;
+    : `rail:${boardRailForPeripheral("", connection.boardLabel) || signalKey(connection.boardLabel)}`;
 }
 
 function boardSideForNode(nodeRect, boardRect) {
@@ -163,7 +149,9 @@ function boardSideForNode(nodeRect, boardRect) {
   const deltaX = nodeCenterX - boardCenterX;
   const deltaY = nodeCenterY - boardCenterY;
 
-  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+  // Prefer a side-facing connector when the component is clearly offset from
+  // the board. This keeps labels out of the narrow vertical corridor on phones.
+  if (Math.abs(deltaX) >= (Math.abs(deltaY) * 0.55)) {
     return deltaX < 0 ? "left" : "right";
   }
   return deltaY < 0 ? "top" : "bottom";
@@ -512,6 +500,32 @@ function relativeRectForElement(element, stageRect) {
   };
 }
 
+function relativeContainedImageRect(image, stageRect) {
+  const rect = diagramRect(image);
+  const boxWidth = Number(image?.offsetWidth || 0);
+  const boxHeight = Number(image?.offsetHeight || 0);
+  const naturalWidth = Number(image?.naturalWidth || 0);
+  const naturalHeight = Number(image?.naturalHeight || 0);
+  if (!rect?.width || !rect?.height || !boxWidth || !boxHeight || !naturalWidth || !naturalHeight) {
+    return relativeRectForElement(image, stageRect);
+  }
+
+  const scale = Math.min(boxWidth / naturalWidth, boxHeight / naturalHeight);
+  const contentWidth = naturalWidth * scale;
+  const contentHeight = naturalHeight * scale;
+  const transform = getComputedStyle(image).transform;
+  const matrix = transform && transform !== "none" ? new DOMMatrixReadOnly(transform) : null;
+  const quarterTurn = matrix && Math.abs(matrix.b) > Math.abs(matrix.a);
+  const visualWidth = quarterTurn ? contentHeight : contentWidth;
+  const visualHeight = quarterTurn ? contentWidth : contentHeight;
+  return {
+    left: rect.left - stageRect.left + ((rect.width - visualWidth) / 2),
+    top: rect.top - stageRect.top + ((rect.height - visualHeight) / 2),
+    width: visualWidth,
+    height: visualHeight,
+  };
+}
+
 function nodeVisualRect(nodeElement, stageRect) {
   const visual = nodeElement?.querySelector(".peripheral-diagram-node-visual");
   const visualSurface = visual?.firstElementChild || visual;
@@ -702,21 +716,25 @@ function writeStoredWireCurve(state, key, points, stageRect) {
   };
 }
 
-function signalLabelDefaultLayout(nodeRect, anchor, signalLabel) {
+function signalLabelDefaultLayout(nodeRect, anchor, signalLabel, boardRect = null) {
   const label = normalizeSignalLabel(signalLabel) || "SIG";
   const width = Math.max(28, (label.length * 6.6) + 14);
-  const sideOffset = anchor.side === "left"
-    ? 8
-    : (anchor.side === "right"
-      ? -(width + 8)
-      : -(width / 2));
-  const verticalOffset = anchor.side === "top" ? 8 : -26;
-  const centerX = anchor.x + sideOffset + (width / 2);
-  const centerY = anchor.y + verticalOffset + 9;
+  const height = 18;
+  const rotation = boardRect ? automaticPinLabelRotation(nodeRect, boardRect) : 0;
+  const radians = Math.abs(rotation) * Math.PI / 180;
+  const visualWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+  const visualHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians));
+  const clearance = 8;
+  const centerX = anchor.x + (anchor.side === "left"
+    ? (visualWidth / 2) + clearance
+    : anchor.side === "right" ? -((visualWidth / 2) + clearance) : 0);
+  const centerY = anchor.y + (anchor.side === "top"
+    ? (visualHeight / 2) + clearance
+    : anchor.side === "bottom" ? -((visualHeight / 2) + clearance) : 0);
   return {
     xFactor: nodeRect.width > 0 ? ((centerX - (nodeRect.left + (nodeRect.width / 2))) / nodeRect.width) : 0,
     yFactor: nodeRect.height > 0 ? ((centerY - (nodeRect.top + (nodeRect.height / 2))) / nodeRect.height) : 0,
-    rotation: 0,
+    rotation,
   };
 }
 
@@ -756,14 +774,77 @@ function renderSignalLabels(layer, labelEntries) {
   const stage = layer.parentElement;
   const stageWidth = stage?.clientWidth || 0;
   const stageHeight = stage?.clientHeight || 0;
-  const labelPadding = 36;
+  const labelPadding = 8;
+  const occupied = [];
+  const ownerRects = [...new Map(labelEntries.map((entry) => [
+    String(entry.nodeId || ""),
+    {
+      left: Number(entry.nodeRect?.left || 0) - 4,
+      right: Number(entry.nodeRect?.left || 0) + Number(entry.nodeRect?.width || 0) + 4,
+      top: Number(entry.nodeRect?.top || 0) - 4,
+      bottom: Number(entry.nodeRect?.top || 0) + Number(entry.nodeRect?.height || 0) + 4,
+    },
+  ])).values()];
+  const overlaps = (rect) => occupied.some((other) => !(
+    rect.right + 4 <= other.left || rect.left >= other.right + 4
+    || rect.bottom + 4 <= other.top || rect.top >= other.bottom + 4
+  ));
+  const overlapsOwner = (rect) => ownerRects.some((owner) => !(
+    rect.right <= owner.left || rect.left >= owner.right
+    || rect.bottom <= owner.top || rect.top >= owner.bottom
+  ));
   labelEntries.forEach((entry) => {
     const rawCenterX = entry.nodeRect.left + (entry.nodeRect.width / 2) + (entry.layout.xFactor * entry.nodeRect.width);
     const rawCenterY = entry.nodeRect.top + (entry.nodeRect.height / 2) + (entry.layout.yFactor * entry.nodeRect.height);
-    const centerX = stageWidth > 0 ? clampValue(rawCenterX, labelPadding, stageWidth - labelPadding) : rawCenterX;
-    const centerY = stageHeight > 0 ? clampValue(rawCenterY, labelPadding, stageHeight - labelPadding) : rawCenterY;
+    const compactPinLabel = Boolean(entry.pinContact && !entry.pinContact.board && !entry.pinContact.column);
+    const size = floatingLabelSize(entry.label, compactPinLabel);
+    const rotation = Math.abs(Number(entry.layout.rotation || 0));
+    const radians = rotation * Math.PI / 180;
+    const visualWidth = Math.abs(size.width * Math.cos(radians)) + Math.abs(size.height * Math.sin(radians));
+    const visualHeight = Math.abs(size.width * Math.sin(radians)) + Math.abs(size.height * Math.cos(radians));
+    const halfWidth = visualWidth / 2;
+    const halfHeight = visualHeight / 2;
+    let centerX = stageWidth > 0 ? clampValue(rawCenterX, labelPadding + halfWidth, stageWidth - labelPadding - halfWidth) : rawCenterX;
+    let centerY = stageHeight > 0 ? clampValue(rawCenterY, labelPadding + halfHeight, stageHeight - labelPadding - halfHeight) : rawCenterY;
+    const ownerCenterX = Number(entry.nodeRect?.left || 0) + (Number(entry.nodeRect?.width || 0) / 2);
+    const ownerCenterY = Number(entry.nodeRect?.top || 0) + (Number(entry.nodeRect?.height || 0) / 2);
+    const shiftHorizontally = Math.abs(centerY - ownerCenterY) >= Math.abs(centerX - ownerCenterX);
+    const candidates = [[0, 0]];
+    for (let ring = 1; ring <= 10; ring += 1) {
+      const primary = shiftHorizontally
+        ? [[ring, 0], [-ring, 0]]
+        : [[0, ring], [0, -ring]];
+      const secondary = shiftHorizontally
+        ? [[0, ring], [0, -ring]]
+        : [[ring, 0], [-ring, 0]];
+      candidates.push(...primary, ...secondary);
+      if (ring <= 4) {
+        candidates.push([ring, ring], [-ring, ring], [ring, -ring], [-ring, -ring]);
+      }
+    }
+    const xStepSize = Math.max(halfWidth + 8, 18);
+    const yStepSize = Math.max(halfHeight + 8, 18);
+    // Contacts supplied by an SVG calibration stay attached to that physical
+    // header. Moving these labels to solve a collision made them appear random
+    // and disconnected from the artwork.
+    for (const [xStep, yStep] of (entry.pinContact ? [[0, 0]] : candidates)) {
+      const candidateX = stageWidth > 0
+        ? clampValue(centerX + (xStep * xStepSize), labelPadding + halfWidth, stageWidth - labelPadding - halfWidth)
+        : centerX;
+      const candidateY = stageHeight > 0
+        ? clampValue(centerY + (yStep * yStepSize), labelPadding + halfHeight, stageHeight - labelPadding - halfHeight)
+        : centerY;
+      const rect = { left: candidateX - halfWidth, right: candidateX + halfWidth, top: candidateY - halfHeight, bottom: candidateY + halfHeight };
+      if (entry.pinContact || (!overlaps(rect) && !overlapsOwner(rect))) {
+        centerX = candidateX;
+        centerY = candidateY;
+        occupied.push(rect);
+        break;
+      }
+    }
     const element = document.createElement("div");
     element.className = "peripheral-diagram-floating-label";
+    if (compactPinLabel) element.classList.add("peripheral-diagram-floating-label-contact");
     element.dataset.nodeId = String(entry.nodeId || "");
     element.dataset.labelKey = String(entry.labelKey || entry.label || "");
     element.style.left = `${centerX}px`;
@@ -772,6 +853,7 @@ function renderSignalLabels(layer, labelEntries) {
 
     const pill = document.createElement("span");
     pill.className = "peripheral-diagram-floating-label-pill";
+    if(entry.layout.labelWidth){pill.style.width=`${entry.layout.labelWidth}px`;pill.style.boxSizing='border-box';}
     pill.textContent = entry.label;
     pill.style.background = entry.palette.badge;
     pill.style.color = entry.palette.text;
@@ -815,11 +897,32 @@ function labelDisplayCenter(entry, stageWidth, stageHeight, labelPadding = 36) {
   };
 }
 
-function floatingLabelSize(label) {
+function floatingLabelSize(label, compact = false) {
   const normalized = normalizeSignalLabel(label) || "SIG";
+  if (compact) {
+    return {
+      width: Math.max(18, (normalized.length * 5) + 8),
+      height: 14,
+    };
+  }
   return {
     width: Math.max(28, (normalized.length * 6.6) + 30),
     height: 24,
+  };
+}
+
+function boardContactLabelLayout(entry, boardRect) {
+  const side = String(entry?.contactSide || (Number(entry?.xFactor || 0) < 0 ? "left" : "right"));
+  const size = floatingLabelSize(entry?.label);
+  const lane = Math.max(0, Number(entry?.contactLane || 0));
+  const gap = 3 + (lane * 8);
+  const offset = (size.width / 2) + gap;
+  return {
+    xFactor: side === "right"
+      ? 0.5 + (offset / Math.max(boardRect.width, 1))
+      : -0.5 - (offset / Math.max(boardRect.width, 1)),
+    yFactor: Number(entry?.yFactor || 0),
+    rotation: 0,
   };
 }
 
@@ -830,7 +933,8 @@ function labelAnchorAwayFromOwner(entry, ownerRect, stageWidth, stageHeight, ren
       y: renderedRect.top + (renderedRect.height / 2),
     }
     : labelDisplayCenter(entry, stageWidth, stageHeight);
-  const size = floatingLabelSize(entry.label);
+    const compactPinLabel = Boolean(entry.pinContact && !entry.pinContact.board && !entry.pinContact.column);
+    const size = floatingLabelSize(entry.label, compactPinLabel);
   const halfWidth = Number(size.width || 0) / 2;
   const halfHeight = Number(size.height || 0) / 2;
   const ownerCenterX = Number(ownerRect?.left || 0) + (Number(ownerRect?.width || 0) / 2);
@@ -859,6 +963,25 @@ function labelAnchorAwayFromOwner(entry, ownerRect, stageWidth, stageHeight, ren
     side,
     tangentX,
     tangentY,
+  };
+}
+
+function physicalPinAnchor(entry, ownerRect) {
+  const contact = entry?.pinContact;
+  if (!contact || contact.board || !ownerRect?.width || !ownerRect?.height) return null;
+  const side = String(contact.side || "right");
+  const tangent = {
+    left: [-1, 0],
+    right: [1, 0],
+    top: [0, -1],
+    bottom: [0, 1],
+  }[side] || [1, 0];
+  return {
+    x: ownerRect.left + (Number(contact.xFactor) * ownerRect.width),
+    y: ownerRect.top + (Number(contact.yFactor) * ownerRect.height),
+    side,
+    tangentX: tangent[0],
+    tangentY: tangent[1],
   };
 }
 
@@ -995,7 +1118,7 @@ export function createPeripheralDiagramWiringModule({
     const boardDefaults = editableBoardLabels(boardProfile);
     const pinById = new Map(
       boardDefaults
-        .filter((entry) => Number.isFinite(Number(entry.pin)))
+        .filter((entry) => isBoardGpio(entry))
         .map((entry) => [entry.id, Number(entry.pin)]),
     );
     const resolvedBoardLabels = resolvePeripheralDiagramNodeLabels(
@@ -1250,7 +1373,7 @@ export function createPeripheralDiagramWiringModule({
     if (targetElement) {
       const targetRef = labelReferenceKey(targetElement.dataset.nodeId, targetElement.dataset.labelKey);
       const entry = lastRenderedLabelEntries.get(targetRef);
-      if (entry?.nodeId === boardNodeId && Number.isFinite(Number(entry.pin))) {
+      if (entry?.nodeId === boardNodeId && isBoardGpio(entry)) {
         return entry;
       }
     }
@@ -1258,7 +1381,7 @@ export function createPeripheralDiagramWiringModule({
     let nearestEntry = null;
     let nearestDistance = Infinity;
     for (const entry of lastRenderedLabelEntries.values()) {
-      if (entry?.nodeId !== boardNodeId || !Number.isFinite(Number(entry.pin))) {
+      if (entry?.nodeId !== boardNodeId || !isBoardGpio(entry)) {
         continue;
       }
       const rect = lastRenderedLabelRects.get(labelReferenceKey(entry.nodeId, entry.labelKey));
@@ -1772,7 +1895,7 @@ export function createPeripheralDiagramWiringModule({
 
   function boardAnchors(stageRect, boardRect) {
     const boardProfile = activeGpioBoardProfile();
-    const primary = gpioBoardLayouts[boardProfile] || { left: [], right: [] };
+    const primary = normalizeBoardRails(boardProfile, gpioBoardLayouts[boardProfile] || { left: [], right: [] });
     const extra = gpioBoardExtraLayouts[boardProfile] || { left: [], right: [] };
     const calibration = boardAnchorCalibration(boardProfile);
     const anchorsByKey = new Map();
@@ -1796,7 +1919,9 @@ export function createPeripheralDiagramWiringModule({
         if (!boardLabel) {
           return;
         }
-        const key = entry.pin != null ? `gpio:${entry.pin}` : `rail:${boardLabel.toUpperCase()}`;
+        const key = entry.pin != null
+          ? `gpio:${entry.pin}`
+          : `rail:${boardRailForPeripheral("", boardLabel) || signalKey(boardLabel)}`;
         if (!anchorsByKey.has(key)) {
           anchorsByKey.set(key, []);
         }
@@ -1812,7 +1937,7 @@ export function createPeripheralDiagramWiringModule({
   }
 
   function editableBoardLabels(boardProfile) {
-    const primary = gpioBoardLayouts[boardProfile] || { left: [], right: [] };
+    const primary = normalizeBoardRails(boardProfile, gpioBoardLayouts[boardProfile] || { left: [], right: [] });
     const extra = gpioBoardExtraLayouts[boardProfile] || { left: [], right: [] };
     const labels = [];
     const seenRailLabels = new Set();
@@ -1934,7 +2059,13 @@ export function createPeripheralDiagramWiringModule({
         usedSignals.add(signalKey(normalizedSignal));
       }
 
-      return connections;
+      return connections.filter((connection) => {
+        const result = validateElectricalConnection(connection);
+        if (!result.valid) {
+          console.error(`[Peripheral diagram] Rejected ${connection.signalLabel} -> ${connection.boardLabel || connection.pin}: ${result.reason}`);
+        }
+        return result.valid;
+      });
     });
   }
 
@@ -2062,12 +2193,7 @@ export function createPeripheralDiagramWiringModule({
       return;
     }
 
-    const boardRect = {
-      left: boardClientRect.left - stageRect.left,
-      top: boardClientRect.top - stageRect.top,
-      width: boardClientRect.width,
-      height: boardClientRect.height,
-    };
+    const boardRect = relativeContainedImageRect(boardImage, stageRect);
     const anchorCandidates = boardAnchors(stageRect, boardRect);
     const nodeRects = new Map(
       nodes.map((node) => {
@@ -2098,7 +2224,12 @@ export function createPeripheralDiagramWiringModule({
     const signalLabels = new Map();
     const labelEntriesByRef = new Map();
     const boardProfile = activeGpioBoardProfile();
+    const activeConnections = collectConnections(nodes).filter((connection) => !isConnectionHidden(state, connectionStorageKey(connection)));
+    const usedBoardTargets = new Set(activeConnections.map(boardTargetKey));
     const boardLabelDefaults = editableBoardLabels(boardProfile);
+    const savedBoardLabelIds = new Set(
+      readPeripheralDiagramNodeLabels(state, peripheralDiagramBoardNodeId(boardProfile)).map((entry) => entry.id),
+    );
     const resolvedBoardLabels = resolvePeripheralDiagramNodeLabels(
       state,
       peripheralDiagramBoardNodeId(boardProfile),
@@ -2109,6 +2240,19 @@ export function createPeripheralDiagramWiringModule({
     const railLabelIndexByKey = new Map();
 
     resolvedBoardLabels.forEach((entry) => {
+      const fallback = boardDefaultsById.get(entry.id) || null;
+      const targetKey = isBoardGpio(fallback)
+        ? `gpio:${Number(fallback.pin)}`
+        : `rail:${boardRailForPeripheral("", entry.label || fallback?.label) || signalKey(entry.label || fallback?.label)}`;
+      if (!shouldShowBoardLabel({
+        targetKey,
+        labelId: entry.id,
+        usedTargets: usedBoardTargets,
+        savedLabelIds: savedBoardLabelIds,
+        isCustom: entry.isCustom,
+      })) {
+        return;
+      }
       const railLabel = String(entry.label || "").trim().toUpperCase();
       const isRailLabel = railLabel && (isPositivePowerSignal(railLabel) || isGroundSignal(railLabel));
       if (!isRailLabel) {
@@ -2133,36 +2277,36 @@ export function createPeripheralDiagramWiringModule({
       const fallback = boardDefaultsById.get(entry.id) || null;
       const railLabel = String(entry.label || fallback?.label || "").trim().toUpperCase();
       const isRailLabel = railLabel && (isPositivePowerSignal(railLabel) || isGroundSignal(railLabel));
+      const usesSavedLayout = savedBoardLabelIds.has(entry.id);
+      const displayLayout = usesSavedLayout
+        ? { xFactor: entry.xFactor, yFactor: entry.yFactor, rotation: entry.rotation }
+        : boardContactLabelLayout({ ...fallback, label: entry.label }, boardRect);
       const resolvedEntry = {
         labelKey: entry.id,
         nodeId: peripheralDiagramBoardNodeId(boardProfile),
         label: entry.label,
-        pin: Number.isFinite(Number(fallback?.pin)) ? Number(fallback.pin) : null,
+        pin: isBoardGpio(fallback) ? Number(fallback.pin) : null,
         palette: peripheralDiagramLabelPalette(entry.label),
         nodeRect: boardRect,
         layout: {
           ...(fallback || { xFactor: 0, yFactor: 0, rotation: 0 }),
-          xFactor: entry.xFactor,
-          yFactor: entry.yFactor,
-          rotation: entry.rotation,
+          ...displayLayout,
         },
+        pinContact: usesSavedLayout ? null : { board: true },
       };
       signalLabels.set(`board:${entry.id}`, resolvedEntry);
       labelEntriesByRef.set(labelReferenceKey(resolvedEntry.nodeId, resolvedEntry.labelKey), resolvedEntry);
 
-      if (Number.isFinite(Number(fallback?.pin))) {
+      if (isBoardGpio(fallback)) {
         resolvedBoardLabelsByTarget.set(`gpio:${Number(fallback.pin)}`, resolvedEntry);
       }
-      if (railLabel && (isRailLabel || !Number.isFinite(Number(fallback?.pin)))) {
-        resolvedBoardLabelsByTarget.set(`rail:${railLabel}`, resolvedEntry);
+      if (railLabel && (isRailLabel || !isBoardGpio(fallback))) {
+        resolvedBoardLabelsByTarget.set(`rail:${boardRailForPeripheral("", railLabel) || signalKey(railLabel)}`, resolvedEntry);
       }
     });
 
     const groupedConnections = new Map();
-    for (const connection of collectConnections(nodes)) {
-      if (isConnectionHidden(state, connectionStorageKey(connection))) {
-        continue;
-      }
+    for (const connection of activeConnections) {
       if (!groupedConnections.has(connection.nodeId)) {
         groupedConnections.set(connection.nodeId, []);
       }
@@ -2196,7 +2340,7 @@ export function createPeripheralDiagramWiringModule({
             id: labelId,
             label,
             palette: peripheralDiagramLabelPalette(label),
-            defaultLayout: signalLabelDefaultLayout(visualRect, defaultAnchor, label),
+            defaultLayout: signalLabelDefaultLayout(visualRect, defaultAnchor, label, boardRect),
           });
         });
       }
@@ -2205,16 +2349,29 @@ export function createPeripheralDiagramWiringModule({
         const defaultAnchor = nodeAnchorForConnection(nodeRect, boardRect, index, connections.length);
         const labelId = peripheralDiagramLabelId(connection.signalLabel);
         if (!nodeSignalLabels.has(labelId)) {
+          const pinContact = peripheralAssetPinContact(
+            node.src,
+            connection.signalLabel,
+            Number(state.peripheralDiagramPositions?.[node.id]?.rotation || 0),
+          );
+          const assetLayout = peripheralColumnLabelLayout(visualRect, boardRect, connections.map(item=>item.signalLabel), index);
           nodeSignalLabels.set(labelId, {
             id: labelId,
             label: normalizeSignalLabel(connection.signalLabel),
             dividerMaximum:node.groupKey==='sensor'&&String(node.profileValue||'').includes('battery-voltage-divider')&&signalKey(connection.signalLabel)==='SIGNAL'?voltageDividerMaximum(state.settings?.battery):null,
             palette: classifyWireColor(connection),
-            defaultLayout: signalLabelDefaultLayout(visualRect, defaultAnchor, connection.signalLabel),
+            defaultLayout: assetLayout || signalLabelDefaultLayout(visualRect, defaultAnchor, connection.signalLabel, boardRect),
+            pinContact: {column:true},
+            legacyIds: String(node.groupKey || "") === "sensor"
+              && String(node.profileValue || "").includes("battery-voltage-divider")
+              && signalKey(connection.signalLabel) === "SIGNAL"
+              ? ["GPIO"]
+              : [],
           });
         }
       });
 
+      const savedNodeLabelIds = new Set(readPeripheralDiagramNodeLabels(state, node.id).map((entry) => entry.id));
       const resolvedLabels = resolvePeripheralDiagramNodeLabels(state, node.id, [...nodeSignalLabels.values()].map((entry, index) => ({
         id: entry.id,
         label: entry.label,
@@ -2222,11 +2379,14 @@ export function createPeripheralDiagramWiringModule({
         yFactor: entry.defaultLayout.yFactor,
         rotation: entry.defaultLayout.rotation,
         order: index,
+        legacyIds: entry.legacyIds || [],
       })));
 
       const resolvedLabelsById = new Map();
       resolvedLabels.forEach((entry, index) => {
         const source = nodeSignalLabels.get(entry.id);
+        const usesSavedLayout = savedNodeLabelIds.has(entry.id)
+          || (entry.legacyIds || []).some((legacyId) => savedNodeLabelIds.has(String(legacyId)));
         const baseLayout = {
           ...(source?.defaultLayout || floatingLabelDefaultLayout(nodeRect, index, resolvedLabels.length)),
           xFactor: entry.xFactor,
@@ -2244,6 +2404,7 @@ export function createPeripheralDiagramWiringModule({
           dividerMaximum:source?.dividerMaximum,
           nodeRect: visualRect,
           layout,
+          pinContact: usesSavedLayout ? null : source?.pinContact || null,
         };
         resolvedLabelsById.set(entry.id, resolvedEntry);
         signalLabels.set(`${node.id}:${entry.id}`, resolvedEntry);
@@ -2286,8 +2447,27 @@ export function createPeripheralDiagramWiringModule({
     lastRenderedLabelEntries = new Map(labelEntriesByRef);
     lastRenderedLabelRects = new Map(actualLabelRects);
     bindLabelConnectionInteractions(labelLayer, overlay);
-    const routingBounds={width:stageRect.width,height:stageRect.height,usedRoutes:[]};
-    let laneIndex=0;
+    const automaticLaneCounts = new Map();
+    const routingBounds = {width:stageRect.width,height:stageRect.height,usedRoutes:[]};
+    const railRoots=new Map(),railEndpoints=new Map(),railParents=new Map();
+    for(const node of nodes){
+      const owner=visualRects.get(node.id)||nodeRects.get(node.id);
+      const labels=resolvedLabelsByNode.get(node.id)||new Map();
+      if(!owner)continue;
+      for(const connection of groupedConnections.get(node.id)||[]){
+        if(connection.type!=='rail')continue;
+        const key=boardTargetKey(connection),boardEntry=resolvedBoardLabelsByTarget.get(key);
+        const entry=labels.get(peripheralDiagramLabelId(connection.signalLabel));
+        if(!boardEntry||!entry)continue;
+        if(!railRoots.has(key))railRoots.set(key,{id:`board:${key}`,owner:boardRect,
+          ...boardLabelAnchor(boardEntry,boardRect,stageRect.width,stageRect.height,actualLabelRects.get(`${boardEntry.nodeId}:${boardEntry.labelKey}`)||null)});
+        const endpoint={id:connectionStorageKey(connection),nodeId:node.id,owner,
+          ...labelAnchorAwayFromOwner(entry,owner,stageRect.width,stageRect.height,actualLabelRects.get(`${entry.nodeId}:${entry.labelKey}`)||null)};
+        if(!railEndpoints.has(key))railEndpoints.set(key,[]);
+        railEndpoints.get(key).push(endpoint);
+      }
+    }
+    for(const [key,endpoints] of railEndpoints)for(const [id,parent] of powerRailTree(railRoots.get(key),endpoints))railParents.set(id,parent);
 
     for (const node of nodes) {
       const nodeRect = nodeRects.get(node.id);
@@ -2302,7 +2482,7 @@ export function createPeripheralDiagramWiringModule({
       connections.forEach((connection, index) => {
         const defaultAnchor = nodeAnchorForConnection(nodeRect, boardRect, index, connections.length);
         const boardLabelEntry = resolvedBoardLabelsByTarget.get(boardTargetKey(connection)) || null;
-        const boardAnchor = boardLabelEntry
+        let boardAnchor = boardLabelEntry
           ? {
             ...boardLabelAnchor(
               boardLabelEntry,
@@ -2333,7 +2513,17 @@ export function createPeripheralDiagramWiringModule({
         const palette = classifyWireColor(connection);
         const connectionKey = connectionStorageKey(connection);
         const savedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
-        const geometry = connectionGeometry(nodeAnchor, boardAnchor, visualRect, boardRect, savedCurvePoints, laneIndex++, routingBounds);
+        let targetOwnerRect=boardRect;
+        const railParent=railParents.get(connectionKey);
+        // Edited wire curves retain their original board endpoint.
+        if(!savedCurvePoints.length&&railParent?.nodeId){
+          boardAnchor={...railParent,boardLabel:connection.boardLabel};
+          targetOwnerRect=railParent.owner;
+        }
+        const laneGroup = String(boardAnchor.side || "left");
+        const laneIndex = automaticLaneCounts.get(laneGroup) || 0;
+        automaticLaneCounts.set(laneGroup, laneIndex + 1);
+        const geometry = connectionGeometry(nodeAnchor, boardAnchor, visualRect, targetOwnerRect, savedCurvePoints, laneIndex,routingBounds);
         if (!hasFiniteAnchorPoint(geometry?.controlPoint) || !hasFiniteAnchorPoint(geometry?.handlePoint)) {
           return;
         }
@@ -2366,10 +2556,10 @@ export function createPeripheralDiagramWiringModule({
         connectionGroup.dataset.nodeRectTop = String(visualRect.top);
         connectionGroup.dataset.nodeRectWidth = String(visualRect.width);
         connectionGroup.dataset.nodeRectHeight = String(visualRect.height);
-        connectionGroup.dataset.boardRectLeft = String(boardRect.left);
-        connectionGroup.dataset.boardRectTop = String(boardRect.top);
-        connectionGroup.dataset.boardRectWidth = String(boardRect.width);
-        connectionGroup.dataset.boardRectHeight = String(boardRect.height);
+        connectionGroup.dataset.boardRectLeft = String(targetOwnerRect.left);
+        connectionGroup.dataset.boardRectTop = String(targetOwnerRect.top);
+        connectionGroup.dataset.boardRectWidth = String(targetOwnerRect.width);
+        connectionGroup.dataset.boardRectHeight = String(targetOwnerRect.height);
         connectionGroup.dataset.routePoints = JSON.stringify(geometry.manualCurvePoints);
         connectionGroup.dataset.controlX = String(geometry.controlPoint.x);
         connectionGroup.dataset.controlY = String(geometry.controlPoint.y);
@@ -2385,7 +2575,7 @@ export function createPeripheralDiagramWiringModule({
         });
 
         const title = createSvgElement("title");
-        title.textContent = `${normalizeSignalLabel(connection.signalLabel)} -> ${boardAnchor.boardLabel}`;
+        title.textContent = `${normalizeSignalLabel(connection.signalLabel)} -> ${railParent?.nodeId&&!savedCurvePoints.length?`${railParent.nodeId} / `:''}${boardAnchor.boardLabel}`;
 
         connectionGroup.addEventListener("pointerenter", () => setActiveConnection(overlay, connectionGroup));
         connectionGroup.addEventListener("pointerleave", () => {
@@ -2443,7 +2633,7 @@ export function createPeripheralDiagramWiringModule({
       const palette = normalizeWirePalette(sourceEntry.palette);
       const connectionKey = `custom:${customLabelConnectionKey(connection)}`;
       const savedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
-      const geometry = connectionGeometry(sourceAnchor, targetAnchor, sourceEntry.nodeRect, targetEntry.nodeRect, savedCurvePoints, laneIndex++, routingBounds);
+      const geometry = connectionGeometry(sourceAnchor, targetAnchor, sourceEntry.nodeRect, targetEntry.nodeRect, savedCurvePoints, 0, routingBounds);
       if (!hasFiniteAnchorPoint(geometry?.controlPoint) || !hasFiniteAnchorPoint(geometry?.handlePoint)) {
         return;
       }

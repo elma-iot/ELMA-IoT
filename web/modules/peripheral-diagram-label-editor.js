@@ -1,4 +1,5 @@
 import {diagramRect} from './diagram-viewport.js';
+import { isBoardGpio, isGroundSignal, isPositivePowerSignal, signalWireColor } from './peripheral-pin-model.js';
 export const PERIPHERAL_DIAGRAM_LABEL_LAYOUTS_KEY = "__diagramLabelLayouts";
 export const CUSTOM_PERIPHERAL_DIAGRAM_LABEL_VALUE = "__custom__";
 
@@ -78,7 +79,7 @@ export function peripheralDiagramBoardNodeId(boardProfile) {
 }
 
 export function peripheralDiagramBoardLabelEntryId({ pin, label, side = "left", lane = 0, index = 0 }) {
-  if (Number.isFinite(Number(pin))) {
+  if (isBoardGpio({pin})) {
     return `BOARD_GPIO_${Number(pin)}`;
   }
   return `BOARD_${String(side).toUpperCase()}_${Number(lane) || 0}_${Number(index) || 0}_${peripheralDiagramLabelId(label)}`;
@@ -90,7 +91,7 @@ export function peripheralDiagramBoardLabelDefaultLayout({ side = "left", lane =
   const yFactor = normalizedCount === 1
     ? 0
     : -0.48 + ((normalizedIndex / Math.max(normalizedCount - 1, 1)) * 0.96);
-  const laneOffset = (Number(lane) || 0) * 0.18;
+  const laneOffset = (Number(lane) || 0) * 0.48;
   const xFactor = String(side) === "right"
     ? 0.72 + laneOffset
     : -0.72 - laneOffset;
@@ -98,6 +99,8 @@ export function peripheralDiagramBoardLabelDefaultLayout({ side = "left", lane =
     xFactor,
     yFactor,
     rotation: 0,
+    contactSide: String(side),
+    contactLane: Number(lane) || 0,
   };
 }
 
@@ -271,6 +274,9 @@ function convertLayoutToRect(layout, fromRect, toRect) {
 }
 
 export function peripheralDiagramLabelPalette(label, fallback = null) {
+  if (!isGroundSignal(label) && !isPositivePowerSignal(label) && !/^GPIO\d+$/i.test(String(label))) {
+    return { badge: signalWireColor(label), text: '#ffffff' };
+  }
   const standard = STANDARD_PERIPHERAL_DIAGRAM_LABEL_MAP.get(peripheralDiagramLabelId(label));
   if (standard) {
     return { badge: standard.badge, text: standard.text };
@@ -331,12 +337,25 @@ function mergeDefaultLabel(defaultLabel, savedLabel, index) {
 }
 
 export function resolvePeripheralDiagramNodeLabels(state, nodeId, defaultLabels = []) {
-  const savedLabels = readPeripheralDiagramNodeLabels(state, nodeId);
+  // Discard the old null->GPIO0 identity collision for board rails. Retain real
+  // GPIO0 labels and every other saved/custom layout.
+  const savedLabels = readPeripheralDiagramNodeLabels(state, nodeId).filter(entry =>
+    !(String(nodeId).startsWith('BOARD_') && entry.id === 'BOARD_GPIO_0'
+      && (isGroundSignal(entry.label) || isPositivePowerSignal(entry.label))));
   const savedById = new Map(savedLabels.map((entry) => [entry.id, entry]));
   const defaults = defaultLabels
-    .map((entry, index) => mergeDefaultLabel(entry, savedById.get(String(entry.id || peripheralDiagramLabelId(entry.label))), index))
-    .filter((entry) => !savedById.get(entry.id)?.isRemoved);
-  const defaultIds = new Set(defaults.map((entry) => entry.id));
+    .map((entry, index) => {
+      const id = String(entry.id || peripheralDiagramLabelId(entry.label));
+      const saved = savedById.get(id)
+        || (entry.legacyIds || []).map((legacyId) => savedById.get(String(legacyId))).find(Boolean);
+      return { ...mergeDefaultLabel(entry, saved, index), legacyIds: entry.legacyIds || [] };
+    })
+    .filter((entry) => {
+      const saved = savedById.get(entry.id)
+        || entry.legacyIds.map((legacyId) => savedById.get(String(legacyId))).find(Boolean);
+      return !saved?.isRemoved;
+    });
+  const defaultIds = new Set(defaults.flatMap((entry) => [entry.id, ...entry.legacyIds.map(String)]));
   const extras = savedLabels
     .filter((entry) => !entry.isRemoved && !defaultIds.has(entry.id))
     .map((entry, index) => ({
