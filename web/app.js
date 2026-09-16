@@ -1,5 +1,6 @@
+import {automaticPeripheralPositions} from './modules/diagram-routing-layout.js';
 import {adcGpioPins, peripheralPinRequirement, safePeripheralPins, occupiedPinChoices} from "./modules/peripheral-pin-policy.js";
-import {diagramRect,canvasClientPoint,setupDiagramViewport} from './modules/diagram-viewport.js';
+import {diagramRect,canvasClientPoint,setupDiagramViewport,focusDiagramViewport} from './modules/diagram-viewport.js';
 import {freePeripheralPin,occupiedPeripheralPins} from "./modules/peripheral-gpio-defaults.js";
 import {createVoltageDividerControls,voltageDividerMaximum,resistorLabel,resistorBands} from './modules/voltage-divider.js';
 import { createAudioTab } from "./modules/audio-tab.js";
@@ -3764,25 +3765,7 @@ function peripheralDiagramNodeMarkup(node) {
 }
 
 function clampPeripheralDiagramPosition(nodeElement, x, y) {
-  const stageRect = diagramRect(elements.peripheralDiagramStage);
-  if (!stageRect) {
-    return { x, y };
-  }
-
-  const visualElement = nodeElement.querySelector(".peripheral-diagram-node-visual");
-  const visualWidth = visualElement?.offsetWidth || nodeElement.offsetWidth;
-  const visualHeight = visualElement?.offsetHeight || nodeElement.offsetHeight;
-  const horizontalInset = Math.max(0, (nodeElement.offsetWidth - visualWidth) / 2);
-  const verticalInset = Math.max(0, (nodeElement.offsetHeight - visualHeight) / 2);
-
-  const minX = -horizontalInset;
-  const minY = -verticalInset;
-  const maxX = Math.max(minX, stageRect.width - nodeElement.offsetWidth + horizontalInset);
-  const maxY = Math.max(minY, stageRect.height - nodeElement.offsetHeight + verticalInset);
-  return {
-    x: Math.min(Math.max(minX, x), maxX),
-    y: Math.min(Math.max(minY, y), maxY),
-  };
+  return {x:Number.isFinite(x)?x:0,y:Number.isFinite(y)?y:0};
 }
 
 function applyPeripheralDiagramNodePosition(nodeElement, x, y) {
@@ -3794,6 +3777,73 @@ function applyPeripheralDiagramNodePosition(nodeElement, x, y) {
   nodeElement.style.transform = "none";
   return clamped;
 }
+
+function responsivePeripheralDiagramPosition(nodeElement, position) {
+  const stageRect = diagramRect(elements.peripheralDiagramStage);
+  if (!stageRect?.width || !stageRect?.height || !nodeElement) {
+    return position || {};
+  }
+  const centerXFactor = Number(position?.centerXFactor);
+  const centerYFactor = Number(position?.centerYFactor);
+  const requestedX = !position.worldCoordinates && Number.isFinite(centerXFactor)
+    ? (centerXFactor * stageRect.width) - (nodeElement.offsetWidth / 2)
+    : Number(position?.x || 0);
+  const requestedY = !position.worldCoordinates && Number.isFinite(centerYFactor)
+    ? (centerYFactor * stageRect.height) - (nodeElement.offsetHeight / 2)
+    : Number(position?.y || 0);
+  const applied = applyPeripheralDiagramNodePosition(nodeElement, requestedX, requestedY);
+  return {
+    ...position,
+    ...applied,
+    centerXFactor: (applied.x + (nodeElement.offsetWidth / 2)) / stageRect.width,
+    centerYFactor: (applied.y + (nodeElement.offsetHeight / 2)) / stageRect.height,
+    layoutVersion: 3,
+    worldCoordinates: true,
+  };
+}
+
+function applyResponsivePeripheralDiagramPositions() {
+  const stage=elements.peripheralDiagramStage;
+  if(!stage)return;
+  const nodes=[...(elements.peripheralDiagramItems?.querySelectorAll('.peripheral-diagram-node[data-node-id]')||[])];
+  const minHeight=stage.clientWidth<600?Math.max(496,320+nodes.length*200):496;
+  stage.style.minHeight=`${minHeight}px`;
+  elements.peripheralDiagramItems?.querySelectorAll(".peripheral-diagram-node[data-node-id]").forEach((nodeElement) => {
+    const nodeId = String(nodeElement.dataset.nodeId || "");
+    const saved = state.peripheralDiagramPositions?.[nodeId];
+    if (!nodeId || !saved || (!Number.isFinite(Number(saved.x)) && !Number.isFinite(Number(saved.centerXFactor)))) {
+      return;
+    }
+    state.peripheralDiagramPositions[nodeId] = responsivePeripheralDiagramPosition(nodeElement, saved);
+  });
+  const stageRect=diagramRect(stage),board=peripheralDiagramStageRelativeRect(elements.peripheralDiagramBoardImage,stageRect);
+  if(!board)return;
+  const fixed=[],automatic=[];
+  const layout=GPIO_BOARD_LAYOUTS[activeGpioBoardProfile()]||{};
+  const contacts=new Map();
+  for(const side of ['left','right']){
+    const pins=layout[side]||[];
+    pins.forEach((entry,index)=>{if(entry.pin!==null && entry.pin!==undefined && Number.isInteger(Number(entry.pin)) && Number(entry.pin)>=0)contacts.set(Number(entry.pin),{x:board.left+(side==='right'?board.width:0),y:board.top+board.height*(index+.5)/Math.max(1,pins.length)});});
+  }
+  for(const element of nodes){
+    const node=state.peripheralDiagramNodeMap?.[element.dataset.nodeId],saved=state.peripheralDiagramPositions?.[element.dataset.nodeId];
+    if(saved&&(Number.isFinite(Number(saved.x))||Number.isFinite(Number(saved.centerXFactor)))){
+      const rect=peripheralDiagramStageRelativeRect(element,stageRect);
+      if(rect)fixed.push({...rect,left:rect.left-65,width:rect.width+130});
+      continue;
+    }
+    if(!node)continue;
+    const definitions=realPeripheralBindingDefinitions(node.groupKey,node.profileValue,state.settings,node.index);
+    const pins=definitions.map(definition=>Number(definition.element?.value));
+    for(const signal of node.pins||[]){const value=peripheralHelperBindingValue(node.groupKey,node.index,signal);if(value!=='')pins.push(Number(value));}
+    const targets=pins.map(pin=>contacts.get(pin)).filter(Boolean);
+    const target=targets.length?{x:targets.reduce((sum,p)=>sum+p.x,0)/targets.length,y:targets.reduce((sum,p)=>sum+p.y,0)/targets.length}:null;
+    automatic.push({id:node.id,width:element.offsetWidth,height:element.offsetHeight,labelHeight:(node.pins||[]).length*28+20,labelWidth:Math.max(65,...(node.pins||[]).map(label=>String(label).length*6.6+38)),target});
+  }
+  const positions=automaticPeripheralPositions({width:stageRect.width,height:stageRect.height,board:{...board,left:board.left-65,width:board.width+130},nodes:automatic,fixed});
+  for(const element of nodes){const position=positions.get(element.dataset.nodeId);if(position)applyPeripheralDiagramNodePosition(element,position.x,position.y);}
+}
+
 
 function handlePeripheralDiagramPointerDown(event) {
   if (event.button !== 0 || !elements.peripheralDiagramStage) {
@@ -4144,6 +4194,20 @@ function setupPeripheralDiagramInteractions() {
   }
 
   setupDiagramViewport(elements.peripheralDiagramStage);
+  document.getElementById('peripheralDiagramFocusButton')?.addEventListener('click',()=>focusDiagramViewport(elements.peripheralDiagramStage,[elements.peripheralDiagramBoardShell]));
+  document.getElementById('peripheralDiagramGatherButton')?.addEventListener('click',()=>{
+    for(const [id,position] of Object.entries(state.peripheralDiagramPositions || {})) {
+      const {x,y,centerXFactor,centerYFactor,layoutVersion,worldCoordinates,...metadata}=position;
+      state.peripheralDiagramPositions[id]=metadata;
+    }
+    applyResponsivePeripheralDiagramPositions();
+    for(const node of elements.peripheralDiagramItems.querySelectorAll('[data-node-id]')) {
+      state.peripheralDiagramPositions[node.dataset.nodeId]={...state.peripheralDiagramPositions[node.dataset.nodeId],x:parseFloat(node.style.left)||0,y:parseFloat(node.style.top)||0,worldCoordinates:true,layoutVersion:3};
+    }
+    savePeripheralDiagramPositions();
+    renderPeripheralDiagramWiring();
+    focusDiagramViewport(elements.peripheralDiagramStage,[elements.peripheralDiagramBoardShell,...elements.peripheralDiagramItems.querySelectorAll('[data-node-id]'),...elements.peripheralDiagramStage.querySelectorAll('.peripheral-diagram-floating-label')],true);
+  });
   elements.peripheralDiagramItems.dataset.interactionsReady = "true";
   elements.peripheralDiagramItems.addEventListener("pointerdown", handlePeripheralDiagramPointerDown);
   elements.peripheralDiagramStage.addEventListener("click", handlePeripheralDiagramClick);
@@ -4427,6 +4491,7 @@ function renderPeripheralDiagram() {
     elements.peripheralDiagramPlaceholderText.hidden = nodes.length > 0;
   }
   updateConfiguredFeatureVisibility();
+  applyResponsivePeripheralDiagramPositions();
   renderPeripheralDiagramWiring(nodes);
 }
 

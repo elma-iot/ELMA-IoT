@@ -1,4 +1,4 @@
-const views=new WeakMap();
+const views=new WeakMap(),controllers=new WeakMap();
 export const clampDiagramZoom=value=>Math.min(3,Math.max(0.4,value));
 export function zoomDiagramAt(view,point,zoom){
   const next=clampDiagramZoom(zoom),ratio=next/view.zoom;
@@ -56,5 +56,18 @@ export function setupDiagramViewport(stage){
   };
   viewport.addEventListener('pointerup',finish,true);viewport.addEventListener('pointercancel',finish,true);
   viewport.addEventListener('wheel',event=>{event.preventDefault();view=zoomDiagramAt(view,local(event),view.zoom*Math.exp(-event.deltaY*(event.deltaMode===1?0.04:0.0015)));apply();},{passive:false});
+  controllers.set(stage,{focus(targets,fit){
+    const origin=diagramRect(stage),rects=targets.filter(Boolean).map(diagramRect);
+    if(!rects.length)return;
+    const left=Math.min(...rects.map(r=>r.left))-origin.left,top=Math.min(...rects.map(r=>r.top))-origin.top;
+    const right=Math.max(...rects.map(r=>r.right))-origin.left,bottom=Math.max(...rects.map(r=>r.bottom))-origin.top;
+    view=diagramViewForBounds({left,top,width:right-left,height:bottom-top},viewport.clientWidth,viewport.clientHeight,fit);apply();
+  }});
   apply();
 }
+
+export function diagramViewForBounds(bounds,width,height,fit=false){
+  const zoom=fit?Math.min(1,Math.max(0.05,Math.min((width-64)/Math.max(bounds.width,1),(height-64)/Math.max(bounds.height,1)))):Math.min(1,(width-32)/Math.max(bounds.width,1));
+  return {zoom,x:width/2-(bounds.left+bounds.width/2)*zoom,y:height/2-(bounds.top+bounds.height/2)*zoom};
+}
+export function focusDiagramViewport(stage,targets,fit=false){controllers.get(stage)?.focus(targets,fit);}

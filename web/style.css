@@ -5165,3 +5165,5 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
 .diagram-viewport > .peripheral-diagram-stage { width:100%;margin:0;transform-origin:0 0; }
 .diagram-viewport.is-panning { cursor:grabbing;user-select:none; }
 .diagram-viewport .peripheral-diagram-node { cursor:move; }
+
+.peripheral-diagram-actions { flex-wrap:wrap; }

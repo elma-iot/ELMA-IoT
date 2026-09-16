@@ -699,9 +699,8 @@ function floatingLabelDefaultLayout(nodeRect, index, count) {
   };
 }
 
-function clampValue(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
+// Canvas coordinates and stored factors may extend beyond the viewport.
+function clampValue(value, min, max) { return Number.isFinite(value)?value:min; }
 
 function convertLayoutToVisualSpace(layout, sourceRect, visualRect) {
   if (!sourceRect?.width || !sourceRect?.height || !visualRect?.width || !visualRect?.height) {
