@@ -96,6 +96,7 @@ export function createConfigurationGpioTab({
 
   function saveGpioBoardPreferences() {
     const ui = ensureUiSettings();
+    ui.gpioSafetyOverride = Boolean(elements.gpioSafetyOverride?.checked);
     ui.gpioBoardAutodetect = Boolean(elements.gpioBoardAutodetect?.checked ?? true);
     ui.gpioBoardSelection = elements.gpioBoardSelector?.value && gpioBoardLayouts[elements.gpioBoardSelector.value]
       ? String(elements.gpioBoardSelector.value)
@@ -107,6 +108,7 @@ export function createConfigurationGpioTab({
 
   function restoreGpioBoardPreferences() {
     const ui = ensureUiSettings();
+    if(elements.gpioSafetyOverride)elements.gpioSafetyOverride.checked=Boolean(ui.gpioSafetyOverride);
     if (elements.gpioBoardAutodetect) {
       elements.gpioBoardAutodetect.checked = ui.gpioBoardAutodetect;
     }
@@ -169,7 +171,8 @@ export function createConfigurationGpioTab({
         elements.gpioBoardAutodetect.closest("label")?.setAttribute("hidden", "");
       }
       const ui = ensureUiSettings();
-      ui.gpioBoardAutodetect = false;
+      ui.gpioSafetyOverride = Boolean(elements.gpioSafetyOverride?.checked);
+    ui.gpioBoardAutodetect = false;
       ui.gpioBoardSelection = compiledBoard;
       return;
     }
@@ -296,7 +299,7 @@ export function createConfigurationGpioTab({
     const activeRoles = roleMap.get(numericPin) || [];
     const reservedInfo = gpioReservedPinInfo(numericPin);
     const warningTitle = reservedInfo?.warning ? ` title="${escapeHtml(reservedInfo.warning)}"` : "";
-    if (reservedInfo) {
+    if (reservedInfo && !elements.gpioSafetyOverride?.checked) {
       return `
         <label class="${gpioReservedRowClass(reservedInfo)}"${warningTitle}>
           <span class="gpio-pin-label">${escapeHtml(label)}</span>
@@ -486,6 +489,7 @@ export function createConfigurationGpioTab({
   }
 
   function bindEvents() {
+    elements.gpioSafetyOverride?.addEventListener("change",()=>{saveGpioBoardPreferences();syncGpioMappingControls();renderPeripheralDiagram();});
     elements.gpioBoardSelector?.addEventListener("change", () => {
       const board=activeGpioBoardProfile();
       const onboardLed=Object.entries(gpioBoardReservedPins[board]||{}).find(([,meta])=>meta.kind==='onboard' && /LED|WS2812|RGB red/i.test(meta.label||''));

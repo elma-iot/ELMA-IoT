@@ -784,6 +784,13 @@
               </div>
             </div>
             <label class="gpio-controls-field">
+              <span class="gpio-controls-field-label">GPIO safety override</span>
+              <div class="gpio-controls-field-main">
+                <label class="inline-toggle"><input id="gpioSafetyOverride" type="checkbox" form="settingsForm" name="ui.gpioSafetyOverride"> Show reserved GPIOs</label>
+                <small>Allows strap, USB and onboard pins. Check wiring before use. Automatic assignments stay safe.</small>
+              </div>
+            </label>
+            <label class="gpio-controls-field">
               <span class="gpio-controls-field-label">Status LED GPIO</span>
               <div class="gpio-controls-field-main">
                 <select id="statusLedPin" form="settingsForm" name="device.statusLedPin" aria-label="Status LED GPIO"></select>

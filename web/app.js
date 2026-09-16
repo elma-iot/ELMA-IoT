@@ -1199,6 +1199,7 @@ const elements = {
   motorTouchSection: document.getElementById("motorTouchSection"),
   motorTouchList: document.getElementById("motorTouchList"),
   motorTouchSummary: document.getElementById("motorTouchSummary"),
+  gpioSafetyOverride: document.getElementById("gpioSafetyOverride"),
   gpioBoardSelector: document.getElementById("gpioBoardSelector"),
   gpioBoardImage: document.getElementById("gpioBoardImage"),
   peripheralDiagramStage: document.getElementById("peripheralDiagramStage"),
@@ -2652,7 +2653,7 @@ function peripheralGpioOptions(group, profile, signal, ownKey, selected="") {
   if(group === "input" && ["SIG","TOUCH","COM"].includes(signal)) ownKey=`ui.input.${ownKey.split(".")[2]}.pin`;
   const layout=GPIO_BOARD_LAYOUTS[activeGpioBoardProfile()] || {};
   const exposedPins=new Set([...(layout.left || []),...(layout.right || [])].filter(entry=>entry.pin!==null && entry.pin!==undefined).map(entry=>Number(entry.pin)));
-  const pins=safePeripheralPins({chip:activeChipFamily(),inputPins:validBoardPins(false),outputPins:validBoardPins(true),exposedPins,blocked:motorUnsafePins(),touchPins:touchCapablePins(),requirement:peripheralPinRequirement(group,profile,signal)});
+  const pins=safePeripheralPins({chip:activeChipFamily(),inputPins:validBoardPins(false),outputPins:validBoardPins(true),exposedPins,blocked:motorUnsafePins(),touchPins:touchCapablePins(),requirement:peripheralPinRequirement(group,profile,signal),override:Boolean(elements.gpioSafetyOverride?.checked) && !assigningPeripheralDefaults});
   return occupiedPinChoices(pins,peripheralGpioAssignments(),ownKey,selected);
 }
 
@@ -4346,6 +4347,11 @@ function setupPeripheralDiagramInteractions() {
 }
 
 function renderPeripheralDiagram() {
+  if(state.peripheralDiagramRenderFrame)return;
+  state.peripheralDiagramRenderFrame=requestAnimationFrame(()=>{state.peripheralDiagramRenderFrame=0;renderPeripheralDiagramNow();});
+}
+
+function renderPeripheralDiagramNow() {
   if (!elements.peripheralDiagramItems) {
     return;
   }
@@ -8660,6 +8666,7 @@ function normalizePeripheralHelperBindings(value) {
 function normalizeUiSettings(uiSettings = {}) {
   const source = isPlainObject(uiSettings) ? uiSettings : {};
   return {
+    gpioSafetyOverride: Boolean(source.gpioSafetyOverride),
     gpioBoardAutodetect: Object.prototype.hasOwnProperty.call(source, "gpioBoardAutodetect")
       ? Boolean(source.gpioBoardAutodetect)
       : true,
@@ -9605,6 +9612,7 @@ Promise.allSettled([loadStatus(), loadSettings()])
       restoreSavedActiveTabIfVisible();
     }
     uiHistoryModule?.captureSnapshot({ replace: true });
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{window.__elmaInterfaceReady=true;}));
   });
 localBuilder.initialize().catch(handleError);
 window.elmaSaveDesignerSettings = () => saveSettings({ silent: true });

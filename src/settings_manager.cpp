@@ -615,6 +615,7 @@ SettingsBundle SettingsManager::defaults() const {
     settings.device.touchHoldFactoryResetEnabled = DefaultConfig::TOUCH_HOLD_FACTORY_RESET_ENABLED;
     settings.device.lowBatterySleepThresholdPercent = DefaultConfig::LOW_BATTERY_SLEEP_THRESHOLD_PERCENT;
     settings.device.lowBatteryWakeIntervalMinutes = DefaultConfig::LOW_BATTERY_WAKE_INTERVAL_MINUTES;
+    settings.ui.gpioSafetyOverride = false;
     settings.ui.gpioBoardAutodetect = true;
     settings.ui.gpioBoardSelection = "";
     settings.ui.peripheralDiagramLayout = "{}";
@@ -935,6 +936,7 @@ SettingsBundle SettingsManager::load() {
     settings.device.touchHoldFactoryResetEnabled = readBool("dev_thf_reset", settings.device.touchHoldFactoryResetEnabled);
     settings.device.lowBatterySleepThresholdPercent = readUInt("dev_lbs_pct", settings.device.lowBatterySleepThresholdPercent);
     settings.device.lowBatteryWakeIntervalMinutes = readUInt("dev_lbs_wk", settings.device.lowBatteryWakeIntervalMinutes);
+    settings.ui.gpioSafetyOverride = readBool("ui_gpio_ovr", settings.ui.gpioSafetyOverride);
     settings.ui.gpioBoardAutodetect = readBool("ui_gpio_auto", settings.ui.gpioBoardAutodetect);
     settings.ui.gpioBoardSelection = readString("ui_gpio_sel", settings.ui.gpioBoardSelection);
     settings.ui.peripheralDiagramLayout = readString("ui_diag", settings.ui.peripheralDiagramLayout);
@@ -1064,6 +1066,7 @@ bool SettingsManager::save(const SettingsBundle& settings) {
     changed |= writeBoolIfChanged("dev_thf_reset", sanitized.device.touchHoldFactoryResetEnabled);
     changed |= writeUIntIfChanged("dev_lbs_pct", sanitized.device.lowBatterySleepThresholdPercent);
     changed |= writeUIntIfChanged("dev_lbs_wk", sanitized.device.lowBatteryWakeIntervalMinutes);
+    changed |= writeBoolIfChanged("ui_gpio_ovr", sanitized.ui.gpioSafetyOverride);
     changed |= writeBoolIfChanged("ui_gpio_auto", sanitized.ui.gpioBoardAutodetect);
     changed |= writeStringIfChanged("ui_gpio_sel", sanitized.ui.gpioBoardSelection);
     changed |= writeStringIfChanged("ui_diag", sanitized.ui.peripheralDiagramLayout);
@@ -1214,6 +1217,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     device["lowBatteryWakeIntervalMinutes"] = settings.device.lowBatteryWakeIntervalMinutes;
 
     JsonObject ui = root["ui"].to<JsonObject>();
+    ui["gpioSafetyOverride"] = settings.ui.gpioSafetyOverride;
     ui["gpioBoardAutodetect"] = settings.ui.gpioBoardAutodetect;
     ui["gpioBoardSelection"] = settings.ui.gpioBoardSelection;
     ui["peripheralDiagramLayout"] = settings.ui.peripheralDiagramLayout;
@@ -1425,6 +1429,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 
     JsonObjectConst ui = object["ui"];
     if (!ui.isNull()) {
+        if (ui["gpioSafetyOverride"].is<bool>()) settings.ui.gpioSafetyOverride = ui["gpioSafetyOverride"].as<bool>();
         if (ui["gpioBoardAutodetect"].is<bool>()) settings.ui.gpioBoardAutodetect = ui["gpioBoardAutodetect"].as<bool>();
         copyString(ui, "gpioBoardSelection", settings.ui.gpioBoardSelection);
         copyJsonStringOrObject(ui, "peripheralDiagramLayout", settings.ui.peripheralDiagramLayout);

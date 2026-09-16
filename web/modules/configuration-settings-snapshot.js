@@ -69,6 +69,7 @@ export function createConfigurationSettingsSnapshotModule({
     const persistedUi = normalizeUiSettings(baseSettings.ui);
     snapshot.ui = normalizeUiSettings({
       gpioBoardAutodetect: Boolean(elements.gpioBoardAutodetect?.checked ?? true),
+      gpioSafetyOverride: Boolean(elements.gpioSafetyOverride?.checked),
       gpioBoardSelection: String(elements.gpioBoardSelector?.value || ""),
       peripheralDiagramPositions: cloneSettingsObject(state.peripheralDiagramPositions || {}) || {},
       peripheralHelperBindings: cloneSettingsObject(state.peripheralHelperBindings || {}) || {},

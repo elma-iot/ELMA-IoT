@@ -172,6 +172,7 @@ struct DeviceSettings {
 };
 
 struct UiSettings {
+    bool gpioSafetyOverride = false;
     bool gpioBoardAutodetect = true;
     String gpioBoardSelection;
     String peripheralDiagramLayout = "{}";
