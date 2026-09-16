@@ -82,7 +82,7 @@ export function obstacleAwareRoute(start,end,owners,lane=0,bounds={}) {
       for(const r of owners){
         const horizontal=a.y===b.y&&a.y>r.top&&a.y<r.top+r.height&&Math.max(a.x,b.x)>r.left&&Math.min(a.x,b.x)<r.left+r.width;
         const vertical=a.x===b.x&&a.x>r.left&&a.x<r.left+r.width&&Math.max(a.y,b.y)>r.top&&Math.min(a.y,b.y)<r.top+r.height;
-        if(horizontal||vertical)cost+=100000;
+        if(horizontal||vertical)cost+=1000000000;
       }
     }
     if(!best||cost<best.cost)best={points,cost};
