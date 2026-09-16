@@ -1,3 +1,4 @@
+import {defaultPeripheralPins} from "./modules/peripheral-pin-model.js";
 import {automaticPeripheralPositions} from './modules/diagram-routing-layout.js';
 import {adcGpioPins, peripheralPinRequirement, safePeripheralPins, occupiedPinChoices} from "./modules/peripheral-pin-policy.js";
 import {diagramRect,canvasClientPoint,setupDiagramViewport,focusDiagramViewport} from './modules/diagram-viewport.js';
@@ -928,7 +929,7 @@ const GPIO_ROLE_OPTIONS = [
   "Builtin RGB",
   "Buzzer Reserved",
 ];
-const WS_STATUS_LED_BOARD_PROFILES = new Set(["esp32-s3-super-mini", "esp32-s3-zero"]);
+const WS_STATUS_LED_BOARD_PROFILES = new Set(["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-devkit-c1"]);
 
 const elements = {
   deviceTitle: document.getElementById("deviceTitle"),
@@ -2748,7 +2749,7 @@ function helperSignalLabels(groupKey, profileValue) {
   }
 
   if (groupKey === "sensor" && profile.includes("battery-voltage-divider")) {
-    return ["GPIO"];
+    return ["SIGNAL"];
   }
 
   if (groupKey === "input" && profile.includes("esp32-native-touch-pad")) {
@@ -3591,6 +3592,15 @@ function peripheralDiagramBindingPins(groupKey) {
 
 function peripheralDiagramTemplatePins(groupKey, profileValue) {
   const profile = String(profileValue || "none");
+  const bindingGroup = ["audio", "display", "storage"].includes(groupKey) ? groupKey : "";
+  const modeledPins = defaultPeripheralPins(
+    groupKey,
+    profile,
+    bindingGroup ? peripheralDiagramBindingPins(bindingGroup) : [],
+  );
+  if (modeledPins) {
+    return modeledPins;
+  }
 
   switch (groupKey) {
     case "audio":
@@ -3652,9 +3662,6 @@ function peripheralDiagramTemplatePins(groupKey, profileValue) {
       }
       return ["SIG", "VCC", "GND"];
     case "sensor":
-      if (profile.includes("battery-voltage-divider")) {
-        return ["GPIO", "Batt", "GND"];
-      }
       if (profile.includes("ds18b20")) {
         return ["DQ", "VCC", "GND"];
       }
@@ -3926,7 +3933,10 @@ function applyResponsivePeripheralDiagramPositions() {
     const target=targets.length?{x:targets.reduce((sum,p)=>sum+p.x,0)/targets.length,y:targets.reduce((sum,p)=>sum+p.y,0)/targets.length}:null;
     automatic.push({id:node.id,width:element.offsetWidth,height:element.offsetHeight,labelHeight:(node.pins||[]).length*28+20,labelWidth:Math.max(65,...(node.pins||[]).map(label=>String(label).length*6.6+38)),target});
   }
-  const positions=automaticPeripheralPositions({width:stageRect.width,height:stageRect.height,board:{...board,left:board.left-65,width:board.width+130},nodes:automatic,fixed});
+  const layoutInput={width:stageRect.width,height:stageRect.height,board:{...board,left:board.left-65,width:board.width+130},nodes:automatic,fixed};
+  const layoutKey=JSON.stringify(layoutInput);
+  const positions=state.peripheralAutoLayoutCache?.key===layoutKey?state.peripheralAutoLayoutCache.positions:automaticPeripheralPositions(layoutInput);
+  state.peripheralAutoLayoutCache={key:layoutKey,positions};
   for(const element of nodes){const position=positions.get(element.dataset.nodeId);if(position)applyPeripheralDiagramNodePosition(element,position.x,position.y);}
 }
 
@@ -3995,8 +4005,12 @@ function handlePeripheralDiagramPointerMove(event) {
   state.peripheralDiagramPositions[dragState.nodeId] = {
     ...(state.peripheralDiagramPositions?.[dragState.nodeId] || {}),
     ...position,
+    centerXFactor: (position.x + (nodeElement.offsetWidth / 2)) / Math.max(stageRect.width, 1),
+    centerYFactor: (position.y + (nodeElement.offsetHeight / 2)) / Math.max(stageRect.height, 1),
+    layoutVersion: 3,
+    worldCoordinates: true,
   };
-  renderPeripheralDiagramWiring();
+  if (!state.peripheralDiagramDragFrame) state.peripheralDiagramDragFrame=requestAnimationFrame(()=>{state.peripheralDiagramDragFrame=0;renderPeripheralDiagramWiring();});
 }
 
 function handlePeripheralDiagramPointerUp(event) {
@@ -4829,7 +4843,9 @@ function statusLedRoleLabel(settings = state.settings, status = state.status) {
 }
 
 function boardDefaultStatusLedPin(boardProfile = activeGpioBoardProfile()) {
-  return WS_STATUS_LED_BOARD_PROFILES.has(String(boardProfile || "").trim().toLowerCase()) ? 48 : 22;
+  const board=String(boardProfile || "").trim().toLowerCase();
+  if(board==="esp32-c3")return 8;
+  return WS_STATUS_LED_BOARD_PROFILES.has(board) ? 48 : 22;
 }
 
 function statusLedPinLabel(pin) {
@@ -5076,14 +5092,10 @@ function updateTouchLivePolling() {
 }
 
 function refreshVisiblePeripheralDiagram() {
-  renderPeripheralDiagram();
-  updateTouchLivePolling();
-  window.setTimeout(() => {
-    if (activeTabName() === "gpio") {
-      renderPeripheralDiagram();
-      updateTouchLivePolling();
-    }
-  }, 0);
+  if(state.peripheralRefreshFrame)return;
+  state.peripheralRefreshFrame=requestAnimationFrame(()=>{
+    state.peripheralRefreshFrame=0;renderPeripheralDiagram();updateTouchLivePolling();
+  });
 }
 
 async function refreshExternalStorageTab(directoryPath = state.currentStoragePathByTarget.sd || "/", options = {}) {

@@ -59,8 +59,8 @@ export function obstacleAwareRoute(start,end,owners,lane=0,bounds={}) {
     if(a.y===b.y)ys.push(a.y-spacing,a.y+spacing);
   }
   const candidates=[];
-  for(const x of xs)candidates.push([start,{x,y:start.y},{x,y:end.y},end]);
-  for(const y of ys)candidates.push([start,{x:start.x,y},{x:end.x,y},end]);
+  for(const x of new Set(xs))candidates.push([start,{x,y:start.y},{x,y:end.y},end]);
+  for(const y of new Set(ys))candidates.push([start,{x:start.x,y},{x:end.x,y},end]);
   let best;
   for(const points of candidates){
     let cost=0;

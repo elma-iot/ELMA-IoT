@@ -5185,3 +5185,10 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
     font-size: 0.56rem;
     letter-spacing: 0.015em;
   }
+
+.gpio-pin-row-occupied[style*="--gpio-wire-color"] {
+  background: color-mix(in srgb, var(--gpio-wire-color) 20%, var(--panel));
+  border-color: var(--gpio-wire-color);
+  box-shadow: inset 4px 0 var(--gpio-wire-color);
+}
+.gpio-pin-row-occupied[style*="--gpio-wire-color"] .gpio-pin-label {color:var(--ink)}

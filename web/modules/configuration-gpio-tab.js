@@ -1,3 +1,4 @@
+import {gpioRoleWireColor} from './peripheral-pin-model.js';
 export function createConfigurationGpioTab({
   state,
   elements,
@@ -199,10 +200,10 @@ export function createConfigurationGpioTab({
     if (normalized.startsWith("esp32-s3") || normalized === "esp32-spk-n16r8") {
       return "ADC sensors: prefer free GPIO1-GPIO20 when you need analog input. PWM outputs can use any green free GPIO that is not already assigned.";
     }
-    if (normalized === "esp32-wrover" || normalized === "esp32-wroom" || normalized === "esp32-mini" || normalized === "wemos-lolin32-mini") {
+    if (normalized === "esp32-wrover" || normalized === "esp32-wroom" || normalized === "esp32-mini" || normalized === "wemos-lolin32-mini" || normalized === "wemos-d1-mini-esp32") {
       return "ADC sensors: prefer free GPIO32, 33, 34, 35, 36, 39, 25, 26, 27, 14, 13, 12, 15, 4, 2, or 0. PWM outputs should go to green free GPIO rows.";
     }
-    if (normalized === "esp32-s2-psram") {
+    if (normalized === "esp32-s2-psram" || normalized === "esp32-s2-wemos-mini") {
       return "ADC and PWM support depends on the exposed ESP32-S2 pins here. Use green free GPIO rows first, then confirm analog-capable choices in the Battery ADC selector.";
     }
     if (normalized === "esp32-c6" || normalized === "esp32-c3") {
@@ -306,9 +307,10 @@ export function createConfigurationGpioTab({
       `;
     }
     const selectedLabel = currentDefinition?.label || (activeRoles.length ? activeRoles.join(" + ") : "Unused");
+    const occupiedStyle=currentRoleKey||activeRoles.length?` style="--gpio-wire-color:${escapeHtml(gpioRoleWireColor(currentRoleKey,selectedLabel))}"`:'';
     if (!currentDefinition && activeRoles.length) {
       return `
-        <label class="gpio-pin-row">
+        <label class="gpio-pin-row gpio-pin-row-occupied"${occupiedStyle}>
           <span class="gpio-pin-label">${escapeHtml(label)}</span>
           <select disabled${selectIdentity} aria-label="${escapeHtml(label)} assignment">
             <option selected>${escapeHtml(selectedLabel)}</option>
@@ -320,7 +322,7 @@ export function createConfigurationGpioTab({
     const options = gpioConfigOptions(numericPin, currentRoleKey, roleState);
     const rowClass = currentRoleKey || activeRoles.length ? "gpio-pin-row gpio-pin-row-occupied" : "gpio-pin-row gpio-pin-row-unused";
     return `
-      <label class="${rowClass}">
+      <label class="${rowClass}"${occupiedStyle}>
         <span class="gpio-pin-label">${escapeHtml(label)}</span>
         <select data-gpio-role-select="true" data-pin="${numericPin}"${selectIdentity} aria-label="${escapeHtml(label)} assignment">
           ${currentRoleKey ? "" : `<option value="" selected>${escapeHtml(selectedLabel)}</option>`}
@@ -485,9 +487,20 @@ export function createConfigurationGpioTab({
 
   function bindEvents() {
     elements.gpioBoardSelector?.addEventListener("change", () => {
+      const board=activeGpioBoardProfile();
+      const onboardLed=Object.entries(gpioBoardReservedPins[board]||{}).find(([,meta])=>meta.kind==='onboard' && /LED|WS2812|RGB red/i.test(meta.label||''));
+      const led=onboardLed?{[board]:Number(onboardLed[0])}:({"esp32-c3":8,"esp32-s3-super-mini":48,"esp32-s3-zero":48});
+      // Explicit board changes choose its built-in LED; loading saved projects keeps overrides.
+      if(elements.statusLedPin && led[board]!==undefined){
+        const value=String(led[board]);
+        if(![...elements.statusLedPin.options].some(option=>option.value===value))elements.statusLedPin.add(new Option(`GPIO${value}`,value));
+        elements.statusLedPin.value=value;
+        state.settings.device.statusLedPin=led[board];
+      }
       saveGpioBoardPreferences();
       syncGpioMappingControls();
       updateGpioBoardImage();
+      queueSettingsSave(150);
     });
 
     elements.gpioBoardAutodetect?.addEventListener("change", async () => {
@@ -503,9 +516,19 @@ export function createConfigurationGpioTab({
       } else {
         updateGpioBoardSelectorMode(state.status, { force: true });
       }
+      const board=activeGpioBoardProfile();
+      const led={"esp32-c3":8,"esp32-s3-super-mini":48,"esp32-s3-zero":48,"esp32-s3-devkit-c1":48,"wemos-lolin32-mini":22,"wemos-d1-mini-esp32":2,"esp32-wroom":2,"esp32-mini":2,"esp32-wrover":2};
+      // Explicit board changes choose its built-in LED; loading saved projects keeps overrides.
+      if(elements.statusLedPin && led[board]!==undefined){
+        const value=String(led[board]);
+        if(![...elements.statusLedPin.options].some(option=>option.value===value))elements.statusLedPin.add(new Option(`GPIO${value}`,value));
+        elements.statusLedPin.value=value;
+        state.settings.device.statusLedPin=led[board];
+      }
       saveGpioBoardPreferences();
       syncGpioMappingControls();
       updateGpioBoardImage();
+      queueSettingsSave(150);
     });
 
     elements.gpioExtraToggle?.addEventListener("click", () => {
