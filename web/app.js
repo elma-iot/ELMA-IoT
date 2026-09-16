@@ -2331,7 +2331,7 @@ function peripheralHelperBindingSlotKey(groupKey, index) {
 }
 
 function peripheralHelperBindingValue(groupKey, index, signalLabel) {
-  if (groupKey === "sensor" && signalLabel === "GPIO") {
+  if (groupKey === "sensor" && ["GPIO", "SIGNAL"].includes(String(signalLabel || "").toUpperCase())) {
     const sensorProfile = String(state.peripheralSensorProfiles?.[Number(index) || 0] || "none").trim().toLowerCase();
     if (sensorProfile === BATTERY_DIVIDER_SENSOR_PROFILE) {
       const adcPin = Number(elements.batteryAdcPin?.value || state.settings?.battery?.adcPin || 0);
@@ -2465,7 +2465,7 @@ function normalizePowerHelperBindings(index) {
 }
 
 function setPeripheralHelperBindingValue(groupKey, index, signalLabel, value) {
-  if (groupKey === "sensor" && signalLabel === "GPIO") {
+  if (groupKey === "sensor" && ["GPIO", "SIGNAL"].includes(String(signalLabel || "").toUpperCase())) {
     const sensorProfile = String(state.peripheralSensorProfiles?.[Number(index) || 0] || "none").trim().toLowerCase();
     if (sensorProfile === BATTERY_DIVIDER_SENSOR_PROFILE) {
       if (elements.batteryAdcPin) {
@@ -2708,7 +2708,7 @@ function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
     }
   }
 
-  if (groupKey === "sensor" && normalizedSignal === "GPIO" && String(profileValue).trim().toLowerCase() === BATTERY_DIVIDER_SENSOR_PROFILE) {
+  if (groupKey === "sensor" && ["GPIO", "SIGNAL"].includes(normalizedSignal) && String(profileValue).trim().toLowerCase() === BATTERY_DIVIDER_SENSOR_PROFILE) {
     return peripheralGpioOptions(groupKey,profileValue,"SIGNAL","battery.adcPin").filter(option=>Number(option.value)>0);
   }
 
@@ -3498,7 +3498,13 @@ function buildEditablePeripheralLabels(node) {
       continue;
     }
     used.add(key);
-    labels.push({ id: key, label: normalized });
+    labels.push({
+      id: key,
+      label: normalized,
+      legacyIds: groupKey === "sensor" && profileValue === BATTERY_DIVIDER_SENSOR_PROFILE && key === "SIGNAL"
+        ? ["GPIO"]
+        : [],
+    });
   }
 
   for (const pinLabel of Array.isArray(node.pins) ? node.pins : []) {
