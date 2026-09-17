@@ -35,6 +35,7 @@ for (const [index, board] of boards.entries()) {
   narrowedApp = narrowedApp.replace(/const WS_STATUS_LED_BOARD_PROFILES = new Set\(\[.*?\]\);/,
     `const WS_STATUS_LED_BOARD_PROFILES = new Set(${JSON.stringify(index < 2 ? [board] : [])});`);
   narrowedApp = replaceFunction(narrowedApp, "boardProfileChipFamily", `function boardProfileChipFamily() { return ${JSON.stringify(chip)}; }`);
+  narrowedApp = replaceFunction(narrowedApp, "boardDefaultStatusLedPin", `function boardDefaultStatusLedPin() { return ${chip === "esp32c3" ? 8 : ["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-devkit-c1"].includes(board) ? 48 : 22}; }`);
   narrowedApp = replaceFunction(narrowedApp, "detectGpioBoardProfile", `function detectGpioBoardProfile() { return ${JSON.stringify(board)}; }`);
 
   await build({
@@ -54,6 +55,10 @@ for (const [index, board] of boards.entries()) {
           if (!match) throw new Error("ADC hint specialization point missing");
           const hint = vm.runInNewContext(`${match[0]}; inferBoardAdcHint(${JSON.stringify(board)})`, {}, {timeout: 1000});
           source = replaceFunction(source, "inferBoardAdcHint", `  function inferBoardAdcHint() { return ${JSON.stringify(hint)}; }`, "  ");
+          source = source.replace(/\{"esp32-c3":8[^{}]*\}/g, literal => {
+            const data = evaluate(literal);
+            return JSON.stringify(board in data ? {[board]: data[board]} : {});
+          });
           source = source.replaceAll('"esp32-s3-super-mini"', JSON.stringify(board));
         }
         if (filename === "device-migration-tab.js") {

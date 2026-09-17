@@ -47,7 +47,7 @@ from migration_importer import import_device
 from gpio_validation import validate_gpio_settings
 
 
-APP_VERSION = "0.1.43"
+APP_VERSION = "0.1.50"
 WINDOWS_APP_USER_MODEL_ID = "ELMA.IoT.Flasher"
 FLASH_BAUD = 460800
 CONSOLE_BAUD = 115200

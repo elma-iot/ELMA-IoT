@@ -4,6 +4,51 @@
 #include <IPAddress.h>
 #include <stdint.h>
 
+#ifndef APP_COMPILED_LANGUAGE_ID
+#define APP_COMPILED_LANGUAGE_ID 0
+#endif
+#if APP_COMPILED_LANGUAGE_ID == 1
+#define APP_COMPILED_LANGUAGE_CODE "es"
+#elif APP_COMPILED_LANGUAGE_ID == 2
+#define APP_COMPILED_LANGUAGE_CODE "zh"
+#elif APP_COMPILED_LANGUAGE_ID == 3
+#define APP_COMPILED_LANGUAGE_CODE "hi"
+#elif APP_COMPILED_LANGUAGE_ID == 4
+#define APP_COMPILED_LANGUAGE_CODE "ar"
+#elif APP_COMPILED_LANGUAGE_ID == 5
+#define APP_COMPILED_LANGUAGE_CODE "pt"
+#elif APP_COMPILED_LANGUAGE_ID == 6
+#define APP_COMPILED_LANGUAGE_CODE "bn"
+#elif APP_COMPILED_LANGUAGE_ID == 7
+#define APP_COMPILED_LANGUAGE_CODE "ru"
+#elif APP_COMPILED_LANGUAGE_ID == 8
+#define APP_COMPILED_LANGUAGE_CODE "ja"
+#elif APP_COMPILED_LANGUAGE_ID == 9
+#define APP_COMPILED_LANGUAGE_CODE "de"
+#elif APP_COMPILED_LANGUAGE_ID == 10
+#define APP_COMPILED_LANGUAGE_CODE "fr"
+#elif APP_COMPILED_LANGUAGE_ID == 11
+#define APP_COMPILED_LANGUAGE_CODE "ko"
+#elif APP_COMPILED_LANGUAGE_ID == 12
+#define APP_COMPILED_LANGUAGE_CODE "tr"
+#elif APP_COMPILED_LANGUAGE_ID == 13
+#define APP_COMPILED_LANGUAGE_CODE "it"
+#elif APP_COMPILED_LANGUAGE_ID == 14
+#define APP_COMPILED_LANGUAGE_CODE "id"
+#elif APP_COMPILED_LANGUAGE_ID == 15
+#define APP_COMPILED_LANGUAGE_CODE "pl"
+#elif APP_COMPILED_LANGUAGE_ID == 16
+#define APP_COMPILED_LANGUAGE_CODE "uk"
+#elif APP_COMPILED_LANGUAGE_ID == 17
+#define APP_COMPILED_LANGUAGE_CODE "vi"
+#elif APP_COMPILED_LANGUAGE_ID == 18
+#define APP_COMPILED_LANGUAGE_CODE "th"
+#elif APP_COMPILED_LANGUAGE_ID == 19
+#define APP_COMPILED_LANGUAGE_CODE "fa"
+#else
+#define APP_COMPILED_LANGUAGE_CODE "en"
+#endif
+
 #ifndef APP_DEFAULT_OLED_ENABLED
 #define APP_DEFAULT_OLED_ENABLED 1
 #endif
@@ -155,6 +200,8 @@ struct DeviceSettings {
     String deviceName;
     String friendlyName;
     uint8_t statusLedPin = APP_DEFAULT_STATUS_LED_PIN;
+    uint8_t statusLedGreenPin = APP_DEFAULT_STATUS_LED_PIN;
+    uint8_t statusLedBluePin = APP_DEFAULT_STATUS_LED_PIN;
     String statusLedType = APP_STATUS_LED_IS_NEOPIXEL ? "neopixel" : "regular";
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
     uint8_t savedVolumePercent = 35;
@@ -171,13 +218,27 @@ struct DeviceSettings {
     uint16_t lowBatteryWakeIntervalMinutes = 15;
 };
 
+#ifndef APP_COMPILED_THEME_ID
+#define APP_COMPILED_THEME_ID 0
+#endif
+#if APP_COMPILED_THEME_ID == 2
+#define APP_COMPILED_THEME_CODE "dark"
+#elif APP_COMPILED_THEME_ID == 1
+#define APP_COMPILED_THEME_CODE "light"
+#else
+#define APP_COMPILED_THEME_CODE "automatic"
+#endif
+
 struct UiSettings {
+    String language = APP_COMPILED_LANGUAGE_CODE;
+    String theme = APP_COMPILED_THEME_CODE;
     bool gpioSafetyOverride = false;
     bool gpioBoardAutodetect = true;
     String gpioBoardSelection;
     String peripheralDiagramLayout = "{}";
     String peripheralHelperBindings = "{}";
     String peripheralProfileSelections = "{}";
+    String recordedMelodies = "{}";
     String motorRuntimeConfig = "{}";
 };
 

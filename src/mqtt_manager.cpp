@@ -871,13 +871,14 @@ void MqttManager::handleMessage(char* topic, char* payload, AsyncMqttClientMessa
                 explicitType.isEmpty() ? mediaContentType : explicitType,
                 command.action == "tts" || announce);
 
+            if (command.action=="tts" && doc["text"].is<const char*>()) {command.url=doc["text"].as<String>();command.mediaType="tts-offline";command.source="offline-tts";}
             if (command.label.isEmpty() && !command.url.isEmpty()) {
                 command.label = command.url;
             }
         }
     } else {
         command.url = payloadValue;
-        command.mediaType = command.action == "tts" ? "tts" : "stream";
+        command.mediaType = command.action == "tts" ? (payloadValue.startsWith("http://") || payloadValue.startsWith("https://") ? "tts" : "tts-offline") : "stream";
     }
     commandHandler_(command);
 }

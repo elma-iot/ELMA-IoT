@@ -5,16 +5,32 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import json
 
 Import("env")
 
 ROOT = Path(env["PROJECT_DIR"])
+sys.path.insert(0,str(ROOT / "scripts"))
+from project_defaults import generate_defaults
+defaults_file=os.environ.get("ELMA_PROJECT_DEFAULTS_FILE","")
+generate_defaults(ROOT,Path(defaults_file).read_text(encoding="utf-8") if defaults_file else os.environ.get("ELMA_PROJECT_DEFAULTS_JSON","{}"))
 WEB_DIR = ROOT / "web"
 BUILD_WEB_DIR = ROOT / ".web-build"
 TMP_WEB_DIR = ROOT / ".tmp-webbundle"
 HEADER = ROOT / "include" / "generated_web_assets.h"
 SOURCE = ROOT / "src" / "generated_web_assets.cpp"
 SKIPPED_WEB_ASSETS = {
+    "esp32-c2-esp8684-breadboard.svg",
+    "wemos-s2-mini-breadboard.svg",
+    "wemos-d1-mini-lite-breadboard.svg",
+    "wemos-d1-mini-esp32-breadboard.svg",
+    "esp8266-esp12f-breadboard.svg",
+    "esp8266-esp12e-breadboard.svg",
+    "esp8266-esp01-breadboard.svg",
+    "i18n.js",
+    "desktop-preferences.js",
+    "desktop-locales.json",
     "favicon.ico",
     # The SVG logo is the canonical favicon. This legacy multi-resolution ICO
     # costs about 87 KiB even after gzip and is not needed by modern browsers.
@@ -49,6 +65,23 @@ selected_board_id = int(selected_board_id_text)
 if selected_board_id and selected_board_id not in BOARD_ASSET_IDS.values():
     raise SystemExit(f"Unknown ELMA selected board identifier: {selected_board_id}")
 env.Append(CPPDEFINES=[("APP_COMPILED_BOARD_PROFILE_ID", selected_board_id)])
+sys.path.insert(0,str(ROOT / "scripts"))
+from compact_peripheral_assets import load_manifest,active_mask,block_svg
+peripheral_svg_manifest=load_manifest(ROOT)
+peripheral_svg_paths=sorted(peripheral_svg_manifest)
+active_profiles_text=os.environ.get("ELMA_ACTIVE_PERIPHERAL_PROFILES")
+active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else None
+peripheral_svg_mask=active_mask(peripheral_svg_manifest,active_profiles)
+env.Append(CPPDEFINES=[("APP_PERIPHERAL_SVG_MASK",peripheral_svg_mask)])
+if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)}; others use blocks with identical I/O")
+
+
+if env.get("PIOENV") == "esp32_notifier_hacs_legacy_ota":
+    env.Append(LINKFLAGS=["-flto"])
+
+language_codes = ["en","es","zh","hi","ar","pt","bn","ru","ja","de","fr","ko","tr","it","id","pl","uk","vi","th","fa"]
+language = os.environ.get("ELMA_COMPILED_LANGUAGE", "en")
+env.Append(CPPDEFINES=[("APP_COMPILED_LANGUAGE_ID", language_codes.index(language)), ("APP_COMPILED_THEME_ID", {"automatic":0,"light":1,"dark":2}[os.environ.get("ELMA_COMPILED_THEME", "automatic")])])
 
 if os.environ.get("ELMA_PORTABLE_BUILDER") == "1" and HEADER.is_file() and SOURCE.is_file():
     selected_label = os.environ.get("ELMA_SELECTED_BOARD_PROFILE", "all supported boards")
@@ -158,6 +191,13 @@ def build_web_assets() -> None:
         shutil.rmtree(TMP_WEB_DIR)
     BUILD_WEB_DIR.mkdir(parents=True, exist_ok=True)
 
+    for code in language_codes:
+        locale_environment = dict(os.environ, ELMA_COMPILED_LANGUAGE=code)
+        subprocess.run(["node", str(ROOT / "scripts" / "build_ui_locales.mjs"), str(ROOT), str(BUILD_WEB_DIR)], cwd=ROOT, env=locale_environment, check=True)
+        target = BUILD_WEB_DIR / "__locales" / code / "firmware-i18n.js"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        (BUILD_WEB_DIR / "firmware-i18n.js").replace(target)
+
     esbuild_cmd = [
         *npx_command(),
         "--no-install",
@@ -183,7 +223,7 @@ def build_web_assets() -> None:
 
         relative_path = path.relative_to(WEB_DIR)
         relative_path_str = relative_path.as_posix()
-        if relative_path_str == "app.js" or relative_path_str.startswith("modules/") or relative_path_str in SKIPPED_WEB_ASSETS:
+        if relative_path_str in ("app.js", "firmware-i18n.js") or relative_path_str.startswith(("modules/", "i18n/")) or relative_path_str in SKIPPED_WEB_ASSETS:
             continue
 
         target_path = BUILD_WEB_DIR / relative_path
@@ -208,6 +248,7 @@ def prepare_payload(path: Path) -> bytes:
 
 
 build_web_assets()
+(BUILD_WEB_DIR / "desktop-locales.json").unlink(missing_ok=True)
 
 
 assets = []
@@ -216,6 +257,8 @@ for path in sorted(BUILD_WEB_DIR.rglob("*")):
         continue
     relative_path = path.relative_to(BUILD_WEB_DIR).as_posix()
     raw = path.read_bytes()
+    if path.suffix == ".html":
+        raw = raw.replace(b'<script type="module" src="/desktop-preferences.js"></script>', b"")
     gzip_encoded = is_gzip_payload(raw)
     payload = raw if gzip_encoded else gzip.compress(raw, compresslevel=9)
     mime = {
@@ -255,6 +298,10 @@ source_lines = [
 ]
 
 def asset_guard(asset_path: str):
+    locale = re.match(r"__locales/([^/]+)/", asset_path)
+    if locale:
+        return f"#if APP_COMPILED_LANGUAGE_ID == {language_codes.index(locale.group(1))}"
+
     variant = re.match(r"__boards/(\d+)/", asset_path)
     if variant:
         return f"#if APP_COMPILED_BOARD_PROFILE_ID == {variant.group(1)}"
@@ -273,9 +320,15 @@ for asset_path, symbol, _, payload, _ in assets:
         source_lines.append(guard)
     header_lines.append(f"extern const uint8_t {symbol}[];")
     header_lines.append(f"extern const size_t {symbol}_len;")
+    compact_asset=asset_path in peripheral_svg_manifest
+    if compact_asset:
+        source_lines.append(f"#if APP_PERIPHERAL_SVG_MASK & {1 << peripheral_svg_paths.index(asset_path)}")
     source_lines.append(f"const uint8_t {symbol}[] PROGMEM = {{")
     source_lines.append(f"    {c_array(payload)}")
     source_lines.append("};")
+    if compact_asset:
+        compact_payload=gzip.compress(block_svg(peripheral_svg_manifest[asset_path]).encode("utf-8"),compresslevel=9,mtime=0)
+        source_lines.extend(["#else",f"const uint8_t {symbol}[] PROGMEM = {{",f"    {c_array(compact_payload)}","};","#endif"])
     source_lines.append(f"const size_t {symbol}_len = sizeof({symbol});")
     if guard:
         header_lines.append("#endif")
@@ -290,7 +343,7 @@ for asset_path, symbol, mime, _, gzip_encoded in assets:
     guard = asset_guard(asset_path)
     if guard:
         source_lines.append(guard)
-    route_path = re.sub(r"^__boards/\d+/", "", asset_path)
+    route_path = re.sub(r"^(?:__boards/\d+|__locales/[^/]+)/", "", asset_path)
     source_lines.append(
         f'    {{"/{route_path}", "{mime}", {symbol}, {symbol}_len, {str(gzip_encoded).lower()}}},'
     )

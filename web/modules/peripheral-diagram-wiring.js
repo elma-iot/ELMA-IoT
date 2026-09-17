@@ -100,7 +100,7 @@ function classifyWireColor(connection) {
   const board = signalKey(connection.boardLabel);
 
   if (isGroundSignal(signal) || board === "GND") {
-    return { stroke: "#111827", glow: "rgba(17, 24, 39, 0.18)", badge: "#111827", text: "#ffffff" };
+    return { stroke: "var(--diagram-ground-color, #111827)", glow: "var(--diagram-ground-glow, rgba(17, 24, 39, 0.18))", badge: "var(--diagram-ground-color, #111827)", text: "var(--diagram-ground-text, #ffffff)" };
   }
   if (board === "5V" || signal === "5V" || signal === "VIN" || signal === "VBUS" || signal.startsWith("5V ") || signal.startsWith("VIN ")) {
     return { stroke: "#dc2626", glow: "rgba(220, 38, 38, 0.18)", badge: "#dc2626", text: "#ffffff" };

@@ -149,6 +149,14 @@ String assetEtag(const EmbeddedWebAsset& asset) {
     tag += asset.path;
     tag += ':';
     tag += String(static_cast<unsigned>(asset.size));
+    // Firmware rebuilds can change CSS while retaining version and byte length.
+    // Include content so a browser cannot revalidate an obsolete stylesheet.
+    uint32_t contentHash = 2166136261u;
+    for (size_t i = 0; i < asset.size; ++i) {
+        contentHash = (contentHash ^ asset.data[i]) * 16777619u;
+    }
+    tag += ':';
+    tag += String(contentHash, HEX);
     tag += asset.gzip ? ":gz" : ":raw";
     tag += '"';
     return tag;
@@ -1089,6 +1097,12 @@ void WebServerManager::registerApiRoutes() {
         firmware["buildDate"] = APP_BUILD_DATE;
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
         firmware["chipFamily"] = "esp32s3";
+    #elif defined(CONFIG_IDF_TARGET_ESP32S2)
+        firmware["chipFamily"] = "esp32s2";
+    #elif defined(CONFIG_IDF_TARGET_ESP32C6)
+        firmware["chipFamily"] = "esp32c6";
+    #elif defined(CONFIG_IDF_TARGET_ESP32C2)
+        firmware["chipFamily"] = "esp32c2";
     #elif defined(CONFIG_IDF_TARGET_ESP32C3)
         firmware["chipFamily"] = "esp32c3";
     #elif defined(CONFIG_IDF_TARGET_ESP32)
@@ -1307,6 +1321,27 @@ void WebServerManager::registerApiRoutes() {
             memcpy(static_cast<uint8_t*>(request->_tempObject) + index, data, len);
         });
 
+    server_.on("/api/logics",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        if(!logicsGetter_){request->send(503,"application/json","{\"error\":\"Logics unavailable\"}");return;}
+        JsonDocument result;logicsGetter_(result,!request->hasParam("live"));sendJson(request,result);
+    });
+    auto* logicHandler=new AsyncCallbackJsonWebHandler("/api/logics",[this](AsyncWebServerRequest* request,JsonVariant& json){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        JsonDocument result;String error;
+        if(!logicsHandler_ || !logicsHandler_(json,result,error)){result["error"]=error.isEmpty()?"Logics unavailable":error;String body;serializeJson(result,body);request->send(400,"application/json",body);return;}
+        sendJson(request,result);
+    });logicHandler->setMaxContentLength(32768);logicHandler->setMethod(HTTP_POST);server_.addHandler(logicHandler);
+
+    auto* sourceHandler = new AsyncCallbackJsonWebHandler("/api/audio/source", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+        if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;
+        String error;
+        if (!audioSourceHandler_ || !audioSourceHandler_(json,error)) {
+            JsonDocument result;result["error"]=error.isEmpty()?"Audio source runtime unavailable":error;String body;serializeJson(result,body);request->send(400,"application/json",body);return;
+        }
+        request->send(202,"application/json","{\"queued\":true}");
+    });sourceHandler->setMaxContentLength(16384);sourceHandler->setMethod(HTTP_POST);server_.addHandler(sourceHandler);
+
     auto* playHandler = new AsyncCallbackJsonWebHandler(
         "/api/play",
         [this](AsyncWebServerRequest* request, JsonVariant& json) {
@@ -1317,9 +1352,9 @@ void WebServerManager::registerApiRoutes() {
                 request->send(400, "application/json", "{\"error\":\"invalid json\"}");
                 return;
             }
-            const String url = String(static_cast<const char*>(json["url"] | ""));
+            const String url = String(static_cast<const char*>(json["text"] | json["url"] | ""));
             const String label = String(static_cast<const char*>(json["label"] | ""));
-            const String type = String(static_cast<const char*>(json["type"] | "stream"));
+            const String type = String(static_cast<const char*>(json["type"] | (json["text"].isNull() ? "stream" : "tts-offline")));
             String message;
             if (!playHandler_(url, label, type, message)) {
                 request->send(400, "application/json", String("{\"error\":\"") + message + "\"}");
@@ -2175,7 +2210,7 @@ void WebServerManager::registerWebRoutes() {
         "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
         "<title>ELMA Legacy OTA</title><style>body{font:16px system-ui;max-width:680px;margin:40px auto;padding:20px}"
         "a{color:#b65f00}</style><h1>ELMA IoT</h1><p>This legacy-partition build keeps audio, MQTT, GPIO, display, "
-        "controls and OTA services. Use ELMA Flasher on the same LAN for configuration and firmware updates.</p>"
+        "controls and OTA services. Use ELMA IoT – ESP32 Toolkit on the same LAN for configuration and firmware updates.</p>"
         "<p><a href='/api/status'>Device status (JSON)</a></p>";
     auto serveLegacyPage = [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;

@@ -1,12 +1,14 @@
-import {defaultPeripheralPins} from "./modules/peripheral-pin-model.js";
-import {automaticPeripheralPositions} from './modules/diagram-routing-layout.js';
+import {createLogicsTab} from './modules/logic-editor.js';
+import {installFormControlIds} from './modules/form-control-ids.js';
 import {adcGpioPins, peripheralPinRequirement, safePeripheralPins, occupiedPinChoices} from "./modules/peripheral-pin-policy.js";
 import {diagramRect,canvasClientPoint,setupDiagramViewport,focusDiagramViewport} from './modules/diagram-viewport.js';
-import {freePeripheralPin,occupiedPeripheralPins} from "./modules/peripheral-gpio-defaults.js";
-import {createVoltageDividerControls,voltageDividerMaximum,resistorLabel,resistorBands} from './modules/voltage-divider.js';
 import { createAudioTab } from "./modules/audio-tab.js";
+import {createVoltageDividerControls,voltageDividerMaximum,resistorLabel,resistorBands} from './modules/voltage-divider.js';
 import { createLogsTab } from "./modules/logs-tab.js";
 import { boardChipFamily, chipPins, pinChoices } from "./modules/board-pin-policy.js";
+import { freePeripheralPin, occupiedPeripheralPins } from "./modules/peripheral-gpio-defaults.js";
+import { automaticPeripheralPositions } from './modules/diagram-routing-layout.js';
+import { isBoardGpio } from './modules/peripheral-pin-model.js';
 import { createBatteryTab } from "./modules/battery-tab.js";
 import { createConfigurationBackupModule } from "./modules/configuration-backup.js";
 import { createConfigurationGpioTab } from "./modules/configuration-gpio-tab.js";
@@ -35,6 +37,7 @@ import {
 } from "./modules/peripheral-diagram-label-editor.js";
 import { createPlaybackStatusModule } from "./modules/playback-status.js";
 import { createPeripheralDiagramWiringModule } from "./modules/peripheral-diagram-wiring.js";
+import { defaultPeripheralPins, normalizeBoardRails } from "./modules/peripheral-pin-model.js";
 import { createRadioBrowserModule } from "./modules/radio-browser.js";
 import { createStatusRenderModule } from "./modules/status-render.js";
 import { createStorageTab } from "./modules/storage-tab.js";
@@ -270,7 +273,7 @@ const PERIPHERAL_SENSOR_PROFILE_OPTIONS = [
   { value: "bno085-bno080", label: "BNO085 / BNO080" },
   { value: "mpu6050", label: "MPU6050" },
   { value: "ds18b20", label: "DS18B20" },
-  { value: "battery-voltage-divider-220k", label: "Battery Voltage Divider (2x 220kOhms)" },
+  { value: "battery-voltage-divider-220k", label: "Battery Voltage Divider" },
   { value: "custom", label: "Custom" },
 ];
 const BATTERY_DIVIDER_SENSOR_PROFILE = "battery-voltage-divider-220k";
@@ -414,13 +417,13 @@ const EFFECT_SELECT_CONFIG = [
 const STORAGE_PREVIEW_EMBEDDED_SCAN_MAX_BYTES = 256 * 1024;
 const GPIO_BOARD_PRESENTATION = {
   "esp32-s3-super-mini": {
-    rotation: "rotate(90deg)",
+    rotation: "rotate(-90deg)",
     rank: "Current board",
     recommendation: "Compact ESP32-S3 board. Good for speaker builds, but with tighter pin breakout than larger S3 boards.",
     tone: "featured",
   },
   "esp32-s3-zero": {
-    rotation: "rotate(90deg)",
+    rotation: "rotate(-90deg)",
     rank: "Compact S3 option",
     recommendation: "Very small ESP32-S3 board. Good when you need S3 features in a minimal footprint.",
     tone: "good",
@@ -456,7 +459,7 @@ const GPIO_BOARD_PRESENTATION = {
     tone: "good",
   },
   "esp32-wroom": {
-    rotation: "rotate(90deg)",
+    rotation: "rotate(-90deg)",
     rank: "3. Good",
     recommendation: "Good for speaker projects, but with less memory headroom than PSRAM-equipped boards.",
     tone: "good",
@@ -468,10 +471,16 @@ const GPIO_BOARD_PRESENTATION = {
     tone: "neutral",
   },
   "wemos-lolin32-mini": {
-    rotation: "rotate(90deg)",
+    rotation: "rotate(-90deg)",
     rank: "ESP32 compact variant",
     recommendation: "Wemos Lolin32 Mini layout with the board-specific narrow pinout and VP/VN analog inputs.",
     tone: "neutral",
+  },
+  "wemos-d1-mini-esp32": {
+    rotation: "none",
+    rank: "ESP32-WROOM compact board",
+    recommendation: "Wemos D1 Mini-format ESP32-WROOM board with onboard USB-to-UART and two rows of breakout pins on each side.",
+    tone: "good",
   },
   "esp32-s2-psram": {
     rotation: "none",
@@ -479,18 +488,35 @@ const GPIO_BOARD_PRESENTATION = {
     recommendation: "Acceptable for simpler audio use, but it is not as strong as S3 or WROVER boards for this project.",
     tone: "neutral",
   },
-  "esp32-c6": {
+  "esp32-s2-wemos-mini": {
     rotation: "none",
+    rank: "Compact ESP32-S2 board",
+    recommendation: "Wemos S2 Mini with native USB and the board-specific 32-pin breakout.",
+    tone: "neutral",
+  },
+  "esp32-c6": {
+    rotation: "rotate(180deg)",
     rank: "6. Works",
     recommendation: "Works, but it is not audio-focused. Choose it only if you specifically need the C6 platform.",
     tone: "neutral",
   },
+  "esp32-c2-esp8684": {
+    rotation: "none", rank: "Compact RISC-V option",
+    recommendation: "ESP8684-DevKitM-1 (ESP32-C2). Uses its onboard USB-to-UART bridge for programming.", tone: "neutral",
+  },
   "esp32-c3": {
-    rotation: "none",
+    rotation: "rotate(180deg)",
     rank: "7. Basic only",
     recommendation: "ESP32-C3 Super Mini layout. Usable for simple builds, but still the most limited option here for speaker-oriented use.",
     tone: "basic",
   },
+  "esp8266-esp01": { rotation: "rotate(90deg)", rank: "Legacy compact module", recommendation: "ESP-01 with only GPIO0 and GPIO2 exposed. Requires a 3.3 V UART programmer and has very limited flash/GPIO capacity.", tone: "basic" },
+  "esp8266-esp01s": { rotation: "rotate(90deg)", rank: "Legacy compact module", recommendation: "ESP-01S pin-compatible module. Requires a 3.3 V UART programmer and has very limited flash/GPIO capacity.", tone: "basic" },
+  "esp8266-wemos-d1-mini-lite": { rotation: "none", rank: "Compact ESP8266 board", recommendation: "Wemos D1 Mini Lite with onboard USB-to-UART and the familiar D1 Mini pin layout.", tone: "neutral" },
+  "esp8266-esp12e": { rotation: "rotate(-90deg)", rank: "Legacy ESP8266 module", recommendation: "ESP-12E family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.", tone: "basic" },
+  "esp8266-esp12f": { rotation: "rotate(-90deg)", rank: "Legacy ESP8266 module", recommendation: "ESP-12F family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.", tone: "basic" },
+  "esp8285-generic": { rotation: "rotate(90deg)", rank: "Legacy integrated-flash module", recommendation: "Generic ESP8285 family target. Confirm the module pinout and flash size before wiring.", tone: "basic" },
+  "custom-board": { rotation: "none", rank: "User-defined board", recommendation: "Select the installed ESP chip, expose only pins present on that chip, and edit the labels to match your board silkscreen.", tone: "neutral" },
 };
 const GPIO_BOARD_ASSETS = {
   "esp32-s3-super-mini": {
@@ -533,18 +559,28 @@ const GPIO_BOARD_ASSETS = {
     src: "/wemos-lolin32-mini-breadboard.svg",
     alt: "Wemos Lolin32 Mini board",
   },
+  "wemos-d1-mini-esp32": { src: "/wemos-d1-mini-esp32-breadboard.svg", alt: "Wemos D1 Mini ESP32 board" },
   "esp32-s2-psram": {
     src: "/esp32-s2-mini-breadboard.svg",
     alt: "ESP32-S2 with PSRAM board",
   },
+  "esp32-s2-wemos-mini": { src: "/wemos-s2-mini-breadboard.svg", alt: "Wemos S2 Mini board" },
   "esp32-c6": {
     src: "/esp32-c6-mini-breadboard.svg",
     alt: "ESP32-C6 board",
   },
+  "esp32-c2-esp8684": { src: "/esp32-c2-esp8684-breadboard.svg", alt: "ESP8684 DevKitM-1 board" },
   "esp32-c3": {
     src: "/esp32-c3-breadboard.svg",
     alt: "ESP32-C3 Super Mini board",
   },
+  "esp8266-esp01": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8266 ESP-01 module" },
+  "esp8266-esp01s": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8266 ESP-01S module" },
+  "esp8266-wemos-d1-mini-lite": { src: "/wemos-d1-mini-lite-breadboard.svg", alt: "Wemos D1 Mini Lite ESP8266 board" },
+  "esp8266-esp12e": { src: "/esp8266-esp12e-breadboard.svg", alt: "ESP8266 ESP-12E module" },
+  "esp8266-esp12f": { src: "/esp8266-esp12f-breadboard.svg", alt: "ESP8266 ESP-12F development board" },
+  "esp8285-generic": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8285 family module" },
+  "custom-board": { src: "/esp32-38pinwide-breadboard.svg", alt: "Generic custom ESP board" },
 };
 const OLED_PREVIEW_SCROLL_INTERVAL_MS = 300;
 const DEFAULT_ESP32S3_AUDIO_PINS = {
@@ -929,7 +965,7 @@ const GPIO_ROLE_OPTIONS = [
   "Builtin RGB",
   "Buzzer Reserved",
 ];
-const WS_STATUS_LED_BOARD_PROFILES = new Set(["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-devkit-c1"]);
+const WS_STATUS_LED_BOARD_PROFILES = new Set(["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-devkit-c1", "esp32-c3"]);
 
 const elements = {
   deviceTitle: document.getElementById("deviceTitle"),
@@ -1082,6 +1118,9 @@ const elements = {
   volumeSlider: document.getElementById("volumeSlider"),
   volumeValue: document.getElementById("volumeValue"),
   statusLedPin: document.getElementById("statusLedPin"),
+  statusLedType: document.getElementById("statusLedType"),
+  statusLedGreenPin: document.getElementById("statusLedGreenPin"),
+  statusLedBluePin: document.getElementById("statusLedBluePin"),
   audioMutedToggle: document.getElementById("audioMutedToggle"),
   lowBatterySleepToggle: document.getElementById("lowBatterySleepToggle"),
   powerCycleFactoryResetToggle: document.getElementById("powerCycleFactoryResetToggle"),
@@ -2345,6 +2384,15 @@ function peripheralHelperBindingValue(groupKey, index, signalLabel) {
 
 function helperBindingDisplayLabel(groupKey, signalLabel) {
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
+  if (groupKey === "sensor" && normalizedSignal === "SIGNAL") {
+    return "ADC Output";
+  }
+  if (groupKey === "communication" && normalizedSignal === "TX") {
+    return "TX → RX (ESP)";
+  }
+  if (groupKey === "communication" && normalizedSignal === "RX") {
+    return "RX ← TX (ESP)";
+  }
   if (groupKey === "input" && normalizedSignal === "SIG") {
     return "GPIO";
   }
@@ -2557,6 +2605,9 @@ function boardProfileChipFamily(boardProfile = activeGpioBoardProfile()) {
   if (!normalizedProfile) {
     return "esp32s3";
   }
+  if (normalizedProfile === "custom-board") {
+    return normalizeCustomBoard(state.settings?.ui?.customBoard).chipFamily;
+  }
   if (normalizedProfile === "esp32-spk-n16r8" || normalizedProfile.startsWith("esp32-s3")) {
     return "esp32s3";
   }
@@ -2566,8 +2617,17 @@ function boardProfileChipFamily(boardProfile = activeGpioBoardProfile()) {
   if (normalizedProfile === "esp32-c3") {
     return "esp32c3";
   }
+  if (normalizedProfile.startsWith("esp32-c2")) {
+    return "esp32c2";
+  }
   if (normalizedProfile === "esp32-c6") {
     return "esp32c6";
+  }
+  if (normalizedProfile.startsWith("esp8266")) {
+    return "esp8266";
+  }
+  if (normalizedProfile.startsWith("esp8285")) {
+    return "esp8285";
   }
   return "esp32";
 }
@@ -3162,8 +3222,8 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
   const helperSignalsForProfile = realDefinitions.length > 0 && ["audio", "display", "storage"].includes(groupKey)
     ? []
     : helperSignalLabels(groupKey, profileValue).filter((signalLabel) => !realDefinitions.some((definition) => definition.label.replace(/^OLED\s+/i, "").replace(/^I2S\s+/i, "") === signalLabel));
-
   assignPeripheralDefaults(groupKey,profileValue,index,realDefinitions,helperSignalsForProfile);
+
   container.hidden = realDefinitions.length === 0 && helperSignalsForProfile.length === 0;
   if (container.hidden) {
     return;
@@ -3385,6 +3445,8 @@ function syncPeripheralBindingGroups(options = {}) {
 }
 
 function loadPeripheralDiagramPositions() {
+  const saved=ensureUiSettings().peripheralDiagramPositions;
+  if(Object.keys(saved||{}).length)return saved;
   try {
     const local = normalizePeripheralDiagramPositions(
       window.localStorage.getItem(PERIPHERAL_DIAGRAM_POSITIONS_STORAGE_KEY) || "{}",
@@ -3530,7 +3592,7 @@ function buildEditableBoardLabels(boardProfile = activeGpioBoardProfile()) {
     return [];
   }
 
-  const primary = GPIO_BOARD_LAYOUTS[profileKey] || { left: [], right: [] };
+  const primary = normalizeBoardRails(profileKey, GPIO_BOARD_LAYOUTS[profileKey] || { left: [], right: [] });
   const extra = GPIO_BOARD_EXTRA_LAYOUTS[profileKey] || { left: [], right: [] };
   const labels = [];
 
@@ -3794,7 +3856,10 @@ function peripheralDiagramSlotStyle(groupKey, index) {
 
 function peripheralDiagramInlineStyle(node) {
   const savedPosition = state.peripheralDiagramPositions?.[node.id];
-  if (savedPosition && Number.isFinite(savedPosition.x) && Number.isFinite(savedPosition.y)) {
+  if (savedPosition
+      && !Number.isFinite(Number(savedPosition.centerXFactor))
+      && Number.isFinite(savedPosition.x)
+      && Number.isFinite(savedPosition.y)) {
     return `left:${savedPosition.x}px; top:${savedPosition.y}px; right:auto; bottom:auto; transform:none;`;
   }
   return node.style || "";
@@ -3923,7 +3988,7 @@ function applyResponsivePeripheralDiagramPositions() {
   const contacts=new Map();
   for(const side of ['left','right']){
     const pins=layout[side]||[];
-    pins.forEach((entry,index)=>{if(entry.pin!==null && entry.pin!==undefined && Number.isInteger(Number(entry.pin)) && Number(entry.pin)>=0)contacts.set(Number(entry.pin),{x:board.left+(side==='right'?board.width:0),y:board.top+board.height*(index+.5)/Math.max(1,pins.length)});});
+    pins.forEach((entry,index)=>{if(isBoardGpio(entry))contacts.set(Number(entry.pin),{x:board.left+(side==='right'?board.width:0),y:board.top+board.height*(index+.5)/Math.max(1,pins.length)});});
   }
   for(const element of nodes){
     const node=state.peripheralDiagramNodeMap?.[element.dataset.nodeId],saved=state.peripheralDiagramPositions?.[element.dataset.nodeId];
@@ -3946,7 +4011,6 @@ function applyResponsivePeripheralDiagramPositions() {
   state.peripheralAutoLayoutCache={key:layoutKey,positions};
   for(const element of nodes){const position=positions.get(element.dataset.nodeId);if(position)applyPeripheralDiagramNodePosition(element,position.x,position.y);}
 }
-
 
 function handlePeripheralDiagramPointerDown(event) {
   if (event.button !== 0 || !elements.peripheralDiagramStage) {
@@ -3986,6 +4050,10 @@ function handlePeripheralDiagramPointerDown(event) {
     ...currentState,
     x: nodeRect.left - stageRect.left,
     y: nodeRect.top - stageRect.top,
+    centerXFactor: ((nodeRect.left - stageRect.left) + (nodeRect.width / 2)) / Math.max(stageRect.width, 1),
+    centerYFactor: ((nodeRect.top - stageRect.top) + (nodeRect.height / 2)) / Math.max(stageRect.height, 1),
+    layoutVersion: 3,
+    worldCoordinates: true,
   };
   if (typeof nodeElement.setPointerCapture === "function") {
     nodeElement.setPointerCapture(event.pointerId);
@@ -4344,6 +4412,23 @@ function setupPeripheralDiagramInteractions() {
   document.addEventListener("pointermove", handlePeripheralDiagramPointerMove);
   document.addEventListener("pointerup", handlePeripheralDiagramPointerUp);
   document.addEventListener("pointercancel", handlePeripheralDiagramPointerUp);
+
+  let resizeFrame = 0;
+  const handleDiagramResize = () => {
+    window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(() => {
+      applyResponsivePeripheralDiagramPositions();
+      renderPeripheralDiagramWiring();
+    });
+  };
+  window.addEventListener("resize", handleDiagramResize, { passive: true });
+  window.addEventListener("orientationchange", handleDiagramResize, { passive: true });
+  window.addEventListener("elma-window-metrics-changed", handleDiagramResize);
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(handleDiagramResize);
+    observer.observe(elements.peripheralDiagramStage);
+    state.peripheralDiagramResizeObserver = observer;
+  }
 }
 
 function renderPeripheralDiagram() {
@@ -4593,6 +4678,7 @@ function renderPeripheralDiagramNow() {
 
   state.peripheralDiagramNodeMap = Object.fromEntries(nodes.map((node) => [node.id, node]));
   elements.peripheralDiagramItems.innerHTML = nodes.map((node) => peripheralDiagramNodeMarkup(node)).join("");
+  applyResponsivePeripheralDiagramPositions();
   if (elements.peripheralDiagramBoardEdit) {
     const boardNode = peripheralDiagramBoardEditorNode();
     elements.peripheralDiagramBoardEdit.hidden = !boardNode;
@@ -4603,7 +4689,6 @@ function renderPeripheralDiagramNow() {
     elements.peripheralDiagramPlaceholderText.hidden = nodes.length > 0;
   }
   updateConfiguredFeatureVisibility();
-  applyResponsivePeripheralDiagramPositions();
   renderPeripheralDiagramWiring(nodes);
 }
 
@@ -4727,7 +4812,10 @@ function populateAudioI2sPinOptions(settings = state.settings) {
 }
 
 function validBoardPins(output = false) {
-  return chipPins(activeChipFamily(), output, activeGpioBoardProfile());
+  const pins=chipPins(activeChipFamily(), output, activeGpioBoardProfile());
+  if(activeGpioBoardProfile()!=="custom-board")return pins;
+  const enabled=new Set(normalizeCustomBoard(state.settings?.ui?.customBoard).pins.map(entry=>entry.pin));
+  return pins.filter(pin=>enabled.has(pin));
 }
 
 function fillBoardPinSelect(field, selected, output = true, blocked = new Set(), disabledValue = null) {
@@ -4742,14 +4830,14 @@ function fillBoardPinSelect(field, selected, output = true, blocked = new Set(),
   field.value = String(selected ?? disabledValue ?? "");
 }
 
-function boardPinAssignmentIssues() {
+function boardPinAssignmentIssues(settings = state.settings) {
   const inputs = new Set(validBoardPins(false));
   const outputs = new Set(validBoardPins(true));
   const issues = [];
-  for (const [pin, roles] of gpioRoleMap(state.settings, state.status)) {
+  for (const [pin, roles] of gpioRoleMap(settings, state.status)) {
     if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} — invalid or reserved on the selected board`);
   }
-  const roleState = gpioConfigRoleState(state.settings);
+  const roleState = gpioConfigRoleState(settings);
   for (const definition of roleState.definitions) {
     const pin = roleState.roleToPin.get(definition.key);
     const input = definition.key.startsWith("battery.") || definition.key.startsWith("ui.input.") || definition.key === "sd.misoPin";
@@ -4766,8 +4854,8 @@ function renderBoardPinWarnings() {
   panel.textContent = "";
 }
 
-function validateBoardPinAssignments() {
-  const issues = boardPinAssignmentIssues();
+function validateBoardPinAssignments(settings = currentSettingsSnapshot()) {
+  const issues = boardPinAssignmentIssues(settings);
   if (issues.length) throw new Error(issues.join("; "));
 }
 
@@ -4895,6 +4983,30 @@ function populateStatusLedPinOptions(settings = state.settings) {
     reservedPins.add(pin);
   }
   fillBoardPinSelect(elements.statusLedPin, selectedPin, true, reservedPins);
+  const fallbackPins = activeChipFamily() === "esp32c3" ? [7, 6] : [23, 21];
+  fillBoardPinSelect(elements.statusLedGreenPin, String(elements.statusLedGreenPin?.value || settings?.device?.statusLedGreenPin || fallbackPins[0]), true, reservedPins);
+  fillBoardPinSelect(elements.statusLedBluePin, String(elements.statusLedBluePin?.value || settings?.device?.statusLedBluePin || fallbackPins[1]), true, reservedPins);
+  syncStatusLedTypeFields();
+}
+
+function syncStatusLedTypeFields(preferBoardDefaults = false) {
+  const rgb = String(elements.statusLedType?.value || "regular").toLowerCase() === "rgb";
+  for (const field of document.querySelectorAll(".status-led-rgb-field")) {
+    field.hidden = !rgb;
+  }
+  if (!rgb) return;
+  const fallbackPins = activeChipFamily() === "esp32c3" ? [7, 6] : [23, 21];
+  const red = Number(elements.statusLedPin?.value);
+  let green = Number(elements.statusLedGreenPin?.value);
+  let blue = Number(elements.statusLedBluePin?.value);
+  if (preferBoardDefaults || !Number.isFinite(green) || green === red) {
+    green = fallbackPins.find((pin) => pin !== red) ?? fallbackPins[0];
+    elements.statusLedGreenPin.value = String(green);
+  }
+  if (preferBoardDefaults || !Number.isFinite(blue) || blue === red || blue === green) {
+    blue = fallbackPins.find((pin) => pin !== red && pin !== green) ?? (activeChipFamily() === "esp32c3" ? 5 : 19);
+    elements.statusLedBluePin.value = String(blue);
+  }
 }
 
 function chipMaxPin() {
@@ -5104,10 +5216,14 @@ function updateTouchLivePolling() {
 }
 
 function refreshVisiblePeripheralDiagram() {
-  if(state.peripheralRefreshFrame)return;
-  state.peripheralRefreshFrame=requestAnimationFrame(()=>{
-    state.peripheralRefreshFrame=0;renderPeripheralDiagram();updateTouchLivePolling();
-  });
+  renderPeripheralDiagram();
+  updateTouchLivePolling();
+  window.setTimeout(() => {
+    if (activeTabName() === "gpio") {
+      renderPeripheralDiagram();
+      updateTouchLivePolling();
+    }
+  }, 0);
 }
 
 async function refreshExternalStorageTab(directoryPath = state.currentStoragePathByTarget.sd || "/", options = {}) {
@@ -7859,6 +7975,10 @@ function gpioRoleMap(settings = state.settings, status = state.status) {
     addRole(battery.chargingSensePin, "Charge Sense");
   }
   addRole(currentGpioRoleNumericValue(elements.statusLedPin, device.statusLedPin), statusLedRoleLabel(settings, status));
+  if(String(document.querySelector('[name="device.statusLedType"]')?.value||device.statusLedType||"").toLowerCase()==="rgb"){
+    addRole(currentGpioRoleNumericValue(elements.statusLedGreenPin, device.statusLedGreenPin), "Status LED green");
+    addRole(currentGpioRoleNumericValue(elements.statusLedBluePin, device.statusLedBluePin), "Status LED blue");
+  }
 
   if (displayType === "wape") {
     const wapeTriggerPin = currentGpioRoleNumericValue(elements.wapeTriggerPin, oled.wapeTriggerPin);
@@ -7956,6 +8076,10 @@ function gpioConfigRoleDefinitions(settings = state.settings) {
   const definitions = [
     { key: "device.statusLedPin", label: statusLedRoleLabel(settings), element: elements.statusLedPin, isAssigned: (value) => Number.isFinite(value) },
   ];
+  if(String(document.querySelector('[name="device.statusLedType"]')?.value||settings?.device?.statusLedType||"").toLowerCase()==="rgb")definitions.push(
+    {key:"device.statusLedGreenPin",label:"Status LED green",element:elements.statusLedGreenPin,isAssigned:value=>Number.isFinite(value)},
+    {key:"device.statusLedBluePin",label:"Status LED blue",element:elements.statusLedBluePin,isAssigned:value=>Number.isFinite(value)}
+  );
 
   if (batteryDividerSensorSelected()) {
     definitions.unshift({ key: "battery.adcPin", label: "Battery ADC", element: elements.batteryAdcPin, unusedValue: 0, isAssigned: (value) => Number.isFinite(value) && value > 0 });
@@ -8663,14 +8787,46 @@ function normalizePeripheralHelperBindings(value) {
   return isPlainObject(value) ? (cloneSettingsObject(value) || {}) : {};
 }
 
+function normalizeCustomBoard(value = {}) {
+  const source=isPlainObject(value)?value:{};
+  const families=new Set(["esp32","esp32s2","esp32s3","esp32c2","esp32c3","esp32c6","esp8266","esp8285"]);
+  const requested=String(source.chipFamily||"").toLowerCase();
+  const chipFamily=families.has(requested)?requested:"esp32";
+  const allowed=chipPins(chipFamily,false,"custom-board");
+  const hasSavedPins=Array.isArray(source.pins);
+  const supplied=hasSavedPins?source.pins:[];
+  const allowedSet=new Set(allowed),seen=new Set();
+  const sourcePins=hasSavedPins?supplied:allowed.map(pin=>({pin,label:`GPIO${pin}`}));
+  const pins=[];
+  for(const entry of sourcePins){
+    const pin=Number(entry?.pin);
+    if(!allowedSet.has(pin)||seen.has(pin))continue;
+    seen.add(pin);
+    pins.push({pin,label:String(entry?.label||`GPIO${pin}`).trim().slice(0,32)||`GPIO${pin}`});
+  }
+  return {chipFamily,pins};
+}
+
+function syncCustomBoardLayout(value = state.settings?.ui?.customBoard) {
+  const custom=normalizeCustomBoard(value),middle=Math.ceil(custom.pins.length/2);
+  GPIO_BOARD_LAYOUTS["custom-board"]={left:custom.pins.slice(0,middle),right:custom.pins.slice(middle)};
+  try{localStorage.setItem("elma.custom.board",JSON.stringify(custom));}catch{}
+  return custom;
+}
+
 function normalizeUiSettings(uiSettings = {}) {
   const source = isPlainObject(uiSettings) ? uiSettings : {};
   return {
+    language: String(source.language || "en").toLowerCase(),
+    theme: ["automatic", "light", "dark"].includes(String(source.theme || "automatic").toLowerCase())
+      ? String(source.theme || "automatic").toLowerCase()
+      : "automatic",
     gpioSafetyOverride: Boolean(source.gpioSafetyOverride),
     gpioBoardAutodetect: Object.prototype.hasOwnProperty.call(source, "gpioBoardAutodetect")
       ? Boolean(source.gpioBoardAutodetect)
       : true,
     gpioBoardSelection: String(source.gpioBoardSelection || ""),
+    customBoard: syncCustomBoardLayout(source.customBoard),
     peripheralDiagramPositions: normalizePeripheralDiagramPositions(
       source.peripheralDiagramPositions ?? source.peripheralDiagramLayout,
     ),
@@ -8704,49 +8860,27 @@ function syncPeripheralProfilesFromSettings(settings = state.settings) {
   if (isPeripheralUiInteracting()) {
     return;
   }
-  state.peripheralAudioProfiles = normalizedPeripheralAudioProfiles();
-  state.peripheralAudioInProfiles = normalizedPeripheralAudioInProfiles();
-  state.peripheralDisplayProfiles = normalizedPeripheralDisplayProfiles();
+  // fillForm has just made the saved peripheral profile document authoritative.
+  // Reading the still-rendered selectors here restored their old DOM values and
+  // silently replaced saved sensors and every other profile with "none".
   if (elements.peripheralAudioProfile && document.activeElement !== elements.peripheralAudioProfile) {
-    const inferredAudioProfile = String(state.peripheralAudioProfiles[0] || elements.peripheralAudioProfile.value || "none").trim() || "none";
+    const inferredAudioProfile = String(state.peripheralAudioProfiles?.[0] || "none").trim() || "none";
     if ([...elements.peripheralAudioProfile.options].some((option) => option.value === inferredAudioProfile)) {
       elements.peripheralAudioProfile.value = inferredAudioProfile;
     }
   }
-  state.peripheralAudioProfiles[0] = String(elements.peripheralAudioProfile?.value || state.peripheralAudioProfiles[0] || "none");
   renderPeripheralAudioOutputControls();
-  state.peripheralAudioInProfiles[0] = String(elements.peripheralAudioInProfile?.value || state.peripheralAudioInProfiles[0] || "none");
+  if (elements.peripheralAudioInProfile && document.activeElement !== elements.peripheralAudioInProfile) {
+    const value=String(state.peripheralAudioInProfiles?.[0]||"none");if([...elements.peripheralAudioInProfile.options].some(option=>option.value===value))elements.peripheralAudioInProfile.value=value;
+  }
   renderPeripheralAudioInControls();
   if (elements.peripheralDisplayProfile && document.activeElement !== elements.peripheralDisplayProfile) {
-    const inferredDisplayProfile = String(state.peripheralDisplayProfiles[0] || elements.peripheralDisplayProfile.value || "none").trim() || "none";
+    const inferredDisplayProfile = String(state.peripheralDisplayProfiles?.[0] || "none").trim() || "none";
     if ([...elements.peripheralDisplayProfile.options].some((option) => option.value === inferredDisplayProfile)) {
       elements.peripheralDisplayProfile.value = inferredDisplayProfile;
     }
   }
-  state.peripheralDisplayProfiles[0] = String(elements.peripheralDisplayProfile?.value || state.peripheralDisplayProfiles[0] || "none");
   renderPeripheralDisplayControls();
-
-  const currentStorageProfiles = normalizedPeripheralStorageProfiles();
-  const nextPrimaryStorageProfile = String(currentStorageProfiles[0] || "none").trim() || "none";
-  state.peripheralStorageProfiles = [nextPrimaryStorageProfile, ...currentStorageProfiles.slice(1)];
-  state.peripheralPowerProfiles = normalizedPeripheralPowerProfiles();
-
-  const currentSensorProfiles = (Array.isArray(state.peripheralSensorProfiles) && state.peripheralSensorProfiles.length
-    ? state.peripheralSensorProfiles
-    : ["none"])
-    .map((value) => String(value || "none").trim() || "none");
-  const nextSensorProfiles = currentSensorProfiles.length ? [...currentSensorProfiles] : ["none"];
-  const batterySensorIndex = nextSensorProfiles.findIndex((profile) => profile.toLowerCase() === BATTERY_DIVIDER_SENSOR_PROFILE);
-  if (Number(settings?.battery?.adcPin || 0) > 0) {
-    if (batterySensorIndex < 0) {
-      const availableIndex = nextSensorProfiles.findIndex((profile) => profile.toLowerCase() === "none");
-      nextSensorProfiles[availableIndex >= 0 ? availableIndex : 0] = BATTERY_DIVIDER_SENSOR_PROFILE;
-    }
-  } else if (batterySensorIndex >= 0) {
-    nextSensorProfiles[batterySensorIndex] = "none";
-  }
-  state.peripheralSensorProfiles = nextSensorProfiles;
-
   renderPeripheralStorageControls();
   renderPeripheralPowerControls();
 }
@@ -8837,6 +8971,10 @@ function parseConfigurationBackup(text) {
 }
 
 function validateSettingsPayload(submittedSettings) {
+  if (submittedSettings.device?.statusLedType === "rgb") {
+    const pins=[submittedSettings.device.statusLedPin,submittedSettings.device.statusLedGreenPin,submittedSettings.device.statusLedBluePin].map(Number);
+    if(pins.some(pin=>!Number.isFinite(pin))||new Set(pins).size!==3)throw new Error("RGB status LED red, green and blue must use three different valid GPIOs.");
+  }
   if (submittedSettings.oled?.enabled !== false && oledPinsConflictInternally(submittedSettings)) {
     throw new Error("OLED SDA, SCL, and RESET must use different GPIOs.");
   }
@@ -9015,18 +9153,15 @@ function setupTabs() {
 }
 
 function setupPasswordToggles() {
-  for (const button of document.querySelectorAll(".password-toggle")) {
-    button.addEventListener("click", () => {
-      const field = elements.settingsForm.elements.namedItem(button.dataset.targetName);
-      if (!field) {
-        return;
-      }
-      const reveal = field.type === "password";
-      field.type = reveal ? "text" : "password";
-      button.classList.toggle("revealed", reveal);
-    });
+  for (const field of document.querySelectorAll('input[type="password"]')) {
+    if (field.closest('.password-field')) continue;
+    if (!field.id) field.id=`elmaPassword${Math.random().toString(36).slice(2)}`;
+    const wrapper=document.createElement('div');wrapper.className='password-field';field.replaceWith(wrapper);wrapper.append(field);
+    const button=document.createElement('button');button.type='button';button.className='password-toggle';button.dataset.targetId=field.id;button.setAttribute('aria-label','Show password');button.innerHTML='<span class="eye-icon" aria-hidden="true"></span>';wrapper.append(button);
   }
+  if(!setupPasswordToggles.bound){document.addEventListener('click',event=>{const button=event.target.closest?.('.password-toggle');if(!button)return;const field=button.dataset.targetId?document.getElementById(button.dataset.targetId):elements.settingsForm.elements.namedItem(button.dataset.targetName);if(!field)return;const reveal=field.type==='password';field.type=reveal?'text':'password';button.classList.toggle('revealed',reveal);button.setAttribute('aria-label',reveal?'Hide password':'Show password');});setupPasswordToggles.bound=true;}
 }
+window.elmaEnhancePasswordFields=setupPasswordToggles;
 
 async function loadStatus() {
   if (state.storageUploadInProgress || state.statusRequestInFlight) {
@@ -9444,6 +9579,7 @@ for (const field of [elements.oledSdaPin, elements.oledSclPin, elements.oledRese
     state.settingsDirty = true;
   });
 }
+elements.statusLedType?.addEventListener("change", () => syncStatusLedTypeFields(true));
 elements.useStaticIpToggle.addEventListener("change", updateConditionalVisibility);
 
 for (const field of elements.settingsForm.elements) {
@@ -9468,7 +9604,7 @@ for (const field of elements.settingsForm.elements) {
     continue;
   }
 
-  if (field.name === "device.statusLedPin") {
+  if (field.name === "device.statusLedPin" || field.name === "device.statusLedGreenPin" || field.name === "device.statusLedBluePin") {
     field.addEventListener("change", () => {
       populateSdPinOptions();
       populateOledPinOptions();
@@ -9563,6 +9699,7 @@ function handleError(error) {
   toast(`Error: ${error.message}`);
 }
 
+installFormControlIds();
 resetTransientOverlays();
 const desktopFlashView = new URLSearchParams(window.location.search).get("elmaView") === "flash";
 if (desktopFlashView) {
@@ -9599,7 +9736,7 @@ loadRadioCountries().catch(handleError);
 
 uiHistoryModule.captureSnapshot({ replace: true });
 
-Promise.allSettled([loadStatus(), loadSettings()])
+window.elmaDesignerReady = Promise.allSettled([loadStatus(), loadSettings()])
   .then((results) => {
     for (const result of results) {
       if (result.status === "rejected") {
@@ -9612,11 +9749,32 @@ Promise.allSettled([loadStatus(), loadSettings()])
       restoreSavedActiveTabIfVisible();
     }
     uiHistoryModule?.captureSnapshot({ replace: true });
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{window.__elmaInterfaceReady=true;}));
   });
 localBuilder.initialize().catch(handleError);
-window.elmaSaveDesignerSettings = () => saveSettings({ silent: true });
+window.elmaSaveDesignerSettings = () => { validateBoardPinAssignments(); return saveSettings({ silent: true }); };
 window.elmaCollectDesignerSettings = () => JSON.stringify(collectForm());
+window.elmaDesignerSnapshot = currentSettingsSnapshot;
+window.elmaValidateDesignerPins = validateBoardPinAssignments;
+window.elmaChipPins = chip => chipPins(String(chip||"esp32").toLowerCase(),false,"custom-board");
+window.elmaCustomBoardDefinition = () => normalizeCustomBoard(state.settings?.ui?.customBoard);
+window.elmaSetCustomBoard = value => {
+  const custom=syncCustomBoardLayout(value);
+  state.settings||={};
+  state.settings.ui=normalizeUiSettings({...state.settings.ui,customBoard:custom,gpioBoardAutodetect:false,gpioBoardSelection:"custom-board"});
+  if(elements.gpioBoardAutodetect)elements.gpioBoardAutodetect.checked=false;
+  if(elements.gpioBoardSelector)elements.gpioBoardSelector.value="custom-board";
+  populateAudioI2sPinOptions(state.settings);populateSdPinOptions(state.settings);populateStatusLedPinOptions(state.settings);populateOledPinOptions(state.settings);populateBatteryAdcPinOptions(state.settings);
+  updateGpioBoardImage();
+  return cloneSettingsObject(custom);
+};
+window.addEventListener("elma-firmware-preferences-changed", event => {
+  if (!state.settings) return;
+  state.settings.ui = normalizeUiSettings({
+    ...state.settings.ui,
+    language: event.detail?.language || state.settings.ui?.language,
+    theme: event.detail?.theme || state.settings.ui?.theme,
+  });
+});
 window.elmaBeginFlashSync = () => {
   if (!desktopFlashView) return;
   elements.localBuilderCompileFlash.disabled = true;
@@ -9632,3 +9790,5 @@ window.elmaRefreshFlashSettings = async () => {
   }
 };
 startStatusPolling();
+
+createLogicsTab();

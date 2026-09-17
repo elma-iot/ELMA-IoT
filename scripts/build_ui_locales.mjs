@@ -1,0 +1,32 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root=path.resolve(process.argv[2]||'.'),out=path.resolve(process.argv[3]||path.join(root,'web'));
+const {locales}=await import(pathToFileURL(path.join(root,'web/i18n/locales/index.js')));
+function runtime(locale) {
+  const selected=locale.code;
+  const messages=selected==='en'?{}:locale.messages;
+  return `(function(){
+if(window.__elmaFirmwareI18nStarted)return;window.__elmaFirmwareI18nStarted=true;
+const SELECTED=${JSON.stringify(selected)},NAME=${JSON.stringify(locale.nativeName)},RTL=${Boolean(locale.rtl)},MESSAGES=${JSON.stringify(messages)};
+const originals=new WeakMap(),attributes=new WeakMap(),networkFetch=window.fetch.bind(window);let current='en',observer,settings={};
+const t=value=>current===SELECTED?(MESSAGES[value]||value):value;
+const fragments=Object.keys(MESSAGES).filter(key=>key.length>=12&&!/^https?:/i.test(key)).sort((a,b)=>b.length-a.length);
+function translated(value){const match=String(value).match(/^(\\s*)(.*?)(\\s*)$/s),core=match?match[2]:String(value);let result=t(core);if(result===core&&current===SELECTED)for(const key of fragments){const replacement=MESSAGES[key];if(replacement&&replacement!==key&&result.includes(key))result=result.split(key).join(replacement);}return (match?match[1]:'')+result+(match?match[3]:'');}
+function apply(root=document,refresh=false){if(!root||root.nodeType!==1&&root.nodeType!==9)return;const nodes=[];if(root.nodeType===1)nodes.push(root);root.querySelectorAll?.('*').forEach(node=>nodes.push(node));for(const element of nodes){if(element.matches?.('script,style,pre,code,textarea,[contenteditable="true"]'))continue;for(const child of element.childNodes)if(child.nodeType===Node.TEXT_NODE&&child.nodeValue.trim()){if(!originals.has(child))originals.set(child,child.nodeValue);else if(refresh&&child.nodeValue!==originals.get(child)&&child.nodeValue!==translated(originals.get(child)))originals.set(child,child.nodeValue);const nextText=translated(originals.get(child));if(child.nodeValue!==nextText)child.nodeValue=nextText;}for(const name of ['title','aria-label','placeholder','data-tooltip','alt'])if(element.hasAttribute?.(name)){let saved=attributes.get(element)||{};const value=element.getAttribute(name);if(!(name in saved)||refresh&&value!==saved[name]&&value!==translated(saved[name])){saved={...saved,[name]:value};attributes.set(element,saved);}const nextAttribute=translated(saved[name]);if(element.getAttribute(name)!==nextAttribute)element.setAttribute(name,nextAttribute);}}}
+function language(value){current=value===SELECTED?SELECTED:'en';document.documentElement.lang=current;document.documentElement.dir=current===SELECTED&&RTL?'rtl':'ltr';apply();const select=document.getElementById('headerLanguageSelect');if(select)select.value=current;}
+function theme(value){const mode=['light','dark'].includes(value)?value:'automatic';if(mode==='automatic')document.documentElement.removeAttribute('data-elma-theme');else document.documentElement.dataset.elmaTheme=mode;const select=document.getElementById('headerThemeSelect');if(select)select.value=mode;}
+window.fetch=async function(input,options={}){const url=new URL(typeof input==='string'?input:input.url,location.href),method=String(options.method||'GET').toUpperCase();if(url.origin===location.origin&&url.pathname==='/api/settings'&&method==='POST'&&options.body){try{const body=JSON.parse(options.body);body.ui||={};body.ui.language=settings.ui?.language||SELECTED;body.ui.theme=settings.ui?.theme||'automatic';options={...options,body:JSON.stringify(body)};}catch{}}return networkFetch(input,options);};
+async function save(key,value){settings.ui||={};settings.ui[key]=value;const response=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ui:settings.ui})});if(!response.ok)throw new Error('Unable to save interface preferences');window.dispatchEvent(new CustomEvent('elma-firmware-preferences-changed',{detail:{language:settings.ui.language,theme:settings.ui.theme}}));}
+async function init(){const languageSelect=document.getElementById('headerLanguageSelect'),themeSelect=document.getElementById('headerThemeSelect');if(languageSelect){languageSelect.replaceChildren(new Option('English','en'));if(SELECTED!=='en')languageSelect.append(new Option(NAME,SELECTED));}try{const response=await fetch('/api/settings');if(response.ok)settings=await response.json();}catch{}const configured=settings.ui?.language;language(configured==='en'||configured===SELECTED?configured:SELECTED);theme(settings.ui?.theme||'automatic');languageSelect?.addEventListener('change',async event=>{language(event.target.value);try{await save('language',current);}catch(error){console.error(error);}});themeSelect?.addEventListener('change',async event=>{const value=event.target.value;theme(value);try{await save('theme',value);}catch(error){console.error(error);}});const options={childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','placeholder','data-tooltip','alt'],subtree:true};observer=new MutationObserver(records=>{observer.disconnect();for(const record of records){if(record.type==='characterData')apply(record.target.parentElement,true);else if(record.type==='attributes')apply(record.target,true);else for(const node of record.addedNodes)apply(node.nodeType===1?node:node.parentElement,true);}observer.observe(document.documentElement,options);});observer.observe(document.documentElement,options);window.ElmaFirmwareI18n={get language(){return current},setLanguage:language,setTheme:theme,selectedLanguage:SELECTED};}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();`;
+}
+
+const code=process.env.ELMA_COMPILED_LANGUAGE||'en';
+const selected=locales.find(locale=>locale.code===code);
+if(!selected)throw new Error('Unsupported firmware language: '+code);
+fs.mkdirSync(out,{recursive:true});
+fs.writeFileSync(path.join(out,'firmware-i18n.js'),runtime(selected).replace('(function(){',"(function(){if(new URLSearchParams(location.search).get('elmaRuntime')==='pc-designer')return;"));
+fs.writeFileSync(path.join(out,'desktop-locales.json'),JSON.stringify(locales.map(({code,nativeName,messages})=>({code,nativeName,messages}))));
+console.log('Firmware languages: English + '+code);

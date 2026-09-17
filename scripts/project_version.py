@@ -44,11 +44,22 @@ def validate(project_dir: Path, expected_tag: str = "", validate_release_metadat
     if not validate_release_metadata:
         return version
 
-    flasher_source = (project_dir / "tools" / "elma_flasher" / "elma_flasher.py").read_text(encoding="utf-8")
+    flasher_path = project_dir / "tools" / "elma_flasher" / "elma_flasher.py"
+    if not flasher_path.is_file():
+        flasher_path = project_dir.parent / "Windows" / "elma_flasher.py"
+    flasher_source = flasher_path.read_text(encoding="utf-8")
     flasher_match = FLASHER_VERSION_PATTERN.search(flasher_source)
     if not flasher_match or flasher_match.group(1) != version:
         errors.append("ELMA Flasher APP_VERSION is missing or does not match firmware APP_VERSION")
 
+    desktop_version=version
+    metadata=project_dir.parent/"Windows"/"app_metadata.py"
+    if metadata.is_file():
+        text=metadata.read_text(encoding="utf-8")
+        desktop=FLASHER_VERSION_PATTERN.search(text)
+        payload=re.search(r'^FIRMWARE_VERSION = "(\d+\.\d+\.\d+)"$',text,re.MULTILINE)
+        if desktop:desktop_version=desktop.group(1)
+        if not payload or payload.group(1)!=version:errors.append("Windows bundled firmware version does not match firmware source")
     readme = (project_dir / "README.md").read_text(encoding="utf-8")
     required_readme_lines = (
         f"- Firmware version: `{tag}`",
@@ -69,7 +80,7 @@ def validate(project_dir: Path, expected_tag: str = "", validate_release_metadat
             asset = f"{prefix}-{tag}.bin"
             if asset not in notes:
                 errors.append(f"release notes do not list {asset}")
-        flasher_asset = f"ELMA-Flasher-{tag}.exe"
+        flasher_asset = f"ELMA-Flasher-v{desktop_version}.exe"
         if flasher_asset not in notes:
             errors.append(f"release notes do not list {flasher_asset}")
 

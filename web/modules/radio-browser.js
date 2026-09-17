@@ -1,3 +1,4 @@
+import {installCountrySearch} from './country-search.js';
 export function createRadioBrowserModule({
   state,
   elements,
@@ -71,6 +72,7 @@ export function createRadioBrowserModule({
       return;
     }
 
+    installCountrySearch(elements.radioCountrySelect);
     const savedSelection = preferredRadioSelection();
     const previousValue = elements.radioCountrySelect.value || savedSelection.country;
     elements.radioCountrySelect.innerHTML = "";
@@ -83,7 +85,11 @@ export function createRadioBrowserModule({
     countries.forEach((country) => {
       const option = document.createElement("option");
       option.value = country.name;
-      option.textContent = `${country.name} (${country.stationCount})`;
+      option.dataset.countryCode=country.code||"";
+      option.dataset.stationCount=String(country.stationCount);
+      let label=country.name;
+      try { if(country.code) label=new Intl.DisplayNames([document.documentElement.lang||"en"],{type:"region"}).of(country.code)||label; } catch {}
+      option.textContent = `${label} (${country.stationCount})`;
       elements.radioCountrySelect.appendChild(option);
     });
 
@@ -141,6 +147,7 @@ export function createRadioBrowserModule({
         .map((country) => ({
           name: String(country.name || "").trim(),
           stationCount: Number(country.stationcount || 0),
+          code: String(country.iso_3166_1 || country.iso3166_1 || "").toUpperCase(),
         }))
         .filter((country) => country.name)
         .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));

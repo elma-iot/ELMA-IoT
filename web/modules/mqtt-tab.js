@@ -52,7 +52,7 @@ export function createMqttTab({
 
     const mqttConnected = Boolean(state.status?.network?.mqttConnected);
     const discoveryEnabled = Boolean(namedField("mqtt.discoveryEnabled")?.checked ?? state.settings?.mqtt?.discoveryEnabled);
-    elements.mqttConnectButton.textContent = mqttConnected ? "Disconnect MQTT" : "Connect MQTT";
+    elements.mqttConnectButton.textContent = mqttConnected ? "Disconnect MQTT" : (document.body.classList.contains("android-designer") ? "Test Connection" : "Connect MQTT");
     elements.mqttConnectButton.classList.toggle("secondary", !mqttConnected);
 
     if (elements.mqttRediscoveryButton) {
@@ -148,6 +148,9 @@ export function createMqttTab({
         setMqttConnectStatus("MQTT settings saved. Waiting for broker connection.");
         setMessage("MQTT settings saved. Waiting for broker connection.");
       }
+    } catch (error) {
+      setMqttConnectStatus(`Connection failed: ${error?.message || error}`, true);
+      throw error;
     } finally {
       state.mqttConnectInProgress = false;
       state.mqttActionInProgress = "";

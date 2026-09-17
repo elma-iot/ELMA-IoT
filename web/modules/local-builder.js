@@ -42,16 +42,16 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     set("pcBuildRam", ramUsed
       ? `${formatBytes(ramUsed)} linked static use · ${(ramUsed / ramTotal * 100).toFixed(1)}% of ${formatBytes(ramTotal)}`
       : "Estimated during compile; confirmed from linker report");
-    set("pcBuildFile", build.firmwareFile || "Generated binary will be saved beside ELMA Flasher");
+    set("pcBuildFile", build.firmwareFile || "Generated binary will be saved beside ELMA IoT – ESP32 Toolkit");
   }
 
   function adaptInterfaceForPc(version = "") {
-    document.title = "ELMA Flasher — Device Designer";
+    document.title = "ELMA IoT – ESP32 Toolkit — Device Designer";
     document.querySelector(".hero-actions")?.setAttribute("hidden", "");
     const title = document.getElementById("deviceTitle");
     if (title) title.textContent = "ELMA Device Designer";
     const firmwareLabel = document.querySelector(".hero-firmware-label");
-    if (firmwareLabel) firmwareLabel.textContent = "ELMA Flasher";
+    if (firmwareLabel) firmwareLabel.textContent = "ELMA IoT – ESP32 Toolkit";
 
     const hideTab = (name) => {
       document.querySelector(`.tab-button[data-tab="${name}"]`)?.setAttribute("hidden", "");
@@ -88,12 +88,12 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     if (hardware) {
       hardware.innerHTML = `
         <h2>Build Memory Estimate</h2>
-        <p class="note">Values are estimates until compilation finishes. ELMA Flasher then replaces them with the exact application binary size and the compiler linker's static RAM report.</p>
+        <p class="note">Values are estimates until compilation finishes. ELMA IoT – ESP32 Toolkit then replaces them with the exact application binary size and the compiler linker's static RAM report.</p>
         <div class="status-list">
           <div class="status-item"><span>Build profile</span><strong id="pcBuildProfile">Resolved after USB chip detection</strong></div>
           <div class="status-item"><span>Application flash</span><strong id="pcBuildFlash">Estimated during compile</strong></div>
           <div class="status-item"><span>Static RAM</span><strong id="pcBuildRam">Estimated during compile</strong></div>
-          <div class="status-item"><span>Saved binary</span><strong id="pcBuildFile">Generated beside ELMA Flasher</strong></div>
+          <div class="status-item"><span>Saved binary</span><strong id="pcBuildFile">Generated beside ELMA IoT – ESP32 Toolkit</strong></div>
         </div>
         <p class="note">Runtime heap and stack peaks depend on the configured peripherals and traffic; confirm those after flashing from the real device's Hardware Monitor.</p>`;
       renderBuildEstimate();
@@ -105,9 +105,9 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     const info = document.getElementById("tab-info");
     if (info) {
       info.innerHTML = `
-        <h2>About ELMA Flasher</h2>
+        <h2>About ELMA IoT – ESP32 Toolkit</h2>
         <div class="status-list">
-          <div class="status-item"><span>Application</span><strong>ELMA Flasher ${version ? `v${version}` : ""}</strong></div>
+          <div class="status-item"><span>Application</span><strong>ELMA IoT – ESP32 Toolkit ${version ? `v${version}` : ""}</strong></div>
           <div class="status-item"><span>Purpose</span><strong>Design, compile, provision and flash ELMA ESP devices from a PC</strong></div>
           <div class="status-item"><span>Supported targets</span><strong>ESP32, ESP32-S3 and ESP32-C3</strong></div>
           <div class="status-item"><span>Identity safety</span><strong>Device and MQTT identity are regenerated from the target hardware ID</strong></div>
@@ -267,6 +267,13 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
           ? `Device flashed at ${state.ipAddress}. Firmware saved as ${state.firmwareFile || "a standard release binary"}.`
           : `Device compiled, flashed and configured successfully. Firmware saved as ${state.firmwareFile || "a standard release binary"}.`);
         toast("Compile and flash complete");
+        if (state.ipAddress && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(state.ipAddress)) {
+          const address = document.createElement("a");
+          address.href = `http://${state.ipAddress}/`;
+          address.textContent = `Open device: ${state.ipAddress}`;
+          address.style.display = "block";
+          elements.localBuilderLog.parentElement.append(address);
+        }
         return;
       }
       if (state.state === "failed" || state.state === "cancelled") {
@@ -302,7 +309,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
         }),
       });
       if (!networkTarget.chip) {
-        window.alert("ELMA Flasher identified this device, but could not verify its ESP chip family. IP flashing has been stopped to prevent installing firmware for the wrong chip. Connect it by USB once or use firmware that reports its exact ESP family.");
+        window.alert("ELMA IoT – ESP32 Toolkit identified this device, but could not verify its ESP chip family. IP flashing has been stopped to prevent installing firmware for the wrong chip. Connect it by USB once or use firmware that reports its exact ESP family.");
         return;
       }
       const selectedChip = elements.localBuilderChip.value;
@@ -373,8 +380,11 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
   }
 
   async function initialize() {
+    const runtime = new URLSearchParams(window.location.search).get("elmaRuntime");
+    if (runtime !== "pc-designer" && !["localhost", "127.0.0.1", "::1", "[::1]"].includes(window.location.hostname)) return;
+    let status;
     try {
-      const status = await api("/api/builder/status");
+      status = await api("/api/builder/status");
       active = Boolean(status.active);
     } catch {
       return;

@@ -1,0 +1,15 @@
+{
+  "sha256": null,
+  "darkThemeContrast": true,
+  "automaticDarkContrast": true,
+  "lightModePreserved": true,
+  "firmwareBuildPassed": true,
+  "androidReleaseBuild": true,
+  "androidUnitTests": true,
+  "androidLint": true,
+  "apkSignedV2V3": true,
+  "portableNativeStartup": true,
+  "embeddedStylesVerified": true,
+  "physicalAndroidTested": false,
+  "deviceFlashed": false
+}

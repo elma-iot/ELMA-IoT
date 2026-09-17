@@ -202,6 +202,7 @@ void WiFiManager::startAccessPoint() {
     apShutdownPending_ = false;
     apShutdownAt_ = 0;
     DebugLog.printf("[wifi] AP started ssid='%s' ip=%s\n", apSsid_.c_str(), WiFi.softAPIP().toString().c_str());
+    DebugLog.printf("[elma-network] mode=AP ssid='%s' ip=%s\n", apSsid_.c_str(), WiFi.softAPIP().toString().c_str());
     updateAppState();
 }
 
@@ -232,6 +233,7 @@ void WiFiManager::loop() {
                 DebugLog.printf("[wifi] connected after %u failed attempt(s)\n", static_cast<unsigned>(consecutiveFailureCount_));
             }
             DebugLog.printf("[wifi] station connected ssid='%s' ip=%s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            DebugLog.printf("[elma-network] mode=STA ssid='%s' ip=%s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
             if (apMode_) {
                 apShutdownPending_ = true;
                 apShutdownAt_ = millis() + WIFI_AP_HANDOFF_TIMEOUT_MS;

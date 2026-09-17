@@ -7,6 +7,9 @@
   <link rel="icon" type="image/svg+xml" href="/elma_iot_logo.svg">
   <link rel="apple-touch-icon" href="/elma_iot_apple_only.svg">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/logic-editor.css">
+  <script defer src="/firmware-i18n.js"></script>
+<script type="module" src="/desktop-preferences.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -17,6 +20,16 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.7 2.8h2.6l.5 2.1c.5.2 1 .5 1.5.9l2-.8 1.9 1.9-.8 2c.4.5.7 1 .9 1.5l2.1.5v2.6l-2.1.5c-.2.5-.5 1-.9 1.5l.8 2-1.9 1.9-2-.8c-.5.4-1 .7-1.5.9l-.5 2.1h-2.6l-.5-2.1c-.5-.2-1-.5-1.5-.9l-2 .8-1.9-1.9.8-2c-.4-.5-.7-1-.9-1.5l-2.1-.5v-2.6l2.1-.5c.2-.5.5-1 .9-1.5l-.8-2 1.9-1.9 2 .8c.5-.4 1-.7 1.5-.9l.5-2.1zm1.3 5.1a4.1 4.1 0 1 0 0 8.2 4.1 4.1 0 0 0 0-8.2z"></path></svg>
           </button>
           <div id="headerActionsMenu" class="hero-actions-menu" aria-hidden="true" data-open="false">
+            <div class="hero-actions-preferences">
+              <label for="headerLanguageSelect">Language</label>
+              <select id="headerLanguageSelect" aria-label="Language"></select>
+              <label for="headerThemeSelect">Theme</label>
+              <select id="headerThemeSelect" aria-label="Theme">
+                <option value="automatic">Automatic</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
             <button id="headerRefreshButton" type="button" class="secondary hero-actions-menu-button" title="Refresh frontend" aria-label="Refresh frontend">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path></svg>
               <span>Refresh</span>
@@ -95,6 +108,7 @@
           <button class="tab-button tab-button-icon tab-gpio" type="button" role="tab" aria-label="Configuration" data-tooltip="Configuration" title="Configuration" aria-selected="true" aria-controls="tab-gpio" data-tab="gpio">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h4v4H6z"></path><path d="M14 6h4v4h-4z"></path><path d="M6 14h4v4H6z"></path><path d="M14 14h4v4h-4z"></path><path d="M10 8h4"></path><path d="M8 10v4"></path><path d="M16 10v4"></path><path d="M10 16h4"></path></svg>
           </button>
+          <button class="tab-button tab-button-icon tab-logics" type="button" role="tab" aria-label="Logics" data-tooltip="Logics" title="Logics" aria-selected="false" aria-controls="tab-logics" data-tab="logics"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="7" height="6" rx="1"></rect><rect x="15" y="15" width="7" height="6" rx="1"></rect><path d="M9 6h9v9M5 9v9h10"></path></svg></button>
           <button id="motorTabButton" class="tab-button tab-button-icon tab-motor" type="button" role="tab" aria-label="Motor" data-tooltip="Motor" title="Motor" aria-selected="false" aria-controls="tab-motor" data-tab="motor" hidden>
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="8" height="8" rx="2"></rect><rect x="13" y="8" width="8" height="8" rx="2"></rect><path d="M11 12h2"></path><path d="M6 8V5"></path><path d="M18 8V5"></path><path d="M6 19v-3"></path><path d="M18 19v-3"></path></svg>
           </button>
@@ -142,6 +156,13 @@
           </button>
         </div>
 
+        <div id="tab-logics" class="tab-panel" role="tabpanel">
+          <div class="logic-palette-bar"><input id="logicPaletteSearch" data-logic-search type="search" placeholder="Search logic / active peripherals" aria-label="Search Logics"><div class="logic-palette" data-logic-palette></div></div>
+          <details class="logic-inspector"><summary>Properties</summary><div class="logic-properties" data-logic-properties></div></details>
+          <div class="logic-status-line"><span data-logic-status role="status">Select Logics to load the device graph.</span><span data-logic-dirty class="logic-state-note"></span></div>
+          <div class="logic-viewport" data-logic-canvas aria-label="Logic canvas"></div>
+          <p class="logic-state-note">Right-click to add nodes, group, save &amp; apply, fit, or undo. Use each automation frame to Play, Pause or Stop. Ctrl+S saves; Ctrl+Z undoes.</p>
+        </div>
         <div id="tab-logs" class="tab-panel" role="tabpanel" aria-label="Logs">
           <div class="device-log-heading"><h2>Logs</h2><button id="deviceLogCopy" type="button" class="secondary">Copy</button></div>
           <p id="deviceLogStatus" role="status">Open this tab to load device logs.</p>
@@ -543,10 +564,17 @@
                 <input form="settingsForm" name="device.savedVolumePercent" type="number" min="0" max="100">
               </label>
               <label>Status LED type
-                <select form="settingsForm" name="device.statusLedType">
+                <select id="statusLedType" form="settingsForm" name="device.statusLedType">
                   <option value="regular">Regular LED</option>
+                  <option value="rgb">RGB LED (3 GPIOs)</option>
                   <option value="neopixel">RGB NeoPixel / WS2812</option>
                 </select>
+              </label>
+              <label class="status-led-rgb-field">RGB green GPIO
+                <select id="statusLedGreenPin" form="settingsForm" name="device.statusLedGreenPin"></select>
+              </label>
+              <label class="status-led-rgb-field">RGB blue GPIO
+                <select id="statusLedBluePin" form="settingsForm" name="device.statusLedBluePin"></select>
               </label>
             </div>
             <div class="row gpio-remap-source">
@@ -774,9 +802,19 @@
                   <option value="esp32-wroom">Classic ESP32-WROOM</option>
                   <option value="esp32-mini">ESP32 Mini</option>
                   <option value="wemos-lolin32-mini">Wemos Lolin32 Mini</option>
+                  <option value="wemos-d1-mini-esp32">Wemos D1 Mini ESP32 (ESP32-WROOM)</option>
                   <option value="esp32-s2-psram">ESP32-S2 with PSRAM</option>
+                  <option value="esp32-s2-wemos-mini">Wemos S2 Mini (ESP32-S2)</option>
                   <option value="esp32-c6">ESP32-C6</option>
+                  <option value="esp32-c2-esp8684">ESP32-C2 / ESP8684 DevKitM-1</option>
                   <option value="esp32-c3">ESP32-C3 Super Mini</option>
+                  <option value="esp8266-esp01">ESP8266 ESP-01</option>
+                  <option value="esp8266-esp01s">ESP8266 ESP-01S</option>
+                  <option value="esp8266-wemos-d1-mini-lite">Wemos D1 Mini Lite (ESP8266)</option>
+                  <option value="esp8266-esp12e">ESP8266 ESP-12E</option>
+                  <option value="esp8266-esp12f">ESP8266 ESP-12F</option>
+                  <option value="esp8285-generic">ESP8285 family module</option>
+                  <option value="custom-board">Custom board…</option>
                 </select>
                 <label class="gpio-controls-autodetect" title="Automatically choose a compatible board from the detected target chip">
                   <input id="gpioBoardAutodetect" type="checkbox" checked aria-label="Autodetect board profile">

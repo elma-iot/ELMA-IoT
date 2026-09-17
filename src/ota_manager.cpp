@@ -3,10 +3,12 @@
 
 #include <HTTPClient.h>
 #include <Update.h>
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <esp_app_format.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/sha256.h>
+#include <mbedtls/version.h>
 
 #include "github_release_client.h"
 #include "version.h"
@@ -123,6 +125,9 @@ String chipFamilyDisplayName(const String& chipFamily) {
     if (normalized == "esp32c3") {
         return "ESP32-C3";
     }
+    if (normalized == "esp32c2") return "ESP32-C2 / ESP8684";
+    if (normalized == "esp32c6") return "ESP32-C6";
+    if (normalized == "esp32s2") return "ESP32-S2";
     if (normalized == "esp32s3") {
         return "ESP32-S3";
     }
@@ -134,12 +139,18 @@ String chipFamilyDisplayName(const String& chipFamily) {
 
 String chipFamilyFromChipId(esp_chip_id_t chipId) {
     switch (chipId) {
-        case ESP_CHIP_ID_ESP32:
+        case static_cast<esp_chip_id_t>(0):
             return "esp32";
-        case ESP_CHIP_ID_ESP32C3:
+        case static_cast<esp_chip_id_t>(2):
+            return "esp32s2";
+        case static_cast<esp_chip_id_t>(5):
             return "esp32c3";
-        case ESP_CHIP_ID_ESP32S3:
+        case static_cast<esp_chip_id_t>(9):
             return "esp32s3";
+        case static_cast<esp_chip_id_t>(12):
+            return "esp32c2";
+        case static_cast<esp_chip_id_t>(13):
+            return "esp32c6";
         default:
             return "";
     }
@@ -150,6 +161,9 @@ String chipFamilyForAssetName(const String& assetName) {
     if (lowered.indexOf("esp32c3") >= 0) {
         return "esp32c3";
     }
+    if (lowered.indexOf("esp32c2") >= 0 || lowered.indexOf("esp8684") >= 0) return "esp32c2";
+    if (lowered.indexOf("esp32c6") >= 0) return "esp32c6";
+    if (lowered.indexOf("esp32s2") >= 0) return "esp32s2";
     if (lowered.indexOf("esp32s3") >= 0) {
         return "esp32s3";
     }
@@ -162,6 +176,12 @@ String chipFamilyForAssetName(const String& assetName) {
 String currentChipFamily() {
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
     return "esp32c3";
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+    return "esp32c2";
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+    return "esp32c6";
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+    return "esp32s2";
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
     return "esp32s3";
 #elif defined(CONFIG_IDF_TARGET_ESP32)
@@ -1528,9 +1548,13 @@ bool OtaManager::installNow(const CheckResult& result, String& message) {
 
     mbedtls_sha256_context sha;
     mbedtls_sha256_init(&sha);
+#if MBEDTLS_VERSION_MAJOR >= 3
+    mbedtls_sha256_starts(&sha, 0);
+#else
     mbedtls_sha256_starts_ret(&sha, 0);
+#endif
 
-    WiFiClient* stream = http.getStreamPtr();
+    auto* stream = http.getStreamPtr();
     uint8_t buffer[1024];
     uint8_t imageHeader[sizeof(esp_image_header_t)] = {0};
     size_t imageHeaderBytes = 0;
@@ -1603,7 +1627,11 @@ bool OtaManager::installNow(const CheckResult& result, String& message) {
         }
         lastProgressAt = millis();
         resumeAttempts = 0;
+#if MBEDTLS_VERSION_MAJOR >= 3
+        mbedtls_sha256_update(&sha, buffer, read);
+#else
         mbedtls_sha256_update_ret(&sha, buffer, read);
+#endif
 
         size_t offset = 0;
         if (!imageHeaderValidated) {
@@ -1664,7 +1692,11 @@ bool OtaManager::installNow(const CheckResult& result, String& message) {
     pumpProgressCallback();
 
     uint8_t digest[32];
+#if MBEDTLS_VERSION_MAJOR >= 3
+    mbedtls_sha256_finish(&sha, digest);
+#else
     mbedtls_sha256_finish_ret(&sha, digest);
+#endif
     mbedtls_sha256_free(&sha);
     String actualHash;
     for (uint8_t byte : digest) {

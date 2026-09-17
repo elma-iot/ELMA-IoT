@@ -1,0 +1,28 @@
+// Exercise production persistence with memory-backed FS/NVS, including failed writes.
+#include <ArduinoJson.h>
+#include <string>
+#include <map>
+#include <cstring>
+#include <cassert>
+#include <iostream>
+using String=std::string;
+enum class StorageTarget{Flash,Sd};
+namespace fs {struct FS{std::map<std::string,std::string> files;bool failRename=false;bool rename(const char* a,const char* b){if(failRename||files.count(b))return false;files[b]=files[a];files.erase(a);return true;}void remove(const char* path){files.erase(path);}};}
+fs::FS flash,sd;bool flashMounted=false,sdMounted=false,nvsWrite=true;
+struct File{std::string* data=nullptr;size_t at=0;explicit operator bool()const{return data;}size_t write(uint8_t byte){data->push_back(char(byte));return 1;}size_t write(const uint8_t* bytes,size_t count){data->append(reinterpret_cast<const char*>(bytes),count);return count;}int read(){return data&&at<data->size()?uint8_t((*data)[at++]):-1;}size_t readBytes(char* out,size_t count){size_t n=0;while(n<count){int c=read();if(c<0)break;out[n++]=char(c);}return n;}void flush(){}void close(){}};
+bool storageMounted(StorageTarget target){return target==StorageTarget::Flash?flashMounted:sdMounted;}
+fs::FS* getStorageFs(StorageTarget target){return storageMounted(target)?target==StorageTarget::Flash?&flash:&sd:nullptr;}
+File storageOpen(StorageTarget target,const char* path,const char* mode="r"){auto fs=getStorageFs(target);if(!fs||(*mode=='w'&&fs->failRename))return {};if(*mode=='w')fs->files[path].clear();auto item=fs->files.find(path);return item==fs->files.end()?File{}:File{&item->second};}
+void beginStorageRead(StorageTarget){}void endStorageRead(StorageTarget){}void beginStorageWrite(StorageTarget){}void endStorageWrite(StorageTarget){}
+struct Preferences{static std::string blob;static uint32_t revision;static size_t capacity;uint32_t getUInt(const char*,uint32_t fallback){return revision?revision:fallback;}size_t putUInt(const char*,uint32_t value){if(!nvsWrite)return 0;revision=value;return 4;}bool begin(const char*,bool){return true;}void end(){}size_t getBytesLength(const char*){return blob.size();}size_t getBytes(const char*,void* out,size_t n){std::memcpy(out,blob.data(),n);return n;}size_t putBytes(const char*,const void* data,size_t n){if(!nvsWrite||n>capacity)return 0;blob.assign(static_cast<const char*>(data),n);return n;}};std::string Preferences::blob;uint32_t Preferences::revision=0;size_t Preferences::capacity=40000;
+#define ELMA_LOGIC_STORAGE_HOST
+#include "../src/logic_storage.cpp"
+int main(){
+ {JsonDocument bulky,loaded;String error;bulky["source"]=99;bulky["mode"]="playing";bulky["graph"]["devices"]=std::string(10000,'x');auto n=bulky["graph"]["nodes"].to<JsonArray>().add<JsonObject>();n["id"]="number";n["type"]="value.number";n["parameters"]["value"]=60;n["position"]["x"]=123;n["ports"]=std::string(10000,'x');n["binding"]=std::string(10000,'x');Preferences::capacity=4096;assert(measureJson(bulky)>20000);assert(saveLogicRecord(bulky.as<JsonVariantConst>(),error));assert(Preferences::blob.size()<4096);assert(loadLogicRecord(loaded));assert(loaded["graph"]["nodes"][0]["parameters"]["value"]==60);assert(loaded["graph"]["nodes"][0]["position"]["x"]==123);assert(loaded["graph"]["devices"].isNull());assert(loaded["graph"]["nodes"][0]["ports"].isNull());Preferences::blob.clear();Preferences::revision=0;Preferences::capacity=40000;latestRevision=0;}
+ JsonDocument record,restored;String error;record["source"]=99;record["mode"]="playing";record["graph"]["threshold"]=50;
+ sdMounted=true;sd.files["/.elma-logics.json"]="{\"revision\":0,\"source\":99,\"graph\":{\"threshold\":40}}";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==50);assert(sd.files.count("/.elma-logics.1.json"));assert(Preferences::blob.empty());
+ record["graph"]["threshold"]=60;record["mode"]="stopped";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60&&restored["mode"]=="stopped");
+ sdMounted=false;record["graph"]["large"]=std::string(6500,'x');record["mode"]="paused";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));sdMounted=true;assert(loadLogicRecord(restored));assert(restored["mode"]=="paused");assert(restored["graph"]["large"].as<std::string>().size()==6500);
+ sd.failRename=true;nvsWrite=false;record["graph"]["threshold"]=70;assert(!saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60);assert(!error.empty());
+ std::cout<<"PASS: SD without LittleFS, NVS multi-page blob, latest revision restoration, failed-write previous graph retained\n";
+}

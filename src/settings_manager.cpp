@@ -1,4 +1,5 @@
 #include "settings_manager.h"
+#include "generated_project_defaults.h"
 
 #include <ctype.h>
 #include <math.h>
@@ -11,6 +12,12 @@
 namespace {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 constexpr auto kPinChip = GpioPinPolicy::Chip::S3;
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+constexpr auto kPinChip = GpioPinPolicy::Chip::S2;
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+constexpr auto kPinChip = GpioPinPolicy::Chip::C6;
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+constexpr auto kPinChip = GpioPinPolicy::Chip::C2;
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
 constexpr auto kPinChip = GpioPinPolicy::Chip::C3;
 #else
@@ -27,7 +34,6 @@ bool safeOutputPin(int pin) {
 constexpr char PREF_NAMESPACE[] = "notifier";
 constexpr char PREF_MARKER[] = "saved";
 constexpr float kLegacyEsp32BatteryCalibration = 3.866f;
-constexpr uint8_t kDocumentedBuzzerPin = 7;
 
 void normalizeEqualizer(AudioSettings& audio) {
     audio.equalizerPreset.trim();
@@ -99,6 +105,10 @@ bool isValidStatusLedPin(uint8_t pin) {
     return safeOutputPin(pin);
 }
 
+bool statusLedUsesPin(const DeviceSettings& device, int pin) {
+    return device.statusLedPin == pin || (device.statusLedType == "rgb" && (device.statusLedGreenPin == pin || device.statusLedBluePin == pin));
+}
+
 bool isValidWapeTriggerPin(uint8_t pin) {
     if (pin == 0) {
         return true;
@@ -164,10 +174,35 @@ bool chargingSensePinConflicts(const BatterySettings& battery, const AudioSettin
         return false;
     }
     return battery.chargingSensePin == battery.adcPin || audioUsesPin(audio, battery.chargingSensePin) ||
-           battery.chargingSensePin == device.statusLedPin || sdUsesPin(sd, battery.chargingSensePin);
+           statusLedUsesPin(device, battery.chargingSensePin) || sdUsesPin(sd, battery.chargingSensePin);
 }
 
-bool oledPinConflicts(const OledSettings& oled, const AudioSettings& audio, const BatterySettings& battery, const DeviceSettings& device, const SdSettings& sd) {
+bool configuredInputControlUsesPin(const UiSettings& ui, int pin) {
+    JsonDocument bindings;
+    JsonDocument profiles;
+    if (deserializeJson(bindings, ui.peripheralHelperBindings) ||
+        deserializeJson(profiles, ui.peripheralProfileSelections)) return false;
+    for (JsonPair entry : bindings.as<JsonObject>()) {
+        const String slot = entry.key().c_str();
+        const bool input = slot.startsWith("input:");
+        if (!input && !slot.startsWith("control:")) continue;
+        const int index = slot.substring(slot.indexOf(':') + 1).toInt();
+        const String profile = profiles[input ? "inputs" : "controls"][index] | "none";
+        if (profile == "none") continue;
+        for (JsonPair binding : entry.value().as<JsonObject>()) {
+            const String signal = binding.key().c_str();
+            if (signal == "MAIN_CONTROL" || signal == "SENSITIVITY" ||
+                signal == "CONTACT" || signal == "SOURCE") continue;
+            const String value = binding.value().as<String>();
+            bool numeric = value.length() > 0;
+            for (size_t i = 0; i < value.length(); ++i) numeric &= isDigit(value[i]);
+            if (numeric && value.toInt() == pin) return true;
+        }
+    }
+    return false;
+}
+
+bool oledPinConflicts(const OledSettings& oled, const AudioSettings& audio, const BatterySettings& battery, const DeviceSettings& device, const SdSettings& sd, const UiSettings& ui) {
     String displayType = oled.displayType;
     displayType.trim();
     displayType.toLowerCase();
@@ -182,8 +217,7 @@ bool oledPinConflicts(const OledSettings& oled, const AudioSettings& audio, cons
 
                 return audioUsesPin(audio, pin) ||
                pin == battery.adcPin || pin == battery.chargingSensePin ||
-               pin == device.statusLedPin || pin == DefaultConfig::BUTTON1_PIN ||
-             pin == DefaultConfig::BUTTON2_PIN || pin == kDocumentedBuzzerPin ||
+               statusLedUsesPin(device, pin) || configuredInputControlUsesPin(ui, pin) ||
              sdUsesPin(sd, pin);
     };
 
@@ -203,7 +237,7 @@ bool wapeTriggerPinConflicts(const OledSettings& oled, const AudioSettings& audi
         return false;
     }
     return audioUsesPin(audio, oled.wapeTriggerPin) ||
-           oled.wapeTriggerPin == battery.adcPin || oled.wapeTriggerPin == device.statusLedPin || sdUsesPin(sd, oled.wapeTriggerPin)
+           oled.wapeTriggerPin == battery.adcPin || statusLedUsesPin(device, oled.wapeTriggerPin) || sdUsesPin(sd, oled.wapeTriggerPin)
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
            || oled.wapeTriggerPin == 21
 #endif
@@ -216,7 +250,8 @@ bool sdPinConflictsWithRequiredFunctions(const SdSettings& sd, const AudioSettin
     }
 
     return audioUsesPin(audio, sd.csPin) || audioUsesPin(audio, sd.sckPin) || audioUsesPin(audio, sd.mosiPin) || audioUsesPin(audio, sd.misoPin) ||
-        sdUsesPin(sd, battery.adcPin) || sdUsesPin(sd, battery.chargingSensePin) || sdUsesPin(sd, device.statusLedPin);
+        sdUsesPin(sd, battery.adcPin) || sdUsesPin(sd, battery.chargingSensePin) || sdUsesPin(sd, device.statusLedPin) ||
+        (device.statusLedType == "rgb" && (sdUsesPin(sd, device.statusLedGreenPin) || sdUsesPin(sd, device.statusLedBluePin)));
 }
 
 String normalizeDisplayType(String value) {
@@ -605,6 +640,8 @@ SettingsBundle SettingsManager::defaults() const {
     settings.device.deviceName = uniqueDeviceName;
     settings.device.friendlyName = uniqueFriendlyName;
     settings.device.statusLedPin = DefaultConfig::STATUS_LED_PIN;
+    settings.device.statusLedGreenPin = DefaultConfig::STATUS_LED_PIN;
+    settings.device.statusLedBluePin = DefaultConfig::STATUS_LED_PIN;
     settings.device.statusLedType = DefaultConfig::STATUS_LED_TYPE;
     settings.device.savedVolumePercent = DefaultConfig::DEFAULT_VOLUME_PERCENT;
     settings.device.audioMuted = DefaultConfig::DEFAULT_AUDIO_MUTED;
@@ -617,12 +654,16 @@ SettingsBundle SettingsManager::defaults() const {
     settings.device.lowBatteryWakeIntervalMinutes = DefaultConfig::LOW_BATTERY_WAKE_INTERVAL_MINUTES;
     settings.ui.gpioSafetyOverride = false;
     settings.ui.gpioBoardAutodetect = true;
+    settings.ui.language = APP_COMPILED_LANGUAGE_CODE;
+    settings.ui.theme = APP_COMPILED_THEME_CODE;
     settings.ui.gpioBoardSelection = "";
     settings.ui.peripheralDiagramLayout = "{}";
     settings.ui.peripheralHelperBindings = defaultPeripheralHelperBindings();
     settings.ui.peripheralProfileSelections = defaultPeripheralProfileSelections();
     settings.ui.motorRuntimeConfig = defaultMotorRuntimeConfig();
     settings.usingSavedSettings = false;
+    JsonDocument compiled;String error;
+    if (deserializeJson(compiled,ELMA_COMPILED_PROJECT_DEFAULTS)==DeserializationError::Ok && compiled.is<JsonObject>()) updateFromJson(settings,compiled.as<JsonVariantConst>(),error);
     return settings;
 }
 
@@ -648,6 +689,17 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     settings.ota.manifestUrl.trim();
     settings.webAuth.username.trim();
     settings.ui.gpioBoardSelection.trim();
+    settings.ui.language.trim();
+    settings.ui.language.toLowerCase();
+    settings.ui.theme.trim();
+    settings.ui.theme.toLowerCase();
+    const String supportedLanguages = "|en|es|zh|hi|ar|pt|bn|ru|ja|de|fr|ko|tr|it|id|pl|uk|vi|th|fa|";
+    if (settings.ui.language.isEmpty() || supportedLanguages.indexOf("|" + settings.ui.language + "|") < 0) {
+        settings.ui.language = "en";
+    }
+    if (settings.ui.theme != "automatic" && settings.ui.theme != "light" && settings.ui.theme != "dark") {
+        settings.ui.theme = "automatic";
+    }
     settings.audio.lastPlayback.url.trim();
     settings.audio.lastPlayback.label.trim();
     settings.audio.lastPlayback.type.trim();
@@ -698,9 +750,12 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     if (!isValidStatusLedPin(settings.device.statusLedPin)) {
         settings.device.statusLedPin = DefaultConfig::STATUS_LED_PIN;
     }
-    if (settings.device.statusLedType != "regular" && settings.device.statusLedType != "neopixel") {
+    if (settings.device.statusLedType != "regular" && settings.device.statusLedType != "rgb" && settings.device.statusLedType != "neopixel") {
         settings.device.statusLedType = DefaultConfig::STATUS_LED_TYPE;
     }
+    if (!isValidStatusLedPin(settings.device.statusLedGreenPin)) settings.device.statusLedGreenPin = DefaultConfig::STATUS_LED_PIN;
+    if (!isValidStatusLedPin(settings.device.statusLedBluePin)) settings.device.statusLedBluePin = DefaultConfig::STATUS_LED_PIN;
+    if (settings.device.statusLedType == "rgb" && (settings.device.statusLedPin == settings.device.statusLedGreenPin || settings.device.statusLedPin == settings.device.statusLedBluePin || settings.device.statusLedGreenPin == settings.device.statusLedBluePin)) settings.device.statusLedType = "regular";
     settings.device.button1Action = normalizeButtonAction(settings.device.button1Action, DefaultConfig::BUTTON1_DEFAULT_ACTION);
     settings.device.button2Action = normalizeButtonAction(settings.device.button2Action, DefaultConfig::BUTTON2_DEFAULT_ACTION);
     settings.effects.startupFile = normalizeEffectFileRef(settings.effects.startupFile);
@@ -771,8 +826,9 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     if (sdPinConflictsWithRequiredFunctions(settings.sd, settings.audio, settings.battery, settings.device)) {
         settings.sd.enabled = false;
     }
-    if (sdUsesPin(settings.sd, settings.device.statusLedPin)) {
+    if (sdUsesPin(settings.sd, settings.device.statusLedPin) || (settings.device.statusLedType == "rgb" && (sdUsesPin(settings.sd, settings.device.statusLedGreenPin) || sdUsesPin(settings.sd, settings.device.statusLedBluePin)))) {
         settings.device.statusLedPin = DefaultConfig::STATUS_LED_PIN;
+        settings.device.statusLedType = DefaultConfig::STATUS_LED_TYPE;
     }
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
     if (approximatelyEqual(settings.battery.calibrationMultiplier, kLegacyEsp32BatteryCalibration)) {
@@ -795,7 +851,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     settings.oled.dimTimeoutSeconds = clampValue<uint16_t>(settings.oled.dimTimeoutSeconds, static_cast<uint16_t>(0), static_cast<uint16_t>(3600));
     if (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
         (settings.oled.resetPin >= 0 && !safeOutputPin(settings.oled.resetPin)) ||
-        oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd)) {
+        oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd, settings.ui)) {
         settings.oled.enabled = false;
         settings.oled.sdaPin = DefaultConfig::OLED_SDA_PIN;
         settings.oled.sclPin = DefaultConfig::OLED_SCL_PIN;
@@ -926,6 +982,8 @@ SettingsBundle SettingsManager::load() {
     settings.device.deviceName = readString("dev_name", settings.device.deviceName);
     settings.device.friendlyName = readString("dev_friendly", settings.device.friendlyName);
     settings.device.statusLedPin = readUInt("dev_led", settings.device.statusLedPin);
+    settings.device.statusLedGreenPin = readUInt("dev_led_g", settings.device.statusLedGreenPin);
+    settings.device.statusLedBluePin = readUInt("dev_led_b", settings.device.statusLedBluePin);
     settings.device.statusLedType = readString("dev_led_type", settings.device.statusLedType);
     settings.device.savedVolumePercent = readUInt("dev_vol", settings.device.savedVolumePercent);
     settings.device.audioMuted = readBool("dev_muted", settings.device.audioMuted);
@@ -938,6 +996,24 @@ SettingsBundle SettingsManager::load() {
     settings.device.lowBatteryWakeIntervalMinutes = readUInt("dev_lbs_wk", settings.device.lowBatteryWakeIntervalMinutes);
     settings.ui.gpioSafetyOverride = readBool("ui_gpio_ovr", settings.ui.gpioSafetyOverride);
     settings.ui.gpioBoardAutodetect = readBool("ui_gpio_auto", settings.ui.gpioBoardAutodetect);
+    // A newly compiled APK locale becomes the default once. Preserve later
+    // explicit English/selected-language choices across ordinary restarts.
+    const String compiledLanguage = APP_COMPILED_LANGUAGE_CODE;
+    if (readString("ui_build_lang", "") != compiledLanguage) {
+        settings.ui.language = compiledLanguage;
+        writeStringIfChanged("ui_lang", compiledLanguage);
+        writeStringIfChanged("ui_build_lang", compiledLanguage);
+    } else {
+        settings.ui.language = readString("ui_lang", settings.ui.language);
+    }
+    const String compiledTheme = APP_COMPILED_THEME_CODE;
+    if (readString("ui_build_theme", "") != compiledTheme) {
+        settings.ui.theme = compiledTheme;
+        writeStringIfChanged("ui_theme", compiledTheme);
+        writeStringIfChanged("ui_build_theme", compiledTheme);
+    } else {
+        settings.ui.theme = readString("ui_theme", settings.ui.theme);
+    }
     settings.ui.gpioBoardSelection = readString("ui_gpio_sel", settings.ui.gpioBoardSelection);
     settings.ui.peripheralDiagramLayout = readString("ui_diag", settings.ui.peripheralDiagramLayout);
     settings.ui.peripheralHelperBindings = readString("ui_helpers", settings.ui.peripheralHelperBindings);
@@ -1056,6 +1132,8 @@ bool SettingsManager::save(const SettingsBundle& settings) {
     changed |= writeStringIfChanged("dev_name", sanitized.device.deviceName);
     changed |= writeStringIfChanged("dev_friendly", sanitized.device.friendlyName);
     changed |= writeUIntIfChanged("dev_led", sanitized.device.statusLedPin);
+    changed |= writeUIntIfChanged("dev_led_g", sanitized.device.statusLedGreenPin);
+    changed |= writeUIntIfChanged("dev_led_b", sanitized.device.statusLedBluePin);
     changed |= writeStringIfChanged("dev_led_type", sanitized.device.statusLedType);
     changed |= writeUIntIfChanged("dev_vol", sanitized.device.savedVolumePercent);
     changed |= writeBoolIfChanged("dev_muted", sanitized.device.audioMuted);
@@ -1068,6 +1146,9 @@ bool SettingsManager::save(const SettingsBundle& settings) {
     changed |= writeUIntIfChanged("dev_lbs_wk", sanitized.device.lowBatteryWakeIntervalMinutes);
     changed |= writeBoolIfChanged("ui_gpio_ovr", sanitized.ui.gpioSafetyOverride);
     changed |= writeBoolIfChanged("ui_gpio_auto", sanitized.ui.gpioBoardAutodetect);
+    changed |= writeStringIfChanged("ui_lang", sanitized.ui.language);
+    changed |= writeStringIfChanged("ui_build_lang", APP_COMPILED_LANGUAGE_CODE);
+    changed |= writeStringIfChanged("ui_theme", sanitized.ui.theme);
     changed |= writeStringIfChanged("ui_gpio_sel", sanitized.ui.gpioBoardSelection);
     changed |= writeStringIfChanged("ui_diag", sanitized.ui.peripheralDiagramLayout);
     changed |= writeStringIfChanged("ui_helpers", sanitized.ui.peripheralHelperBindings);
@@ -1094,6 +1175,21 @@ bool SettingsManager::reset() {
 }
 
 void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) const {
+    auto writeJsonValue = [](JsonObject parent, const char* key, const String& serialized) {
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+        DynamicJsonDocument parsed(serialized.length() * 2U + 128U);
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+        if (!deserializeJson(parsed, serialized)) {
+            parent[key].set(parsed.as<JsonVariantConst>());
+        } else {
+            parent[key] = serialized;
+        }
+    };
     JsonObject wifi = root["wifi"].to<JsonObject>();
     wifi["ssid"] = settings.wifi.ssid;
     wifi["password"] = settings.wifi.password;
@@ -1205,6 +1301,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     device["deviceName"] = settings.device.deviceName;
     device["friendlyName"] = settings.device.friendlyName;
     device["statusLedPin"] = settings.device.statusLedPin;
+    device["statusLedGreenPin"] = settings.device.statusLedGreenPin;
+    device["statusLedBluePin"] = settings.device.statusLedBluePin;
     device["statusLedType"] = settings.device.statusLedType;
     device["savedVolumePercent"] = settings.device.savedVolumePercent;
     device["audioMuted"] = settings.device.audioMuted;
@@ -1217,14 +1315,17 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     device["lowBatteryWakeIntervalMinutes"] = settings.device.lowBatteryWakeIntervalMinutes;
 
     JsonObject ui = root["ui"].to<JsonObject>();
+    ui["language"] = settings.ui.language;
+    ui["theme"] = settings.ui.theme;
     ui["gpioSafetyOverride"] = settings.ui.gpioSafetyOverride;
     ui["gpioBoardAutodetect"] = settings.ui.gpioBoardAutodetect;
     ui["gpioBoardSelection"] = settings.ui.gpioBoardSelection;
-    ui["peripheralDiagramLayout"] = settings.ui.peripheralDiagramLayout;
+    writeJsonValue(ui, "peripheralDiagramLayout", settings.ui.peripheralDiagramLayout);
 
-    ui["peripheralHelperBindings"] = settings.ui.peripheralHelperBindings;
-    ui["peripheralProfiles"] = settings.ui.peripheralProfileSelections;
-    ui["motorRuntimeConfig"] = settings.ui.motorRuntimeConfig;
+    writeJsonValue(ui, "peripheralHelperBindings", settings.ui.peripheralHelperBindings);
+    writeJsonValue(ui, "peripheralProfiles", settings.ui.peripheralProfileSelections);
+    writeJsonValue(ui,"recordedMelodies",settings.ui.recordedMelodies);
+    writeJsonValue(ui, "motorRuntimeConfig", settings.ui.motorRuntimeConfig);
 
     root["usingSavedSettings"] = settings.usingSavedSettings;
 }
@@ -1418,6 +1519,8 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         copyString(device, "button2Action", settings.device.button2Action);
         copyString(device, "statusLedType", settings.device.statusLedType);
         if (device["statusLedPin"].is<uint8_t>()) settings.device.statusLedPin = device["statusLedPin"].as<uint8_t>();
+        if (device["statusLedGreenPin"].is<uint8_t>()) settings.device.statusLedGreenPin = device["statusLedGreenPin"].as<uint8_t>();
+        if (device["statusLedBluePin"].is<uint8_t>()) settings.device.statusLedBluePin = device["statusLedBluePin"].as<uint8_t>();
         if (device["savedVolumePercent"].is<uint8_t>()) settings.device.savedVolumePercent = device["savedVolumePercent"].as<uint8_t>();
         if (device["audioMuted"].is<bool>()) settings.device.audioMuted = device["audioMuted"].as<bool>();
         if (device["lowBatterySleepEnabled"].is<bool>()) settings.device.lowBatterySleepEnabled = device["lowBatterySleepEnabled"].as<bool>();
@@ -1429,6 +1532,8 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 
     JsonObjectConst ui = object["ui"];
     if (!ui.isNull()) {
+        copyString(ui, "language", settings.ui.language);
+        copyString(ui, "theme", settings.ui.theme);
         if (ui["gpioSafetyOverride"].is<bool>()) settings.ui.gpioSafetyOverride = ui["gpioSafetyOverride"].as<bool>();
         if (ui["gpioBoardAutodetect"].is<bool>()) settings.ui.gpioBoardAutodetect = ui["gpioBoardAutodetect"].as<bool>();
         copyString(ui, "gpioBoardSelection", settings.ui.gpioBoardSelection);
@@ -1440,6 +1545,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         }
         copyJsonStringOrObject(ui, "peripheralHelperBindings", settings.ui.peripheralHelperBindings);
         copyJsonStringOrObject(ui, "peripheralProfiles", settings.ui.peripheralProfileSelections);
+        copyJsonStringOrObject(ui,"recordedMelodies",settings.ui.recordedMelodies);
         copyJsonStringOrObject(ui, "motorRuntimeConfig", settings.ui.motorRuntimeConfig);
     }
 

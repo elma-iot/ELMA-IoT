@@ -1,6 +1,11 @@
+#include "buzzer_melody.h"
+#include "logic_device.h"
+#include "logic_audio_dispatch.h"
+#include "generated_project_defaults.h"
 #include "device_log.h"
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
+#include <soc/soc_caps.h>
 #include <Preferences.h>
 #include <esp_ota_ops.h>
 #include <esp_sleep.h>
@@ -25,7 +30,10 @@ void waitForSerialConsole(unsigned long timeoutMs = 1500) {
 void scheduleReboot(uint32_t delayMs);
 
 uint8_t activeStatusLedPin = DefaultConfig::STATUS_LED_PIN;
+uint8_t activeStatusLedGreenPin = DefaultConfig::STATUS_LED_PIN;
+uint8_t activeStatusLedBluePin = DefaultConfig::STATUS_LED_PIN;
 bool activeStatusLedIsNeoPixel = DefaultConfig::STATUS_LED_IS_NEOPIXEL;
+bool activeStatusLedIsRgb = false;
 bool statusLedInitialized = false;
 
 constexpr uint8_t kStatusLedBrightness = 24;
@@ -43,6 +51,11 @@ void initializeStatusLed() {
         statusLedPixel.begin();
         statusLedPixel.clear();
         statusLedPixel.show();
+    } else if (activeStatusLedIsRgb) {
+        pinMode(activeStatusLedPin, OUTPUT);
+        pinMode(activeStatusLedGreenPin, OUTPUT);
+        pinMode(activeStatusLedBluePin, OUTPUT);
+        analogWrite(activeStatusLedPin, 0);analogWrite(activeStatusLedGreenPin, 0);analogWrite(activeStatusLedBluePin, 0);
     } else {
         pinMode(activeStatusLedPin, OUTPUT);
         digitalWrite(activeStatusLedPin, LOW);
@@ -64,6 +77,8 @@ void writeStatusLedColor(uint8_t red, uint8_t green, uint8_t blue) {
     if (activeStatusLedIsNeoPixel) {
         statusLedPixel.setPixelColor(0, statusLedPixel.Color(red, green, blue));
         statusLedPixel.show();
+    } else if (activeStatusLedIsRgb) {
+        analogWrite(activeStatusLedPin, red);analogWrite(activeStatusLedGreenPin, green);analogWrite(activeStatusLedBluePin, blue);
     } else {
         digitalWrite(activeStatusLedPin, (red != 0 || green != 0 || blue != 0) ? HIGH : LOW);
     }
@@ -81,18 +96,23 @@ bool statusLedTypeIsNeoPixel(const String& type) {
     return type.equalsIgnoreCase("neopixel");
 }
 
-void applyStatusLedConfig(uint8_t pin, const String& type) {
+void applyStatusLedConfig(uint8_t pin, uint8_t greenPin, uint8_t bluePin, const String& type) {
     const bool useNeoPixel = statusLedTypeIsNeoPixel(type);
-    if (statusLedInitialized && pin == activeStatusLedPin && useNeoPixel == activeStatusLedIsNeoPixel) {
+    const bool useRgb = type.equalsIgnoreCase("rgb");
+    if (statusLedInitialized && pin == activeStatusLedPin && greenPin == activeStatusLedGreenPin && bluePin == activeStatusLedBluePin && useNeoPixel == activeStatusLedIsNeoPixel && useRgb == activeStatusLedIsRgb) {
         return;
     }
 
     writeStatusLed(false);
     if (statusLedInitialized) {
         pinMode(activeStatusLedPin, INPUT);
+        if(activeStatusLedIsRgb){pinMode(activeStatusLedGreenPin,INPUT);pinMode(activeStatusLedBluePin,INPUT);}
     }
     activeStatusLedPin = pin;
+    activeStatusLedGreenPin = greenPin;
+    activeStatusLedBluePin = bluePin;
     activeStatusLedIsNeoPixel = useNeoPixel;
+    activeStatusLedIsRgb = useRgb;
     statusLedColorKnown = false;
     initializeStatusLed();
 }
@@ -316,6 +336,52 @@ struct DeferredActions {
 };
 
 DeferredActions* deferredActions = nullptr;
+QueueHandle_t logicAudioQueue = nullptr;
+BuzzerMelody buzzerMelody;
+LogicDevice logicDevice;
+bool queueAudioSourceOwned(JsonVariantConst source, String& error,const char* owner) {
+    if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) {error="Firmware update is active";return false;}
+    JsonDocument resolved;
+    if(!source["melodyId"].isNull()){
+        JsonDocument assets;deserializeJson(assets,settings->ui.recordedMelodies);String id=source["melodyId"] | "";
+        if(!assets[id].is<JsonObject>()){error="Recorded melody was not compiled into this firmware";return false;}
+        resolved.set(source);resolved.remove("melodyId");resolved["melody"].set(assets[id]);source=resolved.as<JsonVariantConst>();
+    }
+    if(!source["output"].isNull()){if(!BuzzerMelody::validate(source,*settings,error))return false;}
+    else{
+#ifdef APP_DISABLE_AUDIO
+        error="DAC audio is not supported on this build";return false;
+#else
+        if (!AudioPlayer::validateSource(source,error)) return false;
+#endif
+    }
+    JsonDocument queued;queued.set(source);queued.remove("__logic");queued["__logic"]["outputToken"]=LogicAudioDispatch::outputToken(!source["output"].isNull());
+    if(owner&&*owner){queued["__logic"]["owner"]=owner;queued["__logic"]["token"]=LogicAudioDispatch::token(owner);}
+    source=queued.as<JsonVariantConst>();
+    if(logicAudioQueue&&uxQueueMessagesWaiting(logicAudioQueue)>=8){error="Audio source queue is busy";return false;}
+    const size_t length=measureJson(source)+1;if(length>16384){error="Audio source exceeds 16 KiB";return false;}
+    char* payload=static_cast<char*>(heap_caps_malloc(length,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
+    if(!payload)payload=static_cast<char*>(heap_caps_malloc(length,MALLOC_CAP_8BIT));
+    if(!payload){error="Insufficient audio source memory";return false;}
+    serializeJson(source,payload,length);
+    if (!logicAudioQueue || xQueueSend(logicAudioQueue,&payload,0)!=pdTRUE) {heap_caps_free(payload);error="Audio source queue is busy";return false;}
+    return true;
+}
+
+
+bool queueAudioSource(JsonVariantConst source,String& error){return queueAudioSourceOwned(source,error,nullptr);}
+bool queueLogicAudioStop(JsonObjectConst node,String& error,bool all=false){
+ const char* owner=!all&&node["type"]=="peripheral.play"?(node["id"]|""):"";
+ bool buzzer=std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos;
+ if(*owner)LogicAudioDispatch::token(owner,true);else LogicAudioDispatch::outputToken(buzzer,true);
+ JsonDocument command;command["__logic"]["stop"]=true;command["__logic"]["owner"]=owner;command["__logic"]["buzzer"]=buzzer;
+ size_t size=measureJson(command)+1;char* payload=(char*)heap_caps_malloc(size,MALLOC_CAP_8BIT);
+ if(!payload){error="Insufficient stop command memory";return false;}serializeJson(command,payload,size);
+ if(!logicAudioQueue||xQueueSendToFront(logicAudioQueue,&payload,0)!=pdTRUE){heap_caps_free(payload);error="Audio stop queue is busy";return false;}
+ return true;
+}
+String currentDacLogicOwner,currentBuzzerLogicOwner;
+
 
 struct RuntimeAudioAutomation {
     bool startupEffectPending = false;
@@ -355,11 +421,11 @@ struct RuntimeAudioAutomation {
 RuntimeAudioAutomation runtimeAudio;
 
 uint16_t readNativeTouch(uint8_t pin) {
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
+#if defined(SOC_TOUCH_SENSOR_SUPPORTED) && SOC_TOUCH_SENSOR_SUPPORTED
+    return touchRead(pin);
+#else
     (void)pin;
     return 0;
-#else
-    return touchRead(pin);
 #endif
 }
 
@@ -2114,7 +2180,6 @@ void initializeButtons() {
             button1.lastSampledPressed = digitalRead(button1.pin) == HIGH;
         }
     } else {
-        pinMode(button1.pin, INPUT);
         button1.lastSampledPressed = false;
     }
     button1.stablePressed = button1.lastSampledPressed;
@@ -2135,7 +2200,6 @@ void initializeButtons() {
             button2.lastSampledPressed = digitalRead(button2.pin) == HIGH;
         }
     } else {
-        pinMode(button2.pin, INPUT);
         button2.lastSampledPressed = false;
     }
     button2.stablePressed = button2.lastSampledPressed;
@@ -2507,6 +2571,7 @@ void enterLowBatteryDeepSleep(uint8_t batteryPercent, float voltage, const char*
         return;
     }
 
+    logicDevice.shuttingDown();
     const uint16_t wakeIntervalMinutes = settings->device.lowBatteryWakeIntervalMinutes;
     DebugLog.printf("[power] entering deep sleep reason=%s battery=%u%% voltage=%.3f wake_interval_min=%u\n",
                   reason,
@@ -2672,7 +2737,7 @@ void applyRuntimeSettings() {
     initializeButtons();
     motorController.applySettings(*settings);
     appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings);
-    applyStatusLedConfig(settings->device.statusLedPin, settings->device.statusLedType);
+    applyStatusLedConfig(settings->device.statusLedPin, settings->device.statusLedGreenPin, settings->device.statusLedBluePin, settings->device.statusLedType);
     applyWapeTriggerPin(settings->oled.displayType == "wape" ? settings->oled.wapeTriggerPin : 0);
     wifiManager->applySettings(*settings);
     batteryMonitor->applySettings(settings->battery, settings->battery.adcPin);
@@ -2927,12 +2992,9 @@ void applyClonedConfiguration() {
         return;
     }
 
-    // Bind protocol identities to the target efuse MAC. A deliberately supplied
-    // friendly display name may remain, but never controls MQTT IDs/topics.
-    const SettingsBundle targetDefaults = settingsManager->defaults();
-    cloned.device.deviceName = targetDefaults.device.deviceName;
-    cloned.mqtt.clientId = targetDefaults.mqtt.clientId;
-    cloned.mqtt.baseTopic = targetDefaults.mqtt.baseTopic;
+    // This is an explicit setup operation from the owner-facing Android app.
+    // Preserve its complete snapshot, including the chosen device and MQTT
+    // identities, so the device web UI reflects the wizard after reboot.
     cloned.usingSavedSettings = true;
     settingsManager->save(cloned);
     *settings = settingsManager->load();
@@ -3004,6 +3066,17 @@ void serviceCloneProvisioningSerial() {
         } else if (command == "ELMA_CLONE_PING") {
             DebugLog.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
             Serial.flush();
+        } else if (command == "ELMA_NETWORK_STATUS") {
+            // Requested after USB re-enumeration, when boot-time log messages
+            // may already have passed before Android opened the runtime port.
+            if (wifiManager != nullptr && wifiManager->isConnected()) {
+                DebugLog.printf("[elma-network] mode=STA ssid='%s' ip=%s\n",
+                    WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            } else if (wifiManager != nullptr && wifiManager->isApMode()) {
+                DebugLog.printf("[elma-network] mode=AP ssid='%s' ip=%s\n",
+                    wifiManager->apSsid().c_str(), WiFi.softAPIP().toString().c_str());
+            }
+            Serial.flush();
         } else if (command == "ELMA_DIAGNOSTICS") {
             DebugLog.printf("[health] uptime=%lu heap=%u min_heap=%u largest=%u wifi=%d rssi=%d mqtt=%d\n",
                 millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
@@ -3057,6 +3130,7 @@ bool saveMotorRuntimeConfigFromJson(JsonVariantConst root, String& error) {
 }
 
 bool playRequest(const String& url, const String& label, const String& type, const String& source, String& error, bool addToHistory) {
+    if (type=="tts-offline") {JsonDocument descriptor;descriptor["text"]=url;descriptor["language"]="en";return queueAudioSource(descriptor.as<JsonVariantConst>(),error);}
     if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) {
         error = "Wait for the firmware update to finish before starting playback.";
         return false;
@@ -3503,7 +3577,32 @@ void executePlaybackCommand(const PlaybackCommand& command) {
     }
 }
 
+__attribute__((noinline)) void processQueuedAudioSource() {
+    if(otaManager != nullptr && otaManager->isFirmwareTransferActive())buzzerMelody.stop();else buzzerMelody.loop();
+    char* sourcePayload=nullptr;
+    if (logicAudioQueue && xQueueReceive(logicAudioQueue,&sourcePayload,0)==pdTRUE) {
+        JsonDocument descriptor;String error;auto parsed=deserializeJson(descriptor,sourcePayload);heap_caps_free(sourcePayload);
+        if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) error="Firmware update is active";
+        else if (parsed!=DeserializationError::Ok) error="Invalid audio source payload";
+        else if(descriptor["__logic"]["stop"].as<bool>()){
+            String owner=descriptor["__logic"]["owner"]|"";bool buzzer=descriptor["__logic"]["buzzer"]|false;
+            if(buzzer&&(owner.isEmpty()||owner==currentBuzzerLogicOwner)){buzzerMelody.stop();currentBuzzerLogicOwner="";}
+#ifndef APP_DISABLE_AUDIO
+            if(!buzzer&&(owner.isEmpty()||owner==currentDacLogicOwner)){audioPlayer->stop();currentDacLogicOwner="";}
+#endif
+        }
+        else if(LogicAudioDispatch::outputToken(!descriptor["output"].isNull())!=(descriptor["__logic"]["outputToken"]|uint32_t(0)))return;
+        else if(!LogicAudioDispatch::valid(descriptor["__logic"]["owner"]|"",descriptor["__logic"]["token"]|uint32_t(0)))return;
+        else if(!descriptor["output"].isNull()){if(buzzerMelody.begin(descriptor.as<JsonVariantConst>(),*settings,error))currentBuzzerLogicOwner=descriptor["__logic"]["owner"]|"";}
+#ifndef APP_DISABLE_AUDIO
+        else if(audioPlayer->playSource(descriptor.as<JsonVariantConst>(),error))currentDacLogicOwner=descriptor["__logic"]["owner"]|"";
+#endif
+        if (appState != nullptr) appState->setLastError(error);
+    }
+}
+
 void processDeferredActions() {
+    processQueuedAudioSource();
     if (deferredActions == nullptr) {
         return;
     }
@@ -3712,7 +3811,8 @@ void setup() {
             settingsManager->reset();
             clearPowerCycleCounter();
             Serial.flush();
-            motorController.prepareForRestart();
+            logicDevice.shuttingDown();
+        motorController.prepareForRestart();
             delay(200);
             DebugLog.service(true);
             ESP.restart();
@@ -3726,7 +3826,10 @@ void setup() {
     beginStorageBackends(*settings);
     DebugLog.service(true);
     activeStatusLedPin = settings->device.statusLedPin;
+    activeStatusLedGreenPin = settings->device.statusLedGreenPin;
+    activeStatusLedBluePin = settings->device.statusLedBluePin;
     activeStatusLedIsNeoPixel = statusLedTypeIsNeoPixel(settings->device.statusLedType);
+    activeStatusLedIsRgb = settings->device.statusLedType.equalsIgnoreCase("rgb");
     activeWapeTriggerPin = settings->oled.displayType == "wape" ? settings->oled.wapeTriggerPin : 0;
 
     initializeButtons();
@@ -3750,6 +3853,34 @@ void setup() {
     activeI2sDoutPin = settings->audio.doutPin;
     activeAudioOutputEnabled = settings->audio.enabled;
     audioPlayer->begin(activeI2sBclkPin, activeI2sWsPin, activeI2sDoutPin, settings->device.savedVolumePercent, activeAudioOutputEnabled, *appState);
+    logicDevice.begin(ELMA_COMPILED_LOGICS,*appState,[](JsonObject root){
+        root["firmware"]["version"]=APP_VERSION;
+        root["battery"]["available"]=batteryMonitor->enabled() && batteryMonitor->latest().filteredVoltage>0;
+        root["battery"]["percentage"]=estimateBatteryPercent(root["battery"]["voltage"] | 0.0f);
+    },[](JsonObjectConst node,JsonVariantConst args,std::string& message){
+        String error;bool ok=false;std::string type=node["type"] | "";
+        if(std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos) {
+            std::string command=args["action"]|"";
+            if(command=="stop"){bool stopped=queueLogicAudioStop(node,error,args["all"]|false);if(!stopped)message=error.c_str();return stopped;}
+            if(command=="play"){JsonDocument source;source.set(args["source"]);source["output"]["kind"]=node["parameters"]["buzzerMode"]|"passive";source["output"]["slot"]=(std::string(node["binding"]["group"]|"")+":"+std::to_string(node["binding"]["index"]|0));ok=queueAudioSourceOwned(source.as<JsonVariantConst>(),error,node["id"]|"");}
+        } else if(node["binding"]["group"]=="audio") {
+            auto pins=node["binding"]["pins"];
+            if(!activeAudioOutputEnabled || pins["BCLK"]!=activeI2sBclkPin || pins["WS"]!=activeI2sWsPin || pins["DIN"]!=activeI2sDoutPin) {
+                message="Compiled Logics DAC pins differ from the active audio configuration";return false;
+            }
+            std::string command=args["action"] | "";
+            if(command=="play")ok=queueAudioSourceOwned(args["source"],error,node["id"]|"");
+            else if(command=="stop")ok=queueLogicAudioStop(node,error,args["all"]|false);
+            else if(command=="volume" || command=="set"){double value=args["value"] | -1.0;if(value>=0&&value<=100){audioPlayer->setVolumePercent(uint8_t(value));ok=true;}else error="Invalid Logics volume";}
+        } else if(type=="mainboard.mqtt.connect")ok=mqttManager->requestConnect(error);
+        else if(type=="mainboard.mqtt.disconnect")ok=mqttManager->requestDisconnect(error);
+        else if(type=="mainboard.mqtt.rediscover")ok=mqttManager->requestRediscovery(error);
+        else if(type=="mainboard.ota.check")ok=otaManager->triggerCheck(false);
+        else if(type=="mainboard.device.reboot"){requestRestartSequence("logics",false);ok=true;}
+        if(!ok)message=error.isEmpty()?"Unsupported or failed Logics action":error.c_str();
+        return ok;
+    });
+
 #if APP_AUDIO_DIAGNOSTIC_TEST
     if (activeAudioOutputEnabled) {
         audioPlayer->setDirectLibraryVolume(DefaultConfig::AUDIO_DIAGNOSTIC_LIBRARY_VOLUME);
@@ -3771,6 +3902,10 @@ void setup() {
     mqttManager->begin(*settings, *appState, *wifiManager, *otaManager, handleMqttCommand, [](JsonObject root) {
         appendAugmentedMotorStatus(root);
     });
+    if (!logicAudioQueue) logicAudioQueue=xQueueCreate(9,sizeof(char*));
+    webServer->setLogicsHandlers([](JsonDocument& result,bool graph){logicDevice.snapshot(result,graph);},
+        [](JsonVariantConst command,JsonDocument& result,String& error){return logicDevice.request(command,result,error);});
+    webServer->setAudioSourceHandler(queueAudioSource);
     webServer->begin(
         *appState,
         *wifiManager,
@@ -4258,6 +4393,7 @@ void loop() {
     } else if (!otaManager->isFirmwareTransferActive()) {
         audioReleasedForUpdate = false;
     }
+    logicDevice.loop(now,otaManager->isFirmwareTransferActive());
     processDeferredActions();
     serviceWapeTriggerPulse();
     if (now - lastInputPollAt >= kInputPollIntervalMs) {
@@ -4354,6 +4490,7 @@ void loop() {
     // Never interrupt an inactive-partition write. A restart queued by another
     // subsystem waits until OTA has completed or aborted.
     if (!otaTransferActive && rebootRequested && static_cast<long>(millis() - rebootAt) >= 0) {
+        logicDevice.shuttingDown();
         motorController.prepareForRestart();
         DebugLog.service(true);
         ESP.restart();

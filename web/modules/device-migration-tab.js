@@ -28,6 +28,7 @@ export function createDeviceMigrationTab({
       ["esp32-wrover", "ESP32-WROVER"],
       ["esp32-mini", "ESP32 Mini"],
       ["wemos-lolin32-mini", "Wemos Lolin32 Mini"],
+      ["wemos-d1-mini-esp32", "Wemos D1 Mini ESP32"],
     ],
     esp32c3: [["esp32-c3", "ESP32-C3 Super Mini"]],
   };

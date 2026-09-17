@@ -1,0 +1,10 @@
+{
+  "version": "0.1.44",
+  "firmwareBuild": "esp32s3_notifier_hacs",
+  "firmwareBuildPassed": true,
+  "minimumCheckedDarkFieldContrast": 7.68,
+  "lightThemePassed": true,
+  "automaticDarkPassed": true,
+  "dynamicFormIdsPassed": true,
+  "deviceFlashed": false
+}

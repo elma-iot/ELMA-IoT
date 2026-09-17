@@ -4,7 +4,7 @@ export const PERIPHERAL_DIAGRAM_LABEL_LAYOUTS_KEY = "__diagramLabelLayouts";
 export const CUSTOM_PERIPHERAL_DIAGRAM_LABEL_VALUE = "__custom__";
 
 export const STANDARD_PERIPHERAL_DIAGRAM_LABELS = [
-  { value: "GND", label: "GND", badge: "#111827", text: "#ffffff" },
+  { value: "GND", label: "GND", badge: "var(--diagram-ground-color, #111827)", text: "var(--diagram-ground-text, #ffffff)" },
   { value: "VCC", label: "VCC", badge: "#dc2626", text: "#ffffff" },
   { value: "VIN", label: "VIN", badge: "#b91c1c", text: "#ffffff" },
   { value: "5V", label: "5V", badge: "#ef4444", text: "#ffffff" },
@@ -287,7 +287,7 @@ export function peripheralDiagramLabelPalette(label, fallback = null) {
     return { badge: "#16a34a", text: "#ffffff" };
   }
   if (["GND", "GROUND"].includes(key)) {
-    return { badge: "#111827", text: "#ffffff" };
+    return { badge: "var(--diagram-ground-color, #111827)", text: "var(--diagram-ground-text, #ffffff)" };
   }
   if (["VCC", "VIN", "VBUS", "5V"].includes(key)) {
     return { badge: "#dc2626", text: "#ffffff" };

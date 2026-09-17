@@ -1,0 +1,12 @@
+{
+  "version": "0.1.44",
+  "deviceInspected": "192.168.1.150",
+  "deployedScriptCopies": 2,
+  "duplicateObserverFreezeReproduced": true,
+  "correctedRendererResponsive": true,
+  "firmwareBuild": "esp32s3_notifier_hacs",
+  "firmwareBuildPassed": true,
+  "flashBytes": 1884437,
+  "flashCapacityBytes": 2031616,
+  "deviceFlashed": false
+}

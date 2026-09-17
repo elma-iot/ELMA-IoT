@@ -15,5 +15,8 @@ export function restoreLegacyPeripheralProfiles(settings) {
   if (!Array.isArray(profiles.storage) || !profiles.storage.length) {
     profiles.storage = [settings?.sd?.enabled === true ? "microsd-spi" : "none"];
   }
+  if (!Array.isArray(profiles.sensors) || !profiles.sensors.length) {
+    profiles.sensors = [Number(settings?.battery?.adcPin || 0) > 0 ? "battery-voltage-divider-220k" : "none"];
+  }
   return profiles;
 }

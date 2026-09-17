@@ -14,7 +14,7 @@ export function boardChipFamily(board = "") {
   return "esp32";
 }
 export function supportedBoard(board) {
-  return !["esp32s2", "esp32c6"].includes(boardChipFamily(board));
+  return !["esp32s2", "esp32c6", "esp32c2", "esp8266", "esp8285"].includes(boardChipFamily(board));
 }
 export function chipPins(chip, output = false, board = "") {
   let pins = [];

@@ -1,0 +1,23 @@
+import en from './en.js';
+import es from './es.js';
+import zh from './zh.js';
+import hi from './hi.js';
+import ar from './ar.js';
+import pt from './pt.js';
+import bn from './bn.js';
+import ru from './ru.js';
+import ja from './ja.js';
+import de from './de.js';
+import fr from './fr.js';
+import ko from './ko.js';
+import tr from './tr.js';
+import it from './it.js';
+import id from './id.js';
+import pl from './pl.js';
+import uk from './uk.js';
+import vi from './vi.js';
+import th from './th.js';
+import fa from './fa.js';
+
+export const locales=[en,es,zh,hi,ar,pt,bn,ru,ja,de,fr,ko,tr,it,id,pl,uk,vi,th,fa];
+export const localeByCode=Object.fromEntries(locales.map(locale=>[locale.code,locale]));

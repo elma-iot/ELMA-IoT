@@ -29,6 +29,15 @@ unsigned long reconnectAt = 0;
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 constexpr const char* kChipFamily = "esp32s3";
 constexpr esp_chip_id_t kChipId = ESP_CHIP_ID_ESP32S3;
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+constexpr const char* kChipFamily = "esp32s2";
+constexpr esp_chip_id_t kChipId = ESP_CHIP_ID_ESP32S2;
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+constexpr const char* kChipFamily = "esp32c6";
+constexpr esp_chip_id_t kChipId = ESP_CHIP_ID_ESP32C6;
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+constexpr const char* kChipFamily = "esp32c2";
+constexpr esp_chip_id_t kChipId = ESP_CHIP_ID_ESP32C2;
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
 constexpr const char* kChipFamily = "esp32c3";
 constexpr esp_chip_id_t kChipId = ESP_CHIP_ID_ESP32C3;
@@ -204,7 +213,10 @@ void configureRoutes() {
         system["minimalOtaBridge"] = true;
         JsonObject network = doc["network"].to<JsonObject>();
         network["wifiConnected"] = WiFi.status() == WL_CONNECTED;
+        network["apMode"] = WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA;
         network["ip"] = WiFi.localIP().toString();
+        network["ssid"] = WiFi.SSID();
+        network["apSsid"] = WiFi.softAPSSID();
         network["rssi"] = WiFi.RSSI();
         String body;
         serializeJson(doc, body);

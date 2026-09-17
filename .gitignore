@@ -35,3 +35,7 @@ upload_check.log
 *.jks
 *.keystore
 release.env
+
+include/generated_project_defaults.h
+
+.elma-project-defaults.json

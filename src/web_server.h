@@ -20,6 +20,11 @@ class WebServerManager {
     using SettingsGetter = std::function<SettingsBundle(void)>;
     using SettingsSaver = std::function<bool(JsonVariantConst, String&)>;
     using PlayHandler = std::function<bool(const String&, const String&, const String&, String&)>;
+    using AudioSourceHandler = std::function<bool(JsonVariantConst, String&)>;
+    void setAudioSourceHandler(AudioSourceHandler handler) { audioSourceHandler_ = handler; }
+    using LogicsHandler = std::function<bool(JsonVariantConst, JsonDocument&, String&)>;
+    using LogicsGetter = std::function<void(JsonDocument&, bool)>;
+    void setLogicsHandlers(LogicsGetter getter, LogicsHandler handler) { logicsGetter_=getter;logicsHandler_=handler; }
     using StopHandler = std::function<void(void)>;
     using VolumeHandler = std::function<void(uint8_t)>;
     using EqualizerHandler = std::function<void(const String&, int8_t, int8_t, int8_t)>;
@@ -57,6 +62,8 @@ class WebServerManager {
     bool webUiLocked() const;
 
   private:
+    LogicsGetter logicsGetter_;
+    LogicsHandler logicsHandler_;
 #ifndef APP_DISABLE_WEB_UI
     AsyncWebServer server_;
     AppState* appState_ = nullptr;
@@ -66,6 +73,7 @@ class WebServerManager {
     SettingsGetter settingsGetter_;
     SettingsSaver settingsSaver_;
     PlayHandler playHandler_;
+    AudioSourceHandler audioSourceHandler_;
     StopHandler stopHandler_;
     VolumeHandler volumeHandler_;
     EqualizerHandler equalizerHandler_;

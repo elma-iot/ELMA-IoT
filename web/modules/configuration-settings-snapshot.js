@@ -68,9 +68,12 @@ export function createConfigurationSettingsSnapshotModule({
     const displayProfiles = normalizedPeripheralDisplayProfiles();
     const persistedUi = normalizeUiSettings(baseSettings.ui);
     snapshot.ui = normalizeUiSettings({
+      language: String(window.ElmaAndroidConfig?.language?.() || persistedUi.language || "en"),
+      theme: String(persistedUi.theme || "automatic"),
       gpioBoardAutodetect: Boolean(elements.gpioBoardAutodetect?.checked ?? true),
       gpioSafetyOverride: Boolean(elements.gpioSafetyOverride?.checked),
       gpioBoardSelection: String(elements.gpioBoardSelector?.value || ""),
+      customBoard: cloneSettingsObject(state.settings?.ui?.customBoard || persistedUi.customBoard) || {},
       peripheralDiagramPositions: cloneSettingsObject(state.peripheralDiagramPositions || {}) || {},
       peripheralHelperBindings: cloneSettingsObject(state.peripheralHelperBindings || {}) || {},
       motorRuntimeConfig: cloneSettingsObject(persistedUi.motorRuntimeConfig) || {},

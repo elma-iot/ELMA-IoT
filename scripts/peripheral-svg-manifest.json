@@ -1,0 +1,124 @@
+{
+  "max98357a-breadboard.svg": {
+    "profiles": [
+      "audio:max98357a-i2s-amp"
+    ],
+    "pins": [
+      "WS",
+      "BCLK",
+      "DIN",
+      "VCC",
+      "GND"
+    ],
+    "title": "max98357a-i2s-amp"
+  },
+  "pcm5102a-breadboard.svg": {
+    "profiles": [
+      "audio:pcm5102-i2s-dac"
+    ],
+    "pins": [
+      "WS",
+      "BCLK",
+      "DIN",
+      "VCC",
+      "GND"
+    ],
+    "title": "pcm5102-i2s-dac"
+  },
+  "inmp441-breadboard.svg": {
+    "profiles": [
+      "audioIn:inmp441-i2s-mic"
+    ],
+    "pins": [
+      "WS",
+      "SCK",
+      "SD",
+      "VCC",
+      "GND"
+    ],
+    "title": "inmp441-i2s-mic"
+  },
+  "i2c-oled-breadboard.svg": {
+    "profiles": [
+      "display:i2c-oled"
+    ],
+    "pins": [
+      "SDA",
+      "SCL",
+      "RST",
+      "VCC",
+      "GND"
+    ],
+    "title": "i2c-oled"
+  },
+  "microsd-spi-module.svg": {
+    "profiles": [
+      "storage:microsd-spi"
+    ],
+    "pins": [
+      "CS",
+      "SCK",
+      "MOSI",
+      "MISO",
+      "VCC",
+      "GND"
+    ],
+    "title": "microsd-spi"
+  },
+  "dc-dc-step-down-breadboard.svg": {
+    "profiles": [
+      "power:dc-dc-step-down"
+    ],
+    "pins": [
+      "INPUT_VOLTAGE",
+      "OUTPUT_VOLTAGE"
+    ],
+    "title": "dc-dc-step-down"
+  },
+  "dc-dc-step-up-breadboard.svg": {
+    "profiles": [
+      "power:dc-dc-step-up"
+    ],
+    "pins": [
+      "INPUT_VOLTAGE",
+      "OUTPUT_VOLTAGE"
+    ],
+    "title": "dc-dc-step-up"
+  },
+  "limit-switch-module-breadboard.svg": {
+    "profiles": [
+      "input:limit-switch"
+    ],
+    "pins": [
+      "COM",
+      "NO",
+      "NC"
+    ],
+    "title": "limit-switch"
+  },
+  "ttp223-touch-module.svg": {
+    "profiles": [
+      "input:ttp223-touch-button"
+    ],
+    "pins": [
+      "SIG",
+      "VCC",
+      "GND"
+    ],
+    "title": "ttp223-touch-button"
+  },
+  "drv8833-motor-driver-breadboard.svg": {
+    "profiles": [
+      "control:drv8833-dual-motor-driver"
+    ],
+    "pins": [
+      "IN1",
+      "IN2",
+      "IN3",
+      "IN4",
+      "VCC",
+      "GND"
+    ],
+    "title": "drv8833-dual-motor-driver"
+  }
+}

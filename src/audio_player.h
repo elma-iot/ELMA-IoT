@@ -24,6 +24,8 @@ class AudioPlayer {
     bool play(const String& url, const String& title, const String& mediaType, const String& source);
     bool playStorageFile(StorageTarget target, const String& path, const String& title, const String& mediaType, const String& source);
     bool playStorageOverlay(StorageTarget target, const String& path, uint8_t duckPercent = 35, uint8_t overlayPercent = 100);
+    static bool validateSource(JsonVariantConst source, String& error);
+    bool playSource(JsonVariantConst source, String& error);
     void stop();
     void releaseResourcesForUpdate();
     bool overlayActive() const;

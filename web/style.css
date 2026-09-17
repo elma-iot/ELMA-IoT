@@ -1,14 +1,3 @@
-.voltage-divider-controls {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;margin-top:8px}
-.voltage-divider-controls label {display:flex;flex-direction:column;gap:4px;min-width:0}
-.voltage-divider-controls label>span {white-space:nowrap;font-size:.75rem}
-.voltage-divider-controls select,.voltage-divider-controls input {width:100%;min-width:0;box-sizing:border-box}
-.voltage-divider-maximum,.voltage-divider-warning {grid-column:1/-1;margin:0;font-size:.8rem}
-.voltage-divider-warning {color:#ef4444}
-.voltage-divider-warning[hidden] {display:none}
-.voltage-divider-pin-maximum {position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;line-height:1.2;white-space:nowrap;color:var(--ink);background:var(--panel,#fff);padding:1px 3px;border-radius:2px;pointer-events:none}
-.voltage-divider-unsafe {color:#ef4444;animation:voltage-divider-warning-pulse .8s ease-in-out infinite alternate}
-@keyframes voltage-divider-warning-pulse {from{opacity:1}to{opacity:.35}}
-@media(prefers-reduced-motion:reduce){.voltage-divider-unsafe {animation:none}}
 :root {
   color-scheme: light;
   --bg: #f2f2f2;
@@ -50,6 +39,40 @@ body {
   min-width: 0;
   margin: 12px auto 24px;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-elma-theme="light"]) {
+    color-scheme: dark;
+    --bg: #10141a;
+    --panel: #19212c;
+    --panel-soft: #222c39;
+    --ink: #f1f5f9;
+    --muted: #b7c0cc;
+    --accent-soft: #49330e;
+    --line: #465263;
+    --warn: #ffbc55;
+    --ok: #68d391;
+    --danger: #ff8178;
+    --shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+  }
+}
+
+:root[data-elma-theme="dark"] {
+  color-scheme: dark;
+  --bg: #10141a;
+  --panel: #19212c;
+  --panel-soft: #222c39;
+  --ink: #f1f5f9;
+  --muted: #b7c0cc;
+  --accent-soft: #49330e;
+  --line: #465263;
+  --warn: #ffbc55;
+  --ok: #68d391;
+  --danger: #ff8178;
+  --shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-elma-theme="light"] { color-scheme: light; }
 
 .hero,
 .panel {
@@ -159,7 +182,7 @@ body {
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.98);
     box-shadow: var(--shadow);
-    min-width: 172px;
+    min-width: 252px;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -190,6 +213,36 @@ body {
   .hero-actions-menu-button-danger {
     color: var(--danger);
   }
+
+  :root[data-elma-theme="dark"] :is(h1, h2, h3, h4, label, legend, summary, .note, .hero-firmware) {
+    color: var(--ink);
+  }
+
+  :root[data-elma-theme="dark"] :is(input, select, textarea, .tab-button, .gpio-layout-card, .gpio-controls-strip, .status-item, .resource-card, dialog, .modal) {
+    color: var(--ink);
+    background-color: var(--panel-soft);
+    border-color: var(--line);
+  }
+
+  :root[data-elma-theme="dark"] :is(.panel, .hero, .tab-panel, .settings-card, .status-card) {
+    color: var(--ink);
+    background-color: var(--panel);
+  }
+
+  :root[data-elma-theme="dark"] button.secondary {
+    color: var(--ink);
+    background: var(--panel-soft);
+    border-color: var(--line);
+  }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-elma-theme="light"]) :is(h1, h2, h3, h4, label, legend, summary, .note, .hero-firmware) { color: var(--ink); }
+  :root:not([data-elma-theme="light"]) :is(input, select, textarea, .tab-button, .gpio-layout-card, .gpio-controls-strip, .status-item, .resource-card, dialog, .modal) {
+    color: var(--ink); background-color: var(--panel-soft); border-color: var(--line);
+  }
+  :root:not([data-elma-theme="light"]) :is(.panel, .hero, .tab-panel, .settings-card, .status-card) { color: var(--ink); background-color: var(--panel); }
+  :root:not([data-elma-theme="light"]) button.secondary { color: var(--ink); background: var(--panel-soft); border-color: var(--line); }
+}
 
   .reboot-overlay {
     position: fixed;
@@ -300,9 +353,34 @@ body {
     padding: 28px 22px;
     border: 1px solid var(--line);
     border-radius: 24px;
-    background: rgba(255, 255, 255, 0.98);
+    background: color-mix(in srgb, var(--panel) 98%, transparent);
     box-shadow: var(--shadow);
     text-align: center;
+  }
+
+  .hero-actions-preferences {
+    display: grid;
+    grid-template-columns: auto minmax(108px, 1fr);
+    gap: 7px 10px;
+    align-items: center;
+    padding: 4px 2px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .hero-actions-preferences label {
+    margin: 0;
+    color: var(--ink);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .hero-actions-preferences select {
+    min-width: 0;
+    min-height: 36px;
+    padding: 5px 28px 5px 8px;
+    color: var(--ink);
+    background-color: var(--panel-soft);
+    border-color: var(--line);
   }
 
   .wifi-handoff-signal {
@@ -851,7 +929,7 @@ body {
     border: 1px solid #cfcfcf;
     border-radius: 8px;
     padding: 10px 12px;
-    background: #ffffff;
+    background: var(--panel);
     color: var(--ink);
     font: inherit;
     min-height: 42px;
@@ -867,27 +945,33 @@ body {
 
   .password-toggle {
     position: absolute;
-    top: 50%;
+    display: grid;
+    place-items: center;
+    top: 0;
+    bottom: 0;
     right: 8px;
     width: 36px;
     height: 36px;
+    min-height: 0;
+    margin: auto 0;
     padding: 0;
     border-radius: 0;
     border: 0;
     background: transparent;
     color: #555555;
-    transform: translateY(-50%);
+    transform: none;
     box-shadow: none;
     transition: transform 180ms ease, color 180ms ease;
+    line-height: 1;
   }
 
   .password-toggle:hover {
     background: transparent;
-    transform: translateY(-50%) scale(1.05);
+    transform: scale(1.05);
   }
 
   .password-toggle:active {
-    transform: translateY(calc(-50% + 2px)) scale(0.96);
+    transform: translateY(2px) scale(0.96);
   }
 
   .eye-icon {
@@ -943,9 +1027,16 @@ body {
     opacity: 1;
   }
 
-  input[type="checkbox"] {
+  input[type="checkbox"],
+  input[type="radio"] {
     width: 18px;
     height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 0;
+    padding: 0;
+    align-self: center;
+    flex: 0 0 18px;
   }
 
   input[type="range"] {
@@ -953,11 +1044,13 @@ body {
   }
 
   .check {
-    display: flex;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    column-gap: 10px;
     align-items: center;
     font-weight: 600;
     padding: 6px 0;
+    white-space: nowrap;
   }
 
   .row {
@@ -1425,6 +1518,15 @@ body {
     background: linear-gradient(90deg, #dc6f5c, #b42318);
   }
 
+  .firmware-list .firmware-item:has(> input[type="radio"]) {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+
+  .firmware-list .firmware-item:has(> input[type="radio"]) > input[type="radio"] {
+    grid-column: 1;
+    justify-self: center;
+  }
+
   .usb-flasher-modal {
     width: min(760px, calc(100vw - 24px));
   }
@@ -1491,9 +1593,10 @@ body {
   }
 
   .usb-flasher-choice {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    column-gap: 10px;
+    align-items: center;
     padding: 11px 12px;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -1507,12 +1610,21 @@ body {
   }
 
   .usb-flasher-choice input {
-    margin-top: 3px;
+    grid-column: 1;
+    justify-self: center;
   }
 
   .usb-flasher-choice span,
   .usb-flasher-choice small {
     display: block;
+  }
+
+  .usb-flasher-choice > span {
+    grid-column: 2;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .usb-flasher-choice small {
@@ -1964,7 +2076,7 @@ body {
     padding: 14px;
     border: 1px solid var(--line);
     border-radius: 14px;
-    background: linear-gradient(180deg, #fdfcf8 0%, #f7f5ef 100%);
+    background: var(--panel-soft);
   }
 
   .gpio-controls-field {
@@ -1980,7 +2092,7 @@ body {
     align-items: center;
     font-size: 0.78rem;
     font-weight: 800;
-    color: #334155;
+    color: var(--ink);
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
@@ -2267,10 +2379,23 @@ body {
   }
 
   .peripheral-diagram-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
     min-height: 0;
-    padding: 8px 14px;
+    padding: 0;
     font-size: 0.76rem;
     line-height: 1;
+  }
+
+  .peripheral-diagram-action > svg,
+  .icon-only-button > svg {
+    display: block;
+    place-self: center;
+    flex: none;
   }
 
   .peripheral-diagram-placeholder {
@@ -2358,6 +2483,16 @@ body {
     pointer-events: auto;
     cursor: crosshair;
     touch-action: none;
+  }
+
+  .peripheral-diagram-floating-label-contact .peripheral-diagram-floating-label-pill {
+    min-width: 18px;
+    min-height: 14px;
+    padding: 1px 4px;
+    font-size: 0.5rem;
+    line-height: 1;
+    letter-spacing: 0.015em;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.18);
   }
 
   .peripheral-diagram-wire-connection {
@@ -2659,6 +2794,13 @@ body {
   .peripheral-diagram-node.controls-visible .peripheral-diagram-node-rotate {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .peripheral-diagram-floating-label[data-node-id^="BOARD_"] .peripheral-diagram-floating-label-pill {
+    min-height: 16px;
+    padding: 2px 5px;
+    font-size: 0.56rem;
+    letter-spacing: 0.015em;
   }
 
   .peripheral-diagram-board-shell:hover .peripheral-diagram-board-edit,
@@ -3132,7 +3274,7 @@ body {
   }
 
   .peripheral-diagram-node-display {
-    top: 8px;
+    top: 112px;
     right: 24px;
   }
 
@@ -3286,7 +3428,7 @@ body {
   .gpio-pin-row select:disabled {
     opacity: 1;
     color: var(--ink);
-    background: #ffffff;
+    background: var(--panel-soft);
     cursor: default;
   }
 
@@ -3671,7 +3813,7 @@ body {
     .peripheral-diagram-stage {
       width: calc(100% + 36px);
       margin: -18px;
-      min-height: 656px;
+      min-height: 760px;
     }
 
     .peripheral-diagram-node {
@@ -3693,7 +3835,7 @@ body {
     }
 
     .peripheral-diagram-node-display {
-      top: 6px;
+      top: 112px;
       right: 8px;
     }
 
@@ -5147,6 +5289,45 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
 .device-log-terminal { height: min(60vh, 600px); min-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #101820; color: #d5f5df; padding: 16px; border: 1px solid #34434c; border-radius: 10px; font: 13px/1.55 Consolas, "Courier New", monospace; tab-size: 4; user-select: text; }
 .device-log-terminal:focus-visible { outline: 2px solid #e99500; outline-offset: 2px; }
 
+/* Occupied GPIO rows share their signal's diagram palette in both themes. */
+.gpio-pin-row-occupied[style*="--gpio-wire-color"] {
+  background: color-mix(in srgb, var(--gpio-wire-color) 20%, var(--panel));
+  border-color: var(--gpio-wire-color);
+  box-shadow: inset 4px 0 var(--gpio-wire-color);
+}
+.gpio-pin-row-occupied[style*="--gpio-wire-color"] .gpio-pin-label {color:var(--ink)}
+/* Connectivity remains visible independently of the selected theme. */
+:root .hero-actions-button.secondary[data-device-online="true"] {
+  background: linear-gradient(180deg, #4fb070, #20744b);
+  border-color: #1f6d48;
+  color: #fff;
+}
+:root .hero-actions-button.secondary[data-device-online="false"] {
+  background: linear-gradient(180deg, #d85f57, #b42318);
+  border-color: #92211a;
+  color: #fff;
+}
+/* Keep controls and settings surfaces in the same theme as their text. */
+:root[data-elma-theme="dark"] :is(input,select,textarea,.hero-actions-menu,.gpio-controls-autodetect) {background:var(--panel-soft);color:var(--ink);border-color:var(--line)}
+:root[data-elma-theme="dark"] :is(.gpio-controls-field-label,.peripheral-binding-label,.gpio-controls-field-label span,h2,h3,h4) {color:var(--ink)}
+:root[data-elma-theme="dark"] :is(input,textarea)::placeholder {color:var(--muted);opacity:1}
+@media(prefers-color-scheme:dark){
+ :root:not([data-elma-theme="light"]) :is(input,select,textarea,.hero-actions-menu,.gpio-controls-autodetect) {background:var(--panel-soft);color:var(--ink);border-color:var(--line)}
+ :root:not([data-elma-theme="light"]) :is(.gpio-controls-field-label,.peripheral-binding-label,.gpio-controls-field-label span,h2,h3,h4) {color:var(--ink)}
+ :root:not([data-elma-theme="light"]) :is(input,textarea)::placeholder {color:var(--muted);opacity:1}
+}
+.voltage-divider-controls {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;margin-top:8px}
+.voltage-divider-controls label {display:flex;flex-direction:column;gap:4px;min-width:0}
+.voltage-divider-controls label>span {white-space:nowrap;font-size:.75rem}
+.voltage-divider-controls select,.voltage-divider-controls input {width:100%;min-width:0;box-sizing:border-box}
+.voltage-divider-maximum,.voltage-divider-warning {grid-column:1/-1;margin:0;font-size:.8rem}
+.voltage-divider-warning {color:#ef4444}
+.voltage-divider-warning[hidden] {display:none}
+.voltage-divider-pin-maximum {position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;line-height:1.2;white-space:nowrap;color:var(--ink);background:var(--panel,#fff);padding:1px 3px;border-radius:2px;pointer-events:none}
+.voltage-divider-unsafe {color:#ef4444;animation:voltage-divider-warning-pulse .8s ease-in-out infinite alternate}
+@keyframes voltage-divider-warning-pulse {from{opacity:1}to{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.voltage-divider-unsafe {animation:none}}
+
 /* Shared configuration layout: profile/action row, then its GPIO bindings. */
 .peripheral-profile-row { display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:start;gap:10px; }
 .peripheral-profile-stack,.peripheral-field-composite { display:contents; }
@@ -5169,26 +5350,36 @@ body.local-builder-mode .tab-button[data-tab="hardware"] {
 
 .peripheral-diagram-actions { flex-wrap:wrap; }
 
-.peripheral-diagram-floating-label-contact .peripheral-diagram-floating-label-pill {
-    min-width: 18px;
-    min-height: 14px;
-    padding: 1px 4px;
-    font-size: 0.5rem;
-    line-height: 1;
-    letter-spacing: 0.015em;
-    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.18);
-  }
+/* Native picker rows and inactive fields retain readable theme contrast. */
+select option, select optgroup {background-color:var(--panel);color:var(--ink)}
+:root :is(input,select,textarea):disabled {opacity:1;color:var(--muted);-webkit-text-fill-color:var(--muted)}
+:is(input,textarea)::placeholder {color:var(--muted);opacity:1}
 
-.peripheral-diagram-floating-label[data-node-id^="BOARD_"] .peripheral-diagram-floating-label-pill {
-    min-height: 16px;
-    padding: 2px 5px;
-    font-size: 0.56rem;
-    letter-spacing: 0.015em;
-  }
-
-.gpio-pin-row-occupied[style*="--gpio-wire-color"] {
-  background: color-mix(in srgb, var(--gpio-wire-color) 20%, var(--panel));
-  border-color: var(--gpio-wire-color);
-  box-shadow: inset 4px 0 var(--gpio-wire-color);
+/* Runtime media, storage and diagnostics surfaces in dark mode. */
+:root[data-elma-theme="dark"] :is(.firmware-item,.equalizer-card,.equalizer-band,.storage-embedded-shell,.storage-command-deck,.storage-crumb-trail,.storage-playback-strip,.storage-file-list,.storage-file-row,.storage-folder-row,.storage-preview-shell,.storage-file-badge,.storage-entry-icon,.storage-entry-icon.file,pre:not(.device-log-terminal),.tab-button,.tab-button-icon) {background:var(--panel-soft);color:var(--ink);border-color:var(--line)}
+:root[data-elma-theme="dark"] :is(.equalizer-card,.storage-embedded-shell,.storage-file-list,.storage-preview-shell) {background:var(--panel)}
+:root[data-elma-theme="dark"] :is(.storage-file-row:hover,.storage-file-row:focus-visible,.storage-file-row.selected,.storage-file-row.playing) {background:var(--accent-soft)}
+:root[data-elma-theme="dark"] :is(.storage-entry-icon,.storage-file-badge) {color:var(--warn)}
+:root[data-elma-theme="dark"] :is(.storage-meter-rail,.playback-hero-button,.storage-inline-actions > button) {background:linear-gradient(180deg,var(--panel-soft),var(--panel));color:var(--ink);border-color:var(--line);box-shadow:inset 0 1px 2px rgba(255,255,255,.08),0 2px 4px rgba(0,0,0,.25)}
+:root[data-elma-theme="dark"] .storage-meter-copy-base {color:var(--ink);text-shadow:none}
+:root[data-elma-theme="dark"] .storage-meter-copy-contrast {color:#17202b;text-shadow:none}
+:root[data-elma-theme="dark"] :is(.tab-button[aria-selected="true"],.playback-hero-button.playing,.storage-inline-actions > button.playing,.storage-mode-button[aria-pressed="true"]) {background:linear-gradient(180deg,var(--accent),var(--accent-strong));color:#17202b;border-color:var(--accent)}
+@media (prefers-color-scheme: dark) {
+:root:not([data-elma-theme="light"]) :is(.firmware-item,.equalizer-card,.equalizer-band,.storage-embedded-shell,.storage-command-deck,.storage-crumb-trail,.storage-playback-strip,.storage-file-list,.storage-file-row,.storage-folder-row,.storage-preview-shell,.storage-file-badge,.storage-entry-icon,.storage-entry-icon.file,pre:not(.device-log-terminal),.tab-button,.tab-button-icon) {background:var(--panel-soft);color:var(--ink);border-color:var(--line)}
+:root:not([data-elma-theme="light"]) :is(.equalizer-card,.storage-embedded-shell,.storage-file-list,.storage-preview-shell) {background:var(--panel)}
+:root:not([data-elma-theme="light"]) :is(.storage-file-row:hover,.storage-file-row:focus-visible,.storage-file-row.selected,.storage-file-row.playing) {background:var(--accent-soft)}
+:root:not([data-elma-theme="light"]) :is(.storage-entry-icon,.storage-file-badge) {color:var(--warn)}
+:root:not([data-elma-theme="light"]) :is(.storage-meter-rail,.playback-hero-button,.storage-inline-actions > button) {background:linear-gradient(180deg,var(--panel-soft),var(--panel));color:var(--ink);border-color:var(--line);box-shadow:inset 0 1px 2px rgba(255,255,255,.08),0 2px 4px rgba(0,0,0,.25)}
+:root:not([data-elma-theme="light"]) .storage-meter-copy-base {color:var(--ink);text-shadow:none}
+:root:not([data-elma-theme="light"]) .storage-meter-copy-contrast {color:#17202b;text-shadow:none}
+:root:not([data-elma-theme="light"]) :is(.tab-button[aria-selected="true"],.playback-hero-button.playing,.storage-inline-actions > button.playing,.storage-mode-button[aria-pressed="true"]) {background:linear-gradient(180deg,var(--accent),var(--accent-strong));color:#17202b;border-color:var(--accent)}
 }
-.gpio-pin-row-occupied[style*="--gpio-wire-color"] .gpio-pin-label {color:var(--ink)}
+
+/* Ground wires and their labels follow the canvas contrast. */
+:root {--diagram-ground-color:#111827;--diagram-ground-text:#ffffff;--diagram-ground-glow:rgba(17,24,39,.18)}
+:root[data-elma-theme="dark"] {--diagram-ground-color:#eee7d8;--diagram-ground-text:#19222d;--diagram-ground-glow:rgba(238,231,216,.18)}
+:root[data-elma-theme="dark"] :is(.peripheral-diagram-frame,.peripheral-diagram-placeholder,.peripheral-diagram-editor-stage) {background:var(--panel);color:var(--ink);border-color:var(--line)}
+@media(prefers-color-scheme:dark){
+ :root:not([data-elma-theme="light"]) {--diagram-ground-color:#eee7d8;--diagram-ground-text:#19222d;--diagram-ground-glow:rgba(238,231,216,.18)}
+ :root:not([data-elma-theme="light"]) :is(.peripheral-diagram-frame,.peripheral-diagram-placeholder,.peripheral-diagram-editor-stage) {background:var(--panel);color:var(--ink);border-color:var(--line)}
+}

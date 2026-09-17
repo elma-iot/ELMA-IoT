@@ -1,5 +1,5 @@
-import {voltageDividerSettings} from './voltage-divider.js';
 import { normalizeWifiPower, renderWifiPowerValues } from "./wifi-power-controls.js";
+import {voltageDividerSettings} from './voltage-divider.js';
 import { restoreLegacyPeripheralProfiles } from "./legacy-peripheral-profiles.js";
 import { applyMqttDefaults } from "./mqtt-defaults.js";
 
@@ -103,6 +103,8 @@ export function createConfigurationSettingsPersistenceModule({
   }
 
   function loadPeripheralDiagramPositions() {
+    const saved=normalizeUiSettings(state.settings?.ui).peripheralDiagramPositions;
+    if(Object.keys(saved||{}).length)return saved;
     try {
       const local = normalizeUiSettings({
         peripheralDiagramPositions: window.localStorage.getItem(peripheralDiagramPositionsStorageKey) || "{}",
@@ -200,6 +202,12 @@ export function createConfigurationSettingsPersistenceModule({
     if (elements.statusLedPin && data.device?.statusLedPin !== undefined) {
       elements.statusLedPin.value = String(data.device.statusLedPin);
     }
+    if (elements.statusLedGreenPin && data.device?.statusLedGreenPin !== undefined) {
+      elements.statusLedGreenPin.value = String(data.device.statusLedGreenPin);
+    }
+    if (elements.statusLedBluePin && data.device?.statusLedBluePin !== undefined) {
+      elements.statusLedBluePin.value = String(data.device.statusLedBluePin);
+    }
     if (elements.oledSdaPin && data.oled?.sdaPin !== undefined && [...elements.oledSdaPin.options].some((option) => option.value === String(data.oled.sdaPin))) {
       elements.oledSdaPin.value = String(data.oled.sdaPin);
     }
@@ -280,6 +288,8 @@ export function createConfigurationSettingsPersistenceModule({
     payload.mqtt.port = Number(payload.mqtt.port || 1883);
     payload.device.savedVolumePercent = Number(elements.volumeSlider?.value || payload.device.savedVolumePercent || 5);
     payload.device.statusLedPin = Number(elements.statusLedPin?.value || payload.device.statusLedPin || state.settings?.device?.statusLedPin || 0);
+    payload.device.statusLedGreenPin = Number(elements.statusLedGreenPin?.value || payload.device.statusLedGreenPin || state.settings?.device?.statusLedGreenPin || 0);
+    payload.device.statusLedBluePin = Number(elements.statusLedBluePin?.value || payload.device.statusLedBluePin || state.settings?.device?.statusLedBluePin || 0);
     payload.device.audioMuted = Boolean(elements.audioMutedToggle?.checked ?? payload.device.audioMuted ?? true);
     payload.device.lowBatterySleepThresholdPercent = Number(payload.device.lowBatterySleepThresholdPercent || 20);
     payload.device.lowBatteryWakeIntervalMinutes = Number(payload.device.lowBatteryWakeIntervalMinutes || 0);
