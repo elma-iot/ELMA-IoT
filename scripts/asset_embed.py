@@ -132,11 +132,19 @@ def npx_command() -> list[str]:
     return ["npx.cmd"] if os.name == "nt" else ["npx"]
 
 
+def tool_command(name: str) -> list[str]:
+    node = os.environ.get("ELMA_NODE_EXECUTABLE")
+    if node:
+        cli = {"esbuild": "esbuild/bin/esbuild", "svgo": "svgo/bin/svgo"}[name]
+        return [node, str(ROOT / "node_modules" / cli)]
+    return [*npx_command(), "--no-install", name]
+
+
 @lru_cache(maxsize=1)
 def has_svgo() -> bool:
     try:
         completed = subprocess.run(
-            [*npx_command(), "--no-install", "svgo", "--version"],
+            [*tool_command("svgo"), "--version"],
             cwd=ROOT,
             check=False,
             capture_output=True,
@@ -159,9 +167,7 @@ def optimize_svg(path: Path) -> bytes:
     input_path.write_text(optimized, encoding="utf-8")
 
     svgo_cmd = [
-        *npx_command(),
-        "--no-install",
-        "svgo",
+        *tool_command("svgo"),
         "--input",
         str(input_path),
         "--output",
@@ -193,15 +199,13 @@ def build_web_assets() -> None:
 
     for code in language_codes:
         locale_environment = dict(os.environ, ELMA_COMPILED_LANGUAGE=code)
-        subprocess.run(["node", str(ROOT / "scripts" / "build_ui_locales.mjs"), str(ROOT), str(BUILD_WEB_DIR)], cwd=ROOT, env=locale_environment, check=True)
+        subprocess.run([os.environ.get("ELMA_NODE_EXECUTABLE", "node"), str(ROOT / "scripts" / "build_ui_locales.mjs"), str(ROOT), str(BUILD_WEB_DIR)], cwd=ROOT, env=locale_environment, check=True)
         target = BUILD_WEB_DIR / "__locales" / code / "firmware-i18n.js"
         target.parent.mkdir(parents=True, exist_ok=True)
         (BUILD_WEB_DIR / "firmware-i18n.js").replace(target)
 
     esbuild_cmd = [
-        *npx_command(),
-        "--no-install",
-        "esbuild",
+        *tool_command("esbuild"),
         str(WEB_DIR / "app.js"),
         "--bundle",
         "--format=esm",
