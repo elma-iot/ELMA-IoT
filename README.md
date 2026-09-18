@@ -16,9 +16,13 @@ Project story and current device write-up:
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
 - Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.51.bin`
 
-The firmware images and portable Windows flasher are available from the [v0.1.51 release](https://github.com/elma-iot/ELMA-IoT/releases/tag/v0.1.51).
+v0.1.51 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
 
 ### v0.1.51 highlights
+
+MQTT Publish message sends separate Text and live Value inputs using the bounded QoS 1 queue. Text can append primitive values; configured primary SSD1306/SH1106 OLEDs support temporary text and Clear text actions. Existing relay controls remain available.
+
+### Earlier releases
 
 - Classic ESP32 internal temperature monitoring rejects the invalid raw-128 conversion (53.3 C), retains valid samples for at most 30 seconds, and displays sample age. Values are labelled estimates because the legacy API has no factory-calibrated accuracy guarantee. No smoothing hides temperature changes; expired readings become unavailable. Other targets retain their sensor driver.
 - Last saved desktop configurations autoload, and legacy settings without peripheral-profile metadata restore audio/display/storage selections from their enabled hardware settings. Explicitly saved selections remain authoritative.
