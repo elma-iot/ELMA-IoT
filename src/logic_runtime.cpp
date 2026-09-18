@@ -1,4 +1,5 @@
 #include "logic_runtime.h"
+#include "logic_text.h"
 #include <algorithm>
 #include <cstring>
 
@@ -56,7 +57,12 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
     if (++depth_ > 32 || ++budget_ > 2048) { --depth_; error_ = "Logics evaluation budget exceeded"; return {}; }
     std::string type = node(n)["type"].as<std::string>();
     JsonDocument result;
-    if (type.compare(0, 6, "value.") == 0) result.set(input(n, "value"));
+    if(type=="value.text") {
+        auto appended=input(n,"append");std::string text;
+        if((!linked(n,"append")||!appended.isNull()) && appendText(input(n,"value").as<std::string>(),appended,input(n,"separator").as<std::string>(),text))result.set(text);
+        else error_="Text value unavailable or exceeds 1024 bytes";
+    }
+    else if (type.compare(0, 6, "value.") == 0) result.set(input(n, "value"));
     else if (type.compare(0, 10, "mainboard.") == 0) {
         auto binding = node(n)["binding"];
         if (binding["kind"] == "status" && (binding["availability"].isNull() || path(binding["availability"]).as<bool>()))
@@ -146,6 +152,15 @@ void Runtime::execute(size_t n, const char*) {
         if (type=="peripheral.play") {
             auto source=input(n,"source");if(source.is<const char*>())args["source"]["path"].set(source);else args["source"].set(source);
         }
+        if(type=="mainboard.mqtt.publish") {
+            for(const char* key:{"topic","retained","qos"})args[key].set(input(n,key));
+            auto appended=input(n,"value");std::string text;
+            if(linked(n,"text")&&input(n,"text").isNull()){error_="MQTT text unavailable";activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;return;}
+            if(linked(n,"value")&&appended.isNull()){error_="MQTT appended value unavailable";activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;return;}
+            if(!appendText(input(n,"text").as<std::string>(),appended,input(n,"separator").as<std::string>(),text)){error_="MQTT payload exceeds 1024 bytes or is not a primitive value";activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;return;}
+            args["payload"]=text;
+        }
+        if(type=="peripheral.text"){args["text"].set(input(n,"text"));args["seconds"].set(input(n,"seconds"));}
         if (type=="peripheral.volume") args["value"].set(input(n,"volume"));
         else if (linked(n,"value") || !node(n)["parameters"]["value"].isNull()) args["value"].set(input(n,"value"));
         std::string error;

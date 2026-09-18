@@ -11,14 +11,14 @@ Project story and current device write-up:
 
 ## Current Release
 
-- Firmware version: `v0.1.50`
+- Firmware version: `v0.1.51`
 - Primary release repository: `elma-iot/ELMA-IoT`
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
-- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.50.bin`
+- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.51.bin`
 
-The firmware images and portable Windows flasher are available from the [v0.1.50 release](https://github.com/elma-iot/ELMA-IoT/releases/tag/v0.1.50).
+The firmware images and portable Windows flasher are available from the [v0.1.51 release](https://github.com/elma-iot/ELMA-IoT/releases/tag/v0.1.51).
 
-### v0.1.50 highlights
+### v0.1.51 highlights
 
 - Classic ESP32 internal temperature monitoring rejects the invalid raw-128 conversion (53.3 C), retains valid samples for at most 30 seconds, and displays sample age. Values are labelled estimates because the legacy API has no factory-calibrated accuracy guarantee. No smoothing hides temperature changes; expired readings become unavailable. Other targets retain their sensor driver.
 - Last saved desktop configurations autoload, and legacy settings without peripheral-profile metadata restore audio/display/storage selections from their enabled hardware settings. Explicitly saved selections remain authoritative.
@@ -621,19 +621,19 @@ Current OTA and rollback behavior:
 The Firmware tab checks GitHub Releases by default and matches the expected asset name to the running build variant.
 
 
-Release asset names for `v0.1.50`:
+Release asset names for `v0.1.51`:
 
-- `esp32-notifier-v0.1.50.bin`
-- `esp32-notifier-hacs-v0.1.50.bin`
-- `esp32-notifier-hacs-slim-v0.1.50.bin`
-- `esp32-notifier-hacs-legacy-ota-v0.1.50.bin`
-- `esp32s3-notifier-v0.1.50.bin`
-- `esp32s3-notifier-hacs-v0.1.50.bin`
-- `esp32s3-notifier-hacs-slim-v0.1.50.bin`
-- `esp32c3-notifier-hacs-v0.1.50.bin`
-- `esp32-ota-bridge-v0.1.50.bin`
-- `esp32s3-ota-bridge-v0.1.50.bin`
-- `esp32c3-ota-bridge-v0.1.50.bin`
+- `esp32-notifier-v0.1.51.bin`
+- `esp32-notifier-hacs-v0.1.51.bin`
+- `esp32-notifier-hacs-slim-v0.1.51.bin`
+- `esp32-notifier-hacs-legacy-ota-v0.1.51.bin`
+- `esp32s3-notifier-v0.1.51.bin`
+- `esp32s3-notifier-hacs-v0.1.51.bin`
+- `esp32s3-notifier-hacs-slim-v0.1.51.bin`
+- `esp32c3-notifier-hacs-v0.1.51.bin`
+- `esp32-ota-bridge-v0.1.51.bin`
+- `esp32s3-ota-bridge-v0.1.51.bin`
+- `esp32c3-ota-bridge-v0.1.51.bin`
 - `ELMA-Flasher-v0.1.52.exe`
 - `SHA256SUMS.txt`
 
@@ -716,7 +716,7 @@ Key files and directories:
 
 Current release notes live here:
 
-- [release-assets/v0.1.50/release-notes.md](release-assets/v0.1.50/release-notes.md)
+- [release-assets/v0.1.51/release-notes.md](release-assets/v0.1.51/release-notes.md)
 - [release-assets/v0.1.42/release-notes.md](release-assets/v0.1.42/release-notes.md)
 - [release-assets/v0.1.41/release-notes.md](release-assets/v0.1.41/release-notes.md)
 - [release-assets/v0.1.39/release-notes.md](release-assets/v0.1.39/release-notes.md)

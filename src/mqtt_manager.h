@@ -25,6 +25,7 @@ class MqttManager {
     void publishChipTemperature();
     void publishDiscovery();
     bool publishButtonActionEvent(const String& buttonLabel, uint8_t pin, const String& action);
+    bool publishLogicMessage(const String& topic,const String& payload,bool retained,uint8_t qos,String& error);
     bool isConnected() const;
     bool requestConnect(String& error);
     bool requestDisconnect(String& error);

@@ -206,6 +206,7 @@ void loop() {
 #else
 #include "app_state.h"
 #include "battery_monitor.h"
+#include <cmath>
 #include "display_manager.h"
 #include "mqtt_manager.h"
 #include "motor_control.h"
@@ -3872,6 +3873,18 @@ void setup() {
             if(command=="play")ok=queueAudioSourceOwned(args["source"],error,node["id"]|"");
             else if(command=="stop")ok=queueLogicAudioStop(node,error,args["all"]|false);
             else if(command=="volume" || command=="set"){double value=args["value"] | -1.0;if(value>=0&&value<=100){audioPlayer->setVolumePercent(uint8_t(value));ok=true;}else error="Invalid Logics volume";}
+        } else if(node["binding"]["group"]=="display") {
+            if(!displayManager||!displayManager->available()||node["binding"]["index"]!=0||node["peripheral"]["profile"]!="i2c-oled"||node["binding"]["pins"]["SDA"]!=settings->oled.sdaPin||node["binding"]["pins"]["SCL"]!=settings->oled.sclPin){message="Configured OLED is unavailable or Logics pins do not match";return false;}
+            if(type=="peripheral.clear")ok=displayManager->clearLogicText();
+            else if(type=="peripheral.text") {
+                double seconds=args["seconds"]|0.0;const char* text=args["text"]|nullptr;
+                if(text&&strlen(text)<=256&&std::isfinite(seconds)&&seconds>0&&seconds<=86400){displayManager->showTemporaryCenterText(text,uint32_t(seconds*1000));ok=true;}
+                else error="Display text requires <=256 bytes and a duration >0 to 86400 seconds";
+            }
+        } else if(type=="mainboard.mqtt.publish") {
+            double qos=args["qos"]|-1.0;
+            if(qos==1)ok=mqttManager->publishLogicMessage(args["topic"]|"",args["payload"]|"",args["retained"]|false,uint8_t(qos),error);
+            else error="MQTT QoS must be 1";
         } else if(type=="mainboard.mqtt.connect")ok=mqttManager->requestConnect(error);
         else if(type=="mainboard.mqtt.disconnect")ok=mqttManager->requestDisconnect(error);
         else if(type=="mainboard.mqtt.rediscover")ok=mqttManager->requestRediscovery(error);

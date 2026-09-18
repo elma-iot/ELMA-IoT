@@ -285,3 +285,10 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     drawWrappedLine(*display, bottom, displayHeight - 9, bottomChars, false);
     flushDisplay();
 }
+
+bool DisplayManager::available() const {return isEnabled();}
+bool DisplayManager::clearLogicText() {
+    if(!isEnabled())return false;
+    temporaryCenterText_="";temporaryCenterTextUntilMs_=0;lastSignature_="";
+    clearDisplay();flushDisplay();markActivity();return true;
+}

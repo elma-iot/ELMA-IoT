@@ -1,7 +1,7 @@
-export const COLORS={execution:'#edf2fb',boolean:'#f33f4a',number:'#24bc73',integer:'#13bbdb',string:'#df59ba',analog:'#ef9900',peripheral:'#438deb',path:'#438deb',audio:'#20bac4'};
+export const COLORS={execution:'#edf2fb',boolean:'#f33f4a',number:'#24bc73',integer:'#13bbdb',string:'#df59ba',analog:'#ef9900',peripheral:'#438deb',path:'#438deb',audio:'#20bac4',scalar:'#13bbdb'};
 export const clone=x=>JSON.parse(JSON.stringify(x));
 export const id=()=>globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-export const compatible=(a,b)=>a===b||b==='number'&&['analog','integer'].includes(a)||a==='path'&&b==='audio';
+export const compatible=(a,b)=>b==='scalar'&&['number','integer','analog','boolean','string'].includes(a)||a===b||b==='number'&&['analog','integer'].includes(a)||a==='path'&&b==='audio';
 export const specKey=s=>`${s.type}:${s.peripheral?.id||''}`;
 export function createNode(spec,position){return {id:id(),type:spec.type,name:spec.title,ports:clone(spec.ports),parameters:clone(spec.parameters),position:clone(position),...(spec.binding?{binding:clone(spec.binding)}:{}),...(spec.peripheral?{peripheral:clone(spec.peripheral)}:{})};}
 export function connect(graph,a,ap,b,bp){
@@ -27,3 +27,5 @@ export function problems(graph,specs){
  const visited=new Set(),stack=[];function visit(n){if(stack.includes(n)){for(const x of stack.slice(stack.indexOf(n)))add(errors,x,'Circular flow: use Repeat instead.');return;}if(visited.has(n))return;stack.push(n);for(const next of adjacency.get(n)||[])visit(next);stack.pop();visited.add(n);}for(const n of graph.nodes)visit(n.id);
  return {errors,hints};
 }
+
+export function upgradeNodes(graph,specs){for(const node of graph.nodes){const definition=specs.find(s=>specKey(s)===specKey(node));if(!definition)continue;const old=node.ports||[],next=definition.ports;const safe=old.every(p=>next.some(q=>['id','label','type','direction'].every(key=>p[key]===q[key])&&(!q.required||p.required)))&&next.filter(q=>!old.some(p=>p.id===q.id)).every(q=>!q.required);if(safe){node.ports=clone(next);node.parameters={...clone(definition.parameters),...node.parameters};}}}

@@ -7,7 +7,7 @@
 
 namespace ElmaLogic {
 namespace {
-bool compatible(const char* a,const char* b) {return std::string(a)==b || std::string(b)=="number" && (std::string(a)=="analog" || std::string(a)=="integer") || std::string(a)=="path" && std::string(b)=="audio";}
+bool compatible(const char* a,const char* b) {return std::string(b)=="scalar"&&(std::string(a)=="number"||std::string(a)=="integer"||std::string(a)=="analog"||std::string(a)=="boolean"||std::string(a)=="string") || std::string(a)==b || std::string(b)=="number" && (std::string(a)=="analog" || std::string(a)=="integer") || std::string(a)=="path" && std::string(b)=="audio";}
 JsonObjectConst port(JsonObjectConst node,const char* name,const char* direction) {for(JsonObjectConst p:node["ports"].as<JsonArrayConst>())if(p["id"]==name&&p["direction"]==direction)return p;return {};}
 }
 bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument& output,std::string& error) {
@@ -61,6 +61,11 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         if(type.find("timing.")==0 && !linked(id,"seconds")) {double seconds=n["parameters"]["seconds"]|0.0;if(seconds<=0||seconds>86400)return fail("Interval must be >0 and <=86400 seconds");}
         if(type=="timing.repeat"&&!linked(id,"count")){double count=n["parameters"]["count"]|0.0;if(count<1||count>128||count!=std::floor(count))return fail("Repeat count must be a whole number 1-128");}
         if(type=="condition.between"&&!linked(id,"minimum")&&!linked(id,"maximum")&&n["parameters"]["minimum"].as<double>()>n["parameters"]["maximum"].as<double>())return fail("Minimum exceeds maximum");
+        if(type=="mainboard.mqtt.publish") {
+            if(!linked(id,"topic")){std::string topic=n["parameters"]["topic"]|"";if(topic.empty()||topic.size()>192||topic.find_first_of("+#")!=std::string::npos)return fail("Enter an exact MQTT topic without wildcards");for(unsigned char c:topic)if(c<32)return fail("MQTT topic contains a control character");}
+            if(!linked(id,"qos")&&n["parameters"]["qos"]!=1)return fail("MQTT QoS must be 1");
+        }
+        if(type=="peripheral.text"&&!linked(id,"seconds")){double v=n["parameters"]["seconds"]|0.0;if(v<=0||v>86400)return fail("Display duration must be >0 and <=86400 seconds");}
         if(type=="audio.tts") {
             if(n["parameters"]["language"]!="en")return fail("Offline speech supports basic English");
             for(const char* key:{"speechRate","voicePitch","intonation"})if(!n["parameters"][key].isNull()) {

@@ -1484,3 +1484,11 @@ void MqttManager::setFrontendError(const String& message) {
         appState_->setLastError(message);
     }
 }
+
+bool MqttManager::publishLogicMessage(const String& topic,const String& payload,bool retained,uint8_t qos,String& error) {
+    if(topic.isEmpty()||topic.length()>192||topic.indexOf('+')>=0||topic.indexOf('#')>=0||qos!=1||payload.length()>1024){error="Invalid MQTT topic, payload or QoS (must be 1)";return false;}
+    for(size_t i=0;i<topic.length();++i)if(uint8_t(topic[i])<32){error="MQTT topic contains a control character";return false;}
+    if(!isConnected()){error="MQTT broker is not connected";return false;}
+    if(!publishPacket(topic.c_str(),qos,retained,payload.c_str(),payload.length())){error="MQTT publish queue full or insufficient memory";return false;}
+    error="";return true;
+}

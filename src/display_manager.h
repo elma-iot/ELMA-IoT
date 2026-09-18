@@ -15,6 +15,8 @@ class DisplayManager {
     void applySettings(const OledSettings& settings);
     void setBootMessage(const String& message);
     void showTemporaryCenterText(const String& message, unsigned long durationMs = 1500UL);
+    bool available() const;
+    bool clearLogicText();
     void markActivity();
     void powerOff();
     void loop(const AppStateSnapshot& state);
