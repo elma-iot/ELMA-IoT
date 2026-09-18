@@ -1,3 +1,4 @@
+#ifndef APP_DISABLE_AUDIO
 #include "device_log.h"
 #include "audio_player.h"
 
@@ -1022,3 +1023,5 @@ bool AudioPlayer::playSource(JsonVariantConst source, String& error) {
     }
     impl_->publish();return true;
 }
+
+#endif // APP_DISABLE_AUDIO

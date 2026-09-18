@@ -18,6 +18,8 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     if(!mutex_)return false;
     source_=2166136261u;for(const char* p=program;*p;++p)source_=(source_^uint8_t(*p))*16777619u;
     JsonDocument compiled;deserializeJson(compiled,program);devices_.set(compiled["devices"]);
+    mode_=compiled["mode"]|"playing";
+    if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
     std::string restored=program;
     JsonDocument data;
     if(loadLogicRecord(data)) {

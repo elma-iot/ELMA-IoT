@@ -1,4 +1,5 @@
 import {createLogicsTab} from './modules/logic-editor.js';
+import {installLogicLayout} from './modules/logic-layout.js';
 import {installFormControlIds} from './modules/form-control-ids.js';
 import {adcGpioPins, peripheralPinRequirement, safePeripheralPins, occupiedPinChoices} from "./modules/peripheral-pin-policy.js";
 import {diagramRect,canvasClientPoint,setupDiagramViewport,focusDiagramViewport} from './modules/diagram-viewport.js';
@@ -9791,4 +9792,4 @@ window.elmaRefreshFlashSettings = async () => {
 };
 startStatusPolling();
 
-createLogicsTab();
+const logicsTab=createLogicsTab();if(logicsTab)installLogicLayout(logicsTab);

@@ -70,7 +70,8 @@ from compact_peripheral_assets import load_manifest,active_mask,block_svg
 peripheral_svg_manifest=load_manifest(ROOT)
 peripheral_svg_paths=sorted(peripheral_svg_manifest)
 active_profiles_text=os.environ.get("ELMA_ACTIVE_PERIPHERAL_PROFILES")
-active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else None
+# No configured peripherals means no detailed illustrations; explicit project masks still win.
+active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else []
 peripheral_svg_mask=active_mask(peripheral_svg_manifest,active_profiles)
 env.Append(CPPDEFINES=[("APP_PERIPHERAL_SVG_MASK",peripheral_svg_mask)])
 if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)}; others use blocks with identical I/O")
