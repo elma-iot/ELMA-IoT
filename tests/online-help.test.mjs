@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 
 globalThis.window={ElmaI18n:{language:'ru'}};
 globalThis.document={documentElement:{lang:'en'}};
@@ -9,4 +10,10 @@ test('device Help routes use the active locale and stable topic IDs',()=>{
  assert.equal(helpUrl('logics.gate'),'https://elma-iot.github.io/elma-iot-docs/ru/logics/gate/');
  assert.equal(helpIdForNode({type:'timing.repeat'}),'logics.repeat');
  assert.equal(helpIdForNode({type:'peripheral.play',peripheral:{group:'control',profile:'buzzer'}}),'peripheral.control-buzzer');
+});
+
+test('device section Help uses compact accessible information controls',()=>{
+ const source=readFileSync(new URL('../web/modules/online-help.js',import.meta.url),'utf8');
+ assert.match(source,/online-help-button/);assert.match(source,/button\.textContent='i'/);assert.match(source,/button\.title=label/);
+ assert.doesNotMatch(source,/\? Help/);
 });
