@@ -1,4 +1,5 @@
 import {createLogicsTab} from './modules/logic-editor.js';
+import {installOnlineHelpLinks} from './modules/online-help.js';
 import {installLogicLayout} from './modules/logic-layout.js';
 import {installFormControlIds} from './modules/form-control-ids.js';
 import {adcGpioPins, peripheralPinRequirement, safePeripheralPins, occupiedPinChoices} from "./modules/peripheral-pin-policy.js";
@@ -9790,6 +9791,7 @@ window.elmaRefreshFlashSettings = async () => {
     elements.localBuilderCompileFlash.disabled = false;
   }
 };
+installOnlineHelpLinks();
 startStatusPolling();
 
 const logicsTab=createLogicsTab();if(logicsTab)installLogicLayout(logicsTab);

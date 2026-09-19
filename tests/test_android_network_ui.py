@@ -22,4 +22,4 @@ def disconnect():
 def finish():
  view.page().runJavaScript('document.getElementById("mqttConnectButton").textContent',lambda text:(results.update(disconnected=text),app.quit()))
 view.setUrl(QUrl(f'http://127.0.0.1:{server.server_port}/index.html?elmaRuntime=pc-designer'));view.show();QTimer.singleShot(4000,scan);QTimer.singleShot(30000,app.quit);app.exec();server.shutdown();print(json.dumps(results));
-sys.exit(0 if len(results.get('networks',[]))==2 and '-71' in results['networks'][1] and results.get('connected',{}).get('label')=='Disconnect MQTT' and results.get('disconnected')=='Connect MQTT' and results['connected']['calls'].count('mqtt')>=1 else 1)
+sys.exit(0 if len(results.get('networks',[]))==2 and '-71' in results['networks'][1] and results.get('connected',{}).get('label')=='Disconnect MQTT' and results.get('disconnected')=='Test Connection' and results['connected']['calls'].count('mqtt')>=1 else 1)

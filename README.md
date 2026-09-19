@@ -11,12 +11,18 @@ Project story and current device write-up:
 
 ## Current Release
 
-- Firmware version: `v0.1.53`
+- Firmware version: `v0.1.54`
 - Primary release repository: `elma-iot/ELMA-IoT`
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
-- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.53.bin`
+- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.54.bin`
 
-v0.1.53 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
+v0.1.54 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
+
+### v0.1.54 highlights
+
+The device web interface now opens centralized online documentation through lightweight localized Help links. Every Logics block routes to its stable topic ID; no manuals or screenshots consume firmware flash or OTA headroom.
+
+Standalone PlatformIO targets now select their matching board profile at build time, just as Android and Windows already do. This excludes unrelated board artwork and metadata from the image and preserves the existing dual-OTA partition layout and update compatibility.
 
 ### v0.1.53 highlights
 
@@ -633,20 +639,20 @@ Current OTA and rollback behavior:
 The Firmware tab checks GitHub Releases by default and matches the expected asset name to the running build variant.
 
 
-Release asset names for `v0.1.53`:
+Release asset names for `v0.1.54`:
 
-- `esp32-notifier-v0.1.53.bin`
-- `esp32-notifier-hacs-v0.1.53.bin`
-- `esp32-notifier-hacs-slim-v0.1.53.bin`
-- `esp32-notifier-hacs-legacy-ota-v0.1.53.bin`
-- `esp32s3-notifier-v0.1.53.bin`
-- `esp32s3-notifier-hacs-v0.1.53.bin`
-- `esp32s3-notifier-hacs-slim-v0.1.53.bin`
-- `esp32c3-notifier-hacs-v0.1.53.bin`
-- `esp32-ota-bridge-v0.1.53.bin`
-- `esp32s3-ota-bridge-v0.1.53.bin`
-- `esp32c3-ota-bridge-v0.1.53.bin`
-- `ELMA-Flasher-v0.1.55.exe`
+- `esp32-notifier-v0.1.54.bin`
+- `esp32-notifier-hacs-v0.1.54.bin`
+- `esp32-notifier-hacs-slim-v0.1.54.bin`
+- `esp32-notifier-hacs-legacy-ota-v0.1.54.bin`
+- `esp32s3-notifier-v0.1.54.bin`
+- `esp32s3-notifier-hacs-v0.1.54.bin`
+- `esp32s3-notifier-hacs-slim-v0.1.54.bin`
+- `esp32c3-notifier-hacs-v0.1.54.bin`
+- `esp32-ota-bridge-v0.1.54.bin`
+- `esp32s3-ota-bridge-v0.1.54.bin`
+- `esp32c3-ota-bridge-v0.1.54.bin`
+- `ELMA-Flasher-v0.1.57.exe`
 - `SHA256SUMS.txt`
 
 GitHub release publishing is automated by [.github/workflows/platformio.yml](.github/workflows/platformio.yml): publishing a release triggers CI to build eight operating firmware variants (including the legacy-slot build), three minimal recovery variants and the Windows flasher. Existing manually verified assets are not overwritten. Full release images use ESP32-WROOM, ESP32-S3 Super Mini and ESP32-C3 board defaults respectively; use the EXE to build for another supported board. Binaries and the EXE are release attachments, not Git source files.
@@ -728,6 +734,7 @@ Key files and directories:
 
 Current release notes live here:
 
+- [release-assets/v0.1.54/release-notes.md](release-assets/v0.1.54/release-notes.md)
 - [release-assets/v0.1.53/release-notes.md](release-assets/v0.1.53/release-notes.md)
 - [release-assets/v0.1.52/release-notes.md](release-assets/v0.1.52/release-notes.md)
 - [release-assets/v0.1.42/release-notes.md](release-assets/v0.1.42/release-notes.md)

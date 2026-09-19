@@ -58,7 +58,21 @@ BOARD_ASSET_IDS = {
     "esp32-c6-mini-breadboard.svg": 13,
 }
 
-selected_board_id_text = os.environ.get("ELMA_SELECTED_BOARD_PROFILE_ID", "0").strip()
+default_board_ids = {
+    "esp32_notifier": "8", "esp32_notifier_hacs": "8",
+    "esp32_notifier_hacs_slim": "8", "esp32_notifier_hacs_legacy_ota": "8",
+    "esp32_notifier_slim": "8", "esp32_designer_noaudio": "8",
+    "esp32_designer_noaudio_hacs": "8", "esp32_designer_noaudio_slim": "8",
+    "esp32_designer_noaudio_hacs_slim": "8",
+    "esp32c3_designer": "11", "esp32c3_designer_hacs": "11",
+    "esp32c3_designer_slim": "11", "esp32c3_designer_hacs_slim": "11",
+    "esp32s3_notifier": "1", "esp32s3_notifier_hacs": "1",
+    "esp32s3_notifier_slim": "1", "esp32s3_notifier_hacs_slim": "1",
+    "esp32s3_notifier_hacs_audio_test": "1", "esp32s3_designer_noaudio": "1",
+    "esp32s3_designer_noaudio_hacs": "1", "esp32s3_designer_noaudio_slim": "1",
+    "esp32s3_designer_noaudio_hacs_slim": "1",
+}
+selected_board_id_text = os.environ.get("ELMA_SELECTED_BOARD_PROFILE_ID", default_board_ids.get(env.get("PIOENV"), "0")).strip()
 if not selected_board_id_text.isdigit():
     raise SystemExit("ELMA_SELECTED_BOARD_PROFILE_ID must be a numeric board identifier")
 selected_board_id = int(selected_board_id_text)
