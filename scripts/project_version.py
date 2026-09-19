@@ -52,7 +52,7 @@ def validate(project_dir: Path, expected_tag: str = "", validate_release_metadat
     if not flasher_match or flasher_match.group(1) != version:
         errors.append("ELMA Flasher APP_VERSION is missing or does not match firmware APP_VERSION")
 
-    desktop_version=version
+    desktop_version=None
     metadata=project_dir.parent/"Windows"/"app_metadata.py"
     if metadata.is_file():
         text=metadata.read_text(encoding="utf-8")
@@ -80,9 +80,13 @@ def validate(project_dir: Path, expected_tag: str = "", validate_release_metadat
             asset = f"{prefix}-{tag}.bin"
             if asset not in notes:
                 errors.append(f"release notes do not list {asset}")
-        flasher_asset = f"ELMA-Flasher-v{desktop_version}.exe"
-        if flasher_asset not in notes:
-            errors.append(f"release notes do not list {flasher_asset}")
+        # The public firmware checkout intentionally has no private Windows sibling
+        # in CI. Validate its independently versioned asset only when that metadata
+        # is actually available in the local multi-repository workspace.
+        if desktop_version:
+            flasher_asset = f"ELMA-Flasher-v{desktop_version}.exe"
+            if flasher_asset not in notes:
+                errors.append(f"release notes do not list {flasher_asset}")
 
     if errors:
         raise RuntimeError("Project version validation failed:\n- " + "\n- ".join(errors))
