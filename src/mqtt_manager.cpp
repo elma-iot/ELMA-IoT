@@ -16,6 +16,13 @@ String payloadToString(char* payload, size_t len) {
     return value;
 }
 
+String uniqueBrokerClientId(const String& configured) {
+    const String base = configured.isEmpty() ? "elma-device" : configured;
+    char suffix[8];
+    snprintf(suffix, sizeof(suffix), "-%06llX", static_cast<unsigned long long>(ESP.getEfuseMac() & 0xFFFFFFULL));
+    return base + suffix;
+}
+
 bool mqttReconnectRequired(const SettingsBundle& current, const SettingsBundle& next) {
     return current.mqtt.host != next.mqtt.host ||
            current.mqtt.port != next.mqtt.port ||
@@ -406,7 +413,10 @@ void MqttManager::configureClient() {
     // AsyncMqttClient borrows these pointers; neither temporaries nor a
     // SettingsBundle replaced by a later UI save may own their storage.
     clientHost_ = settings_.mqtt.host;
-    clientId_ = settings_.mqtt.clientId.isEmpty() ? settings_.device.deviceName : settings_.mqtt.clientId;
+    // MQTT brokers allow only one live connection per client ID. Projects are
+    // commonly cloned to several ESPs, so keep the configured ID as the human
+    // readable prefix and add this chip's stable hardware suffix.
+    clientId_ = uniqueBrokerClientId(settings_.mqtt.clientId.isEmpty() ? settings_.device.deviceName : settings_.mqtt.clientId);
     clientUsername_ = settings_.mqtt.username;
     clientPassword_ = settings_.mqtt.password;
     clientWillTopic_ = HaBridge::availabilityTopic(settings_);

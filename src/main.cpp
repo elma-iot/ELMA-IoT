@@ -3865,9 +3865,11 @@ void setup() {
             if(command=="stop"){bool stopped=queueLogicAudioStop(node,error,args["all"]|false);if(!stopped)message=error.c_str();return stopped;}
             if(command=="play"){JsonDocument source;source.set(args["source"]);source["output"]["kind"]=node["parameters"]["buzzerMode"]|"passive";source["output"]["slot"]=(std::string(node["binding"]["group"]|"")+":"+std::to_string(node["binding"]["index"]|0));ok=queueAudioSourceOwned(source.as<JsonVariantConst>(),error,node["id"]|"");}
         } else if(node["binding"]["group"]=="audio") {
-            auto pins=node["binding"]["pins"];
-            if(!activeAudioOutputEnabled || pins["BCLK"]!=activeI2sBclkPin || pins["WS"]!=activeI2sWsPin || pins["DIN"]!=activeI2sDoutPin) {
-                message="Compiled Logics DAC pins differ from the active audio configuration";return false;
+            // OTA intentionally retains saved settings. The primary audio action
+            // therefore follows the DAC that audioPlayer initialized at boot,
+            // even when the graph was compiled with older pin metadata.
+            if(!activeAudioOutputEnabled) {
+                message="Compiled Logics audio action requires an enabled DAC";return false;
             }
             std::string command=args["action"] | "";
             if(command=="play")ok=queueAudioSourceOwned(args["source"],error,node["id"]|"");
