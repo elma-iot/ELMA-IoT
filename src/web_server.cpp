@@ -1094,6 +1094,9 @@ void WebServerManager::registerApiRoutes() {
 #endif
         JsonObject firmware = doc["firmware"].to<JsonObject>();
         firmware["version"] = APP_VERSION;
+        firmware["configurationSnapshotVersion"] = 1;
+        firmware["serialConfigurationSnapshot"] = true;
+        firmware["selectiveConfigurationApply"] = true;
         firmware["buildDate"] = APP_BUILD_DATE;
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
         firmware["chipFamily"] = "esp32s3";

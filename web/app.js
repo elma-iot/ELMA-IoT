@@ -3676,7 +3676,7 @@ function peripheralDiagramTemplatePins(groupKey, profileValue) {
   switch (groupKey) {
     case "audio":
       if (profile.includes("buzzer")) {
-        return ["SIG", "VCC", "GND"];
+        return ["SIG", "GND"];
       }
       return peripheralDiagramBindingPins("audio").length ? peripheralDiagramBindingPins("audio") : ["WS", "BCLK", "DOUT", "VCC", "GND"];
     case "audioIn":
@@ -3747,7 +3747,10 @@ function peripheralDiagramTemplatePins(groupKey, profileValue) {
       if (profile.includes("drv8833")) {
         return ["IN1", "IN2", "IN3", "IN4", "VCC", "GND"];
       }
-      if (profile.includes("servo") || profile.includes("buzzer") || profile.includes("vibration")) {
+      if (profile.includes("buzzer")) {
+        return ["SIG", "GND"];
+      }
+      if (profile.includes("servo") || profile.includes("vibration")) {
         return ["SIG", "VCC", "GND"];
       }
       if (profile.includes("led-pwm-dimmer")) {

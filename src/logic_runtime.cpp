@@ -4,6 +4,19 @@
 #include <cstring>
 
 namespace ElmaLogic {
+namespace {
+void setBuzzerPreset(JsonObject source,const char* requested) {
+    const std::string preset=requested?requested:"beep";
+    auto melody=source["melody"].to<JsonObject>();melody["instrument"]="organ";melody["octave"]=4;
+    auto notes=melody["notes"].to<JsonArray>();
+    auto add=[&](int note,float start,float duration){auto item=notes.add<JsonObject>();item["note"]=note;item["start"]=start;item["duration"]=duration;item["velocity"]=.75f;};
+    if(preset=="double-beep"){add(69,0,.18f);add(69,.30f,.18f);}
+    else if(preset=="alert"){add(76,0,.16f);add(69,.22f,.16f);add(76,.44f,.24f);}
+    else if(preset=="doorbell"){add(76,0,.35f);add(72,.42f,.55f);}
+    else if(preset=="success"){add(60,0,.16f);add(64,.20f,.16f);add(67,.40f,.30f);}
+    else add(69,0,.25f);
+}
+}
 bool Runtime::begin(const char* payload, Action action, std::string& error) {
     suspend(); graph_.clear(); previous_.clear(); cache_.clear(); started_ = false; paused_ = false; error_.clear();
     if (std::strlen(payload) > 32768 || deserializeJson(graph_, payload) ||
@@ -150,7 +163,10 @@ void Runtime::execute(size_t n, const char*) {
         if (type.compare(0,7,"action.")==0) { auto ref=input(n,"device");target=ref.as<JsonObjectConst>();args["action"]=type.substr(7); }
         else args["action"]=type.substr(type.find('.')+1);
         if (type=="peripheral.play") {
-            auto source=input(n,"source");if(source.is<const char*>())args["source"]["path"].set(source);else args["source"].set(source);
+            auto source=input(n,"source");
+            if(source.is<const char*>()&&strlen(source.as<const char*>()))args["source"]["path"].set(source);
+            else if(!source.isNull())args["source"].set(source);
+            else if(std::string(node(n)["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos)setBuzzerPreset(args["source"].to<JsonObject>(),node(n)["parameters"]["preset"]|"beep");
         }
         if(type=="mainboard.mqtt.publish") {
             for(const char* key:{"topic","retained","qos"})args[key].set(input(n,key));

@@ -27,10 +27,13 @@ bool loadLogicRecord(JsonDocument& record) {
     Preferences prefs;
     if(prefs.begin("elma-logics",true)){
         uint32_t remembered=prefs.getUInt("revision",0);if(remembered>latestRevision)latestRevision=remembered;
-        size_t size=prefs.getBytesLength("record");std::string data;
-        if(size && size<=40000){data.resize(size);if(prefs.getBytes("record",&data[0],size)!=size)data.clear();}
-        prefs.end();JsonDocument candidate;
-        if(!data.empty() && !deserializeJson(candidate,data))accept(candidate);
+        for(const char* key:{"compact","record"}) {
+            size_t size=prefs.getBytesLength(key);std::string data;
+            if(size && size<=40000){data.resize(size);if(prefs.getBytes(key,&data[0],size)!=size)data.clear();}
+            JsonDocument candidate;
+            if(!data.empty() && !(std::string(key)=="compact"?deserializeMsgPack(candidate,data):deserializeJson(candidate,data)))accept(candidate);
+        }
+        prefs.end();
     }
     return found;
 }
@@ -60,12 +63,34 @@ bool saveLogicRecord(JsonVariantConst record,String& error) {
         endStorageWrite(target);
         if(ok){rememberRevision(next);error="";return true;}
     }
-    // NVS updates are atomic; never erase existing settings to make room.
-    String data;serializeJson(record,data);
-    Preferences prefs;
-    bool ok=prefs.begin("elma-logics",false);
-    if(ok){ok=prefs.putBytes("record",data.c_str(),data.length())==data.length();prefs.end();}
+    // MessagePack is substantially smaller than the editable JSON and NVS
+    // already journals blob updates atomically. Keep the legacy JSON reader
+    // above so graphs saved by older firmware migrate on their next save.
+    String data;serializeMsgPack(record,data);
+    auto writeCompact=[&](){Preferences prefs;bool saved=prefs.begin("elma-logics",false);if(saved){saved=prefs.putBytes("compact",data.c_str(),data.length())==data.length();if(saved)prefs.remove("record");prefs.end();}return saved;};
+    bool ok=writeCompact();
+    if(!ok) {
+        // Persistent Logics are more important than the inactive copy of the
+        // bounded reboot log. Reclaim only that old checkpoint and retry; the
+        // live serial/RAM log and current boot checkpoint remain available.
+        Preferences logs;
+        if(logs.begin("rebootlog",false)){uint8_t active=logs.getUChar("active",0)&1;logs.remove(active?"boot0":"boot1");logs.end();}
+        ok=writeCompact();
+    }
     if(ok){rememberRevision(next);error="";return true;}
     error="Cannot persist Logics: insert a configured SD card or free internal storage";
     return false;
+}
+bool clearLogicRecord() {
+    bool ok=true;
+    for(auto target:{StorageTarget::Flash,StorageTarget::Sd}) {
+        auto fs=getStorageFs(target);if(!fs || !storageMounted(target))continue;
+        beginStorageWrite(target);
+        for(const char* path:{"/.elma-logics.json","/.elma-logics.0.json","/.elma-logics.1.json"})fs->remove(path);
+        endStorageWrite(target);
+    }
+    Preferences prefs;
+    if(prefs.begin("elma-logics",false)){ok=prefs.clear()&&ok;prefs.end();}else ok=false;
+    latestRevision=0;
+    return ok;
 }

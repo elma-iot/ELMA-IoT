@@ -163,7 +163,7 @@ export function defaultPeripheralPins(groupKey, profileValue, bindingPins = []) 
     return ["WS", "SCK", "SD", "VCC", "GND"];
   }
   if (group === "audio") {
-    if (profile.includes("buzzer")) return ["SIG", "VCC", "GND"];
+    if (profile.includes("buzzer")) return ["SIG", "GND"];
     if (profile.includes("bluetooth")) return ["BT", "PWR"];
     return ["WS", "BCLK", "DOUT", "VCC", "GND"];
   }
@@ -178,7 +178,8 @@ export function defaultPeripheralPins(groupKey, profileValue, bindingPins = []) 
   if (group === "control") {
     if (profile.includes("dual-servo")) return ["PWM1", "PWM2", "5V", "GND"];
     if (profile.includes("drv8833")) return ["IN1", "IN2", "IN3", "IN4", "VCC", "GND"];
-    if (profile.includes("servo") || profile.includes("buzzer") || profile.includes("vibration")) return ["SIG", "VCC", "GND"];
+    if (profile.includes("buzzer")) return ["SIG", "GND"];
+    if (profile.includes("servo") || profile.includes("vibration")) return ["SIG", "VCC", "GND"];
     if (profile.includes("led-pwm-dimmer")) return ["PWM", "VCC", "GND"];
     if (profile.includes("fan")) return ["PWM", "TACH", "VCC", "GND"];
     if (profile.includes("tb6612") || profile.includes("l298n") || profile.includes("dc-motor-driver-generic")) return ["AIN1", "AIN2", "BIN1", "BIN2", "PWMA", "PWMB", "STBY", "VCC", "GND"];

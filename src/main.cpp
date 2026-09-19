@@ -13,6 +13,7 @@
 
 #include "default_config.h"
 #include "motor_runtime_config.h"
+#include "logic_storage.h"
 #include "storage_backend.h"
 
 namespace {
@@ -493,6 +494,7 @@ bool otaPendingVerification = false;
 bool otaHealthConfirmed = false;
 unsigned long otaBootStartedAt = 0;
 bool powerCycleCounterClearArmed = false;
+bool runtimeSafeModeActive = false;
 unsigned long powerCycleCounterClearAt = 0;
 unsigned long lastInputPollAt = 0;
 String otaPendingVersion;
@@ -577,9 +579,21 @@ constexpr char kOtaLastBadReasonKey[] = "bad_reason";
 constexpr char kPowerCycleNamespace[] = "boot_guard";
 constexpr char kPowerCycleCountKey[] = "pc_count";
 constexpr char kLowBatteryBootGuardFixKey[] = "lb_sleep_fix";
+constexpr char kAbnormalResetCountKey[] = "crash_count";
+constexpr uint8_t kRuntimeSafeModeThreshold = 3;
+constexpr char kAudioPlaybackGuardNamespace[] = "audio_guard";
+constexpr char kAudioPlaybackPendingKey[] = "pending";
+constexpr char kAudioPlaybackUrlKey[] = "url";
+constexpr unsigned long kAudioPlaybackStableMs = 20000UL;
+
+bool audioPlaybackGuardActive = false;
+unsigned long audioPlaybackGuardStartedAt = 0;
+String audioPlaybackGuardUrl;
 
 bool playRequest(const String& url, const String& label, const String& type, const String& source, String& error, bool addToHistory);
+const char* resetReasonToString(esp_reset_reason_t reason);
 void flushPendingSettingsNow();
+void syncPendingLastPlaybackSettings();
 void restoreAmbientVolumeIfNeeded();
 void applyCpuFrequencyPolicy();
 bool queuePreviewResume(const AppStateSnapshot& snapshot, const String& previewSource);
@@ -651,6 +665,76 @@ String canonicalPlaybackReference(const String& url) {
         return String(storageTargetId(storageTarget)) + ":" + storagePath;
     }
     return PlaybackText::normalizeUrl(url);
+}
+
+bool resetReasonCanBeCausedByPlayback(esp_reset_reason_t reason) {
+    return reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT ||
+        reason == ESP_RST_TASK_WDT || reason == ESP_RST_WDT;
+}
+
+void clearAudioPlaybackGuard() {
+    Preferences preferences;
+    if (preferences.begin(kAudioPlaybackGuardNamespace, false)) {
+        preferences.remove(kAudioPlaybackPendingKey);
+        preferences.remove(kAudioPlaybackUrlKey);
+        preferences.end();
+    }
+    audioPlaybackGuardActive = false;
+    audioPlaybackGuardStartedAt = 0;
+    audioPlaybackGuardUrl = "";
+}
+
+void armAudioPlaybackGuard(const String& url) {
+    const String normalizedUrl = canonicalPlaybackReference(url);
+    Preferences preferences;
+    if (preferences.begin(kAudioPlaybackGuardNamespace, false)) {
+        preferences.putBool(kAudioPlaybackPendingKey, true);
+        preferences.putString(kAudioPlaybackUrlKey, normalizedUrl);
+        preferences.end();
+    }
+    audioPlaybackGuardActive = true;
+    audioPlaybackGuardStartedAt = millis();
+    audioPlaybackGuardUrl = normalizedUrl;
+    DebugLog.printf("[audio-guard] armed for %s\n", normalizedUrl.c_str());
+}
+
+void recoverInterruptedAudioPlayback(esp_reset_reason_t resetReason) {
+    Preferences preferences;
+    if (!preferences.begin(kAudioPlaybackGuardNamespace, true)) return;
+    const bool pending = preferences.getBool(kAudioPlaybackPendingKey, false);
+    const String guardedUrl = preferences.getString(kAudioPlaybackUrlKey, "");
+    preferences.end();
+    if (!pending) return;
+
+    if (resetReasonCanBeCausedByPlayback(resetReason) && settings != nullptr &&
+        settingsManager != nullptr && settings->audio.lastPlayback.resumeAfterBoot &&
+        canonicalPlaybackReference(settings->audio.lastPlayback.url) == guardedUrl) {
+        settings->audio.lastPlayback.resumeAfterBoot = false;
+        syncPendingLastPlaybackSettings();
+        settingsManager->save(*settings);
+        runtimeAudio.resumeSavedPlaybackPending = false;
+        const String message = "Automatic playback was stopped because this source caused an abnormal restart.";
+        if (appState != nullptr) appState->setLastError(message);
+        DebugLog.printf("[audio-guard] quarantined unstable saved source after %s reset: %s\n",
+                        resetReasonToString(resetReason), guardedUrl.c_str());
+    } else {
+        DebugLog.printf("[audio-guard] cleared stale playback marker after %s reset\n", resetReasonToString(resetReason));
+    }
+    clearAudioPlaybackGuard();
+}
+
+void serviceAudioPlaybackGuard(const AppStateSnapshot& snapshot) {
+    if (!audioPlaybackGuardActive) return;
+    const String currentUrl = canonicalPlaybackReference(snapshot.playback.url);
+    const bool active = snapshot.playback.state == "playing" || snapshot.playback.state == "buffering";
+    if (!active || currentUrl != audioPlaybackGuardUrl) {
+        clearAudioPlaybackGuard();
+        return;
+    }
+    if (millis() - audioPlaybackGuardStartedAt >= kAudioPlaybackStableMs) {
+        DebugLog.printf("[audio-guard] source stable; automatic resume allowed: %s\n", audioPlaybackGuardUrl.c_str());
+        clearAudioPlaybackGuard();
+    }
 }
 
 void syncPendingLastPlaybackSettings() {
@@ -1449,6 +1533,19 @@ uint8_t updatePowerCycleCounter(esp_reset_reason_t resetReason) {
     return count;
 }
 
+uint8_t updateAbnormalResetCounter(esp_reset_reason_t resetReason) {
+    Preferences preferences;
+    if (!preferences.begin(kPowerCycleNamespace, false)) return 0;
+    uint8_t count=preferences.getUChar(kAbnormalResetCountKey,0);
+    if(resetReasonCanBeCausedByPlayback(resetReason)&&count<255){++count;preferences.putUChar(kAbnormalResetCountKey,count);}
+    preferences.end();return count;
+}
+
+void clearAbnormalResetCounter() {
+    Preferences preferences;
+    if(preferences.begin(kPowerCycleNamespace,false)){removePreferenceIfPresent(preferences,kAbnormalResetCountKey);preferences.end();}
+}
+
 void armPowerCycleCounterClear() {
     powerCycleCounterClearArmed = true;
     powerCycleCounterClearAt = millis() + kPowerCycleCounterClearDelayMs;
@@ -1459,8 +1556,9 @@ void maybeClearPowerCycleCounterAfterStableBoot() {
         return;
     }
     clearPowerCycleCounter();
+    clearAbnormalResetCounter();
     powerCycleCounterClearArmed = false;
-    DebugLog.println("[boot-guard] power-cycle counter cleared after stable uptime");
+    DebugLog.println("[boot-guard] reset counters cleared after stable uptime");
 }
 
 void storeRollbackPendingInfo(const String& version, const String& reason) {
@@ -3067,6 +3165,18 @@ void serviceCloneProvisioningSerial() {
         } else if (command == "ELMA_CLONE_PING") {
             DebugLog.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
             Serial.flush();
+        } else if (command == "ELMA_CONFIG_SNAPSHOT") {
+            JsonDocument settingsDocument;
+            settingsManager->toJson(*settings, settingsDocument.to<JsonObject>());
+            String settingsJson;serializeJson(settingsDocument,settingsJson);
+            JsonDocument logicDocument;logicDevice.snapshot(logicDocument,true);
+            String logicJson;serializeJson(logicDocument,logicJson);
+            DebugLog.printf("[elma-config] schema=1 firmware=%s settingsBytes=%u logicsBytes=%u\n", APP_VERSION,
+                static_cast<unsigned>(settingsJson.length()),static_cast<unsigned>(logicJson.length()));
+            Serial.print("[elma-config-settings] ");Serial.println(settingsJson);
+            Serial.print("[elma-config-logics] ");Serial.println(logicJson);
+            DebugLog.println("[elma-config] end");
+            Serial.flush();
         } else if (command == "ELMA_NETWORK_STATUS") {
             // Requested after USB re-enumeration, when boot-time log messages
             // may already have passed before Android opened the runtime port.
@@ -3668,6 +3778,9 @@ void processDeferredActions() {
     if (deferredActions->playPending && (otaManager == nullptr || !otaManager->isBusy())) {
         const AppStateSnapshot playbackSnapshotBeforeStart = appState != nullptr ? appState->snapshot() : AppStateSnapshot{};
         bool started = false;
+        const bool guardPlayback = isResumablePlaybackSelection(
+            deferredActions->playUrl, deferredActions->playType, deferredActions->playSource);
+        if (guardPlayback) armAudioPlaybackGuard(deferredActions->playUrl);
         if (deferredActions->playSource == "effect-ambient") {
             restoreEffectVolumeIfNeeded();
             runtimeAudio.ambientPreviousVolume = settings != nullptr ? settings->device.savedVolumePercent : runtimeAudio.ambientPreviousVolume;
@@ -3714,6 +3827,7 @@ void processDeferredActions() {
                     deferredActions->playSource);
             }
         }
+        if (!started && guardPlayback) clearAudioPlaybackGuard();
         if (started && deferredActions->playAddToHistory) {
             rememberPlaybackSelection(
                 deferredActions->playUrl,
@@ -3787,6 +3901,14 @@ void setup() {
 
     settingsManager->begin();
     *settings = settingsManager->load();
+    const uint8_t abnormalResetCount=updateAbnormalResetCounter(resetReason);
+    runtimeSafeModeActive=abnormalResetCount>=kRuntimeSafeModeThreshold;
+    if(abnormalResetCount>0)armPowerCycleCounterClear();
+    recoverInterruptedAudioPlayback(resetReason);
+    if(runtimeSafeModeActive){
+        settings->audio.lastPlayback.resumeAfterBoot=false;
+        DebugLog.printf("[boot-guard] runtime safe mode active after %u consecutive abnormal resets\n",static_cast<unsigned>(abnormalResetCount));
+    }
     repairLowBatteryBootCounterOnce();
 
     // Take ownership of configured bridge inputs before storage, networking, or
@@ -3895,6 +4017,11 @@ void setup() {
         if(!ok)message=error.isEmpty()?"Unsupported or failed Logics action":error.c_str();
         return ok;
     });
+    if(runtimeSafeModeActive){
+        const char* warning="Recovery safe mode: automatic playback and Logics were stopped after repeated abnormal restarts. Review them before restarting.";
+        logicDevice.enterRecoverySafeMode(warning);
+        appState->setLastError(warning);
+    }
 
 #if APP_AUDIO_DIAGNOSTIC_TEST
     if (activeAudioOutputEnabled) {
@@ -4018,14 +4145,14 @@ void setup() {
 
     displayManager->setBootMessage("Idle");
 #if !APP_AUDIO_DIAGNOSTIC_TEST
-    runtimeAudio.startupEffectPending = !effectFileForSource("effect-startup").isEmpty();
+    runtimeAudio.startupEffectPending = !runtimeSafeModeActive && !effectFileForSource("effect-startup").isEmpty();
     runtimeAudio.startupEffectActive = false;
     runtimeAudio.startupEffectAttempts = 0;
     runtimeAudio.startupEffectEligibleAt = millis() + kStartupEffectDelayMs;
 #endif
     runtimeAudio.ambientEligibleAt = millis() + kAmbientResumeDelayMs;
     runtimeAudio.bootUpdateCheckQueued = settings->ota.autoCheck || settings->ota.autoUpdate;
-    runtimeAudio.resumeSavedPlaybackPending = settings->audio.rememberLastPlayed && settings->audio.lastPlayback.resumeAfterBoot && !settings->audio.lastPlayback.url.isEmpty();
+    runtimeAudio.resumeSavedPlaybackPending = !runtimeSafeModeActive && settings->audio.rememberLastPlayed && settings->audio.lastPlayback.resumeAfterBoot && !settings->audio.lastPlayback.url.isEmpty();
     runtimeAudio.resumeSavedPlaybackEligibleAt = 0;
     runtimeAudio.updateAvailableEffectEligibleAt = 0;
     if (settings->oled.displayType == "wape" && settings->oled.wapeTriggerEvent == "device_start") {
@@ -4325,7 +4452,7 @@ void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
             playConfiguredEffectSource("effect-low-battery", "Low Battery");
     }
 
-    if (snapshot.playback.source != "effect-ambient") {
+    if (!runtimeSafeModeActive && snapshot.playback.source != "effect-ambient") {
         startAmbientIfEligible(snapshot);
     }
 
@@ -4450,6 +4577,7 @@ void loop() {
         runtimeStateSnapshotInitialized = true;
         processSoundEffectTransitions(runtimeStateSnapshot);
         serviceRuntimeAudioAutomation(runtimeStateSnapshot);
+        serviceAudioPlaybackGuard(runtimeStateSnapshot);
         displayManager->loop(runtimeStateSnapshot);
         handleLowBatterySleepPolicy(runtimeStateSnapshot);
         confirmOtaHealthIfReady();
@@ -4473,6 +4601,7 @@ void loop() {
 
     if (factoryResetRequested) {
         settingsManager->reset();
+        clearLogicRecord();
         startFactoryResetLedBlink(millis());
         const unsigned long minimumRebootAt = millis() + kFactoryResetLedSuccessWindowMs;
         if (!rebootRequested || static_cast<long>(rebootAt - minimumRebootAt) < 0) {

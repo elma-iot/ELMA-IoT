@@ -3,6 +3,9 @@
 #include "audio_player.h"
 
 #include <Audio.h>
+#include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <driver/gpio.h>
 #include <memory>
@@ -20,6 +23,7 @@ AudioPlayer::Impl* g_impl = nullptr;
 constexpr unsigned long kSwitchFadeOutMs = 70UL;
 constexpr unsigned long kStartFadeInMs = 90UL;
 constexpr unsigned long kSwitchQuietTimeMs = 18UL;
+constexpr uint8_t kMaximumStreamRedirects = 4;
 constexpr uint32_t kPreferredDiagnosticSampleRateHz = DefaultConfig::AUDIO_DIAGNOSTIC_PREFERRED_SAMPLE_RATE_HZ;
 
 uint8_t percentToLibraryVolume(uint8_t volumePercent) {
@@ -33,6 +37,52 @@ String fallbackTitleFromPath(const String& path) {
     }
     const int slashIndex = path.lastIndexOf('/');
     return slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
+}
+
+bool isRedirectStatus(int status) {
+    return status == HTTP_CODE_MOVED_PERMANENTLY || status == HTTP_CODE_FOUND ||
+        status == HTTP_CODE_SEE_OTHER || status == HTTP_CODE_TEMPORARY_REDIRECT ||
+        status == HTTP_CODE_PERMANENT_REDIRECT;
+}
+
+String resolveStreamRedirects(const String& requestedUrl) {
+    String current = requestedUrl;
+    for (uint8_t redirect = 0; redirect < kMaximumStreamRedirects; ++redirect) {
+        HTTPClient http;
+        http.setConnectTimeout(5000);
+        http.setTimeout(5000);
+        http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+        bool begun = false;
+        if (current.startsWith("https://")) {
+            WiFiClientSecure client;
+            client.setInsecure();
+            begun = http.begin(client, current);
+            if (!begun) return current;
+            const int status = http.GET();
+            const String location = http.getLocation();
+            http.end();
+            client.stop();
+            if (!isRedirectStatus(status) || !location.startsWith("http")) return current;
+            DebugLog.printf("[audio] pre-resolved redirect %s -> %s\n", current.c_str(), location.c_str());
+            current = location;
+        } else if (current.startsWith("http://")) {
+            WiFiClient client;
+            begun = http.begin(client, current);
+            if (!begun) return current;
+            const int status = http.GET();
+            const String location = http.getLocation();
+            http.end();
+            client.stop();
+            if (!isRedirectStatus(status) || !location.startsWith("http")) return current;
+            DebugLog.printf("[audio] pre-resolved redirect %s -> %s\n", current.c_str(), location.c_str());
+            current = location;
+        } else {
+            break;
+        }
+        delay(20);
+        yield();
+    }
+    return current;
 }
 
 bool parseAudioFileReference(const String& raw, StorageTarget& target, String& path) {
@@ -119,6 +169,7 @@ class AudioPlayer::Impl {
     String type = "idle";
     String title = "Idle";
     String url;
+    String connectionUrl;
     String source = "none";
     bool storageLeaseActive = false;
     StorageTarget storageTarget = StorageTarget::Flash;
@@ -178,6 +229,24 @@ void clearOverlay(AudioPlayer::Impl* impl) {
     if (impl != nullptr) {
         impl->overlay.clear();
     }
+}
+
+void recreateAudioEngine(AudioPlayer::Impl* impl) {
+    if (impl == nullptr) return;
+    impl->audio.~Audio();
+    new (&impl->audio) Audio();
+    impl->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
+    impl->audio.setI2SCommFMT_LSB(false);
+    if (impl->outputEnabled) {
+        impl->audio.setPinout(impl->bclkPin, impl->wsPin, impl->doutPin);
+    }
+    impl->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO);
+    impl->audio.setConnectionTimeout(8000, 8000);
+    impl->audio.setTone(impl->defaultLowDb, impl->defaultPresenceDb, impl->defaultHighDb);
+    impl->applyHardwareVolumePercent(impl->volume);
+    impl->clockRate = 0;
+    DebugLog.printf("[audio] decoder and network buffers reset, free heap=%u free psram=%u\n",
+                    static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getFreePsram()));
 }
 
 void releaseStorageLease(AudioPlayer::Impl* impl) {
@@ -521,7 +590,8 @@ void AudioPlayer::loop() {
     if (impl_->retryPending && millis() >= impl_->retryAt) {
         impl_->retryPending = false;
         impl_->audio.stopSong();
-        impl_->audio.connecttohost(impl_->url.c_str());
+        recreateAudioEngine(impl_);
+        impl_->audio.connecttohost((impl_->connectionUrl.isEmpty() ? impl_->url : impl_->connectionUrl).c_str());
         impl_->state = "buffering";
         impl_->publish();
     }
@@ -549,11 +619,17 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     }
     clearOverlay(impl_);
     releaseStorageLease(impl_);
+    if (!impl_->url.isEmpty() || impl_->state == "error") {
+        recreateAudioEngine(impl_);
+    }
+
+    const String connectionUrl = resolveStreamRedirects(normalizedUrl);
 
     impl_->stopRequested = false;
     impl_->retryPending = false;
     impl_->retryCount = 0;
     impl_->url = normalizedUrl;
+    impl_->connectionUrl = connectionUrl;
     impl_->title = normalizedTitle;
     impl_->type = mediaType;
     impl_->source = source;
@@ -563,10 +639,11 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     impl_->publish();
     impl_->applyHardwareVolumePercent(0);
 
-    bool connected = impl_->audio.connecttohost(normalizedUrl.c_str());
+    bool connected = impl_->audio.connecttohost(connectionUrl.c_str());
     if (!connected) {
+        recreateAudioEngine(impl_);
         delay(120);
-        connected = impl_->audio.connecttohost(normalizedUrl.c_str());
+        connected = impl_->audio.connecttohost(connectionUrl.c_str());
     }
     if (!connected) {
         impl_->applyHardwareVolumePercent(impl_->volume);
@@ -620,12 +697,16 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
         }
     }
     clearOverlay(impl_);
+    if (!impl_->url.isEmpty() || impl_->state == "error") {
+        recreateAudioEngine(impl_);
+    }
     acquireStorageLease(impl_, target);
 
     impl_->stopRequested = false;
     impl_->retryPending = false;
     impl_->retryCount = 0;
     impl_->url = sourceUrl;
+    impl_->connectionUrl = "";
     impl_->title = normalizedTitle;
     impl_->type = mediaType;
     impl_->source = source;
@@ -728,6 +809,7 @@ void AudioPlayer::stop() {
     impl_->type = "idle";
     impl_->title = "Idle";
     impl_->url = "";
+    impl_->connectionUrl = "";
     impl_->source = "manual";
     impl_->publish();
 }
@@ -737,9 +819,7 @@ void AudioPlayer::releaseResourcesForUpdate() {
     stop();
     // stopSong only silences I2S; it retains the decoder, input buffer and
     // network connection. Recreate the idle driver to actually release them.
-    impl_->audio.~Audio();
-    new (&impl_->audio) Audio();
-    begin(impl_->bclkPin, impl_->wsPin, impl_->doutPin, impl_->volume, impl_->outputEnabled, *impl_->appState);
+    recreateAudioEngine(impl_);
 }
 
 bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin) {
