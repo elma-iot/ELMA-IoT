@@ -11,14 +11,14 @@ Project story and current device write-up:
 
 ## Current Release
 
-- Firmware version: `v0.1.54`
+- Firmware version: `v0.1.55`
 - Primary release repository: `elma-iot/ELMA-IoT`
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
-- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.54.bin`
+- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.55.bin`
 
-v0.1.54 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
+v0.1.55 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
 
-### v0.1.54 highlights
+### v0.1.55 highlights
 
 The device web interface now opens centralized online documentation through lightweight localized Help links. Every Logics block routes to its stable topic ID; no manuals or screenshots consume firmware flash or OTA headroom.
 
@@ -639,19 +639,19 @@ Current OTA and rollback behavior:
 The Firmware tab checks GitHub Releases by default and matches the expected asset name to the running build variant.
 
 
-Release asset names for `v0.1.54`:
+Release asset names for `v0.1.55`:
 
-- `esp32-notifier-v0.1.54.bin`
-- `esp32-notifier-hacs-v0.1.54.bin`
-- `esp32-notifier-hacs-slim-v0.1.54.bin`
-- `esp32-notifier-hacs-legacy-ota-v0.1.54.bin`
-- `esp32s3-notifier-v0.1.54.bin`
-- `esp32s3-notifier-hacs-v0.1.54.bin`
-- `esp32s3-notifier-hacs-slim-v0.1.54.bin`
-- `esp32c3-notifier-hacs-v0.1.54.bin`
-- `esp32-ota-bridge-v0.1.54.bin`
-- `esp32s3-ota-bridge-v0.1.54.bin`
-- `esp32c3-ota-bridge-v0.1.54.bin`
+- `esp32-notifier-v0.1.55.bin`
+- `esp32-notifier-hacs-v0.1.55.bin`
+- `esp32-notifier-hacs-slim-v0.1.55.bin`
+- `esp32-notifier-hacs-legacy-ota-v0.1.55.bin`
+- `esp32s3-notifier-v0.1.55.bin`
+- `esp32s3-notifier-hacs-v0.1.55.bin`
+- `esp32s3-notifier-hacs-slim-v0.1.55.bin`
+- `esp32c3-notifier-hacs-v0.1.55.bin`
+- `esp32-ota-bridge-v0.1.55.bin`
+- `esp32s3-ota-bridge-v0.1.55.bin`
+- `esp32c3-ota-bridge-v0.1.55.bin`
 - `ELMA-Flasher-v0.1.57.exe`
 - `SHA256SUMS.txt`
 
@@ -734,7 +734,7 @@ Key files and directories:
 
 Current release notes live here:
 
-- [release-assets/v0.1.54/release-notes.md](release-assets/v0.1.54/release-notes.md)
+- [release-assets/v0.1.55/release-notes.md](release-assets/v0.1.55/release-notes.md)
 - [release-assets/v0.1.53/release-notes.md](release-assets/v0.1.53/release-notes.md)
 - [release-assets/v0.1.52/release-notes.md](release-assets/v0.1.52/release-notes.md)
 - [release-assets/v0.1.42/release-notes.md](release-assets/v0.1.42/release-notes.md)

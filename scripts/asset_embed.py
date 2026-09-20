@@ -80,7 +80,8 @@ if selected_board_id and selected_board_id not in BOARD_ASSET_IDS.values():
     raise SystemExit(f"Unknown ELMA selected board identifier: {selected_board_id}")
 env.Append(CPPDEFINES=[("APP_COMPILED_BOARD_PROFILE_ID", selected_board_id)])
 sys.path.insert(0,str(ROOT / "scripts"))
-from compact_peripheral_assets import load_manifest,active_mask,block_svg
+from compact_peripheral_assets import load_manifest,active_mask,default_svg
+from share_compact_peripheral_svg import BEGIN as SHARED_FALLBACK_BEGIN, END as SHARED_FALLBACK_END, install_shared_fallback
 peripheral_svg_manifest=load_manifest(ROOT)
 peripheral_svg_paths=sorted(peripheral_svg_manifest)
 active_profiles_text=os.environ.get("ELMA_ACTIVE_PERIPHERAL_PROFILES")
@@ -88,7 +89,7 @@ active_profiles_text=os.environ.get("ELMA_ACTIVE_PERIPHERAL_PROFILES")
 active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else []
 peripheral_svg_mask=active_mask(peripheral_svg_manifest,active_profiles)
 env.Append(CPPDEFINES=[("APP_PERIPHERAL_SVG_MASK",peripheral_svg_mask)])
-if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)}; others use blocks with identical I/O")
+if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)}; unconfigured routes share one compact default image")
 
 
 if env.get("PIOENV") == "esp32_notifier_hacs_legacy_ota":
@@ -99,6 +100,7 @@ language = os.environ.get("ELMA_COMPILED_LANGUAGE", "en")
 env.Append(CPPDEFINES=[("APP_COMPILED_LANGUAGE_ID", language_codes.index(language)), ("APP_COMPILED_THEME_ID", {"automatic":0,"light":1,"dark":2}[os.environ.get("ELMA_COMPILED_THEME", "automatic")])])
 
 if os.environ.get("ELMA_PORTABLE_BUILDER") == "1" and HEADER.is_file() and SOURCE.is_file():
+    install_shared_fallback(SOURCE,peripheral_svg_manifest)
     selected_label = os.environ.get("ELMA_SELECTED_BOARD_PROFILE", "all supported boards")
     print(f"[web-assets] portable builder is using the prebundled configurator for {selected_label}")
     Return()
@@ -316,6 +318,17 @@ source_lines = [
     "",
 ]
 
+default_peripheral_payload=gzip.compress(default_svg().encode("utf-8"),compresslevel=9,mtime=0)
+source_lines.extend([
+    SHARED_FALLBACK_BEGIN,
+    "const uint8_t elma_default_peripheral_svg[] PROGMEM = {",
+    f"    {c_array(default_peripheral_payload)}",
+    "};",
+    "const size_t elma_default_peripheral_svg_len = sizeof(elma_default_peripheral_svg);",
+    SHARED_FALLBACK_END,
+    "",
+])
+
 def asset_guard(asset_path: str):
     locale = re.match(r"__locales/([^/]+)/", asset_path)
     if locale:
@@ -346,9 +359,10 @@ for asset_path, symbol, _, payload, _ in assets:
     source_lines.append(f"    {c_array(payload)}")
     source_lines.append("};")
     if compact_asset:
-        compact_payload=gzip.compress(block_svg(peripheral_svg_manifest[asset_path]).encode("utf-8"),compresslevel=9,mtime=0)
-        source_lines.extend(["#else",f"const uint8_t {symbol}[] PROGMEM = {{",f"    {c_array(compact_payload)}","};","#endif"])
-    source_lines.append(f"const size_t {symbol}_len = sizeof({symbol});")
+        source_lines.append(f"const size_t {symbol}_len = sizeof({symbol});")
+        source_lines.append("#endif")
+    else:
+        source_lines.append(f"const size_t {symbol}_len = sizeof({symbol});")
     if guard:
         header_lines.append("#endif")
         source_lines.append("#endif")
@@ -363,9 +377,12 @@ for asset_path, symbol, mime, _, gzip_encoded in assets:
     if guard:
         source_lines.append(guard)
     route_path = re.sub(r"^(?:__boards/\d+|__locales/[^/]+)/", "", asset_path)
-    source_lines.append(
-        f'    {{"/{route_path}", "{mime}", {symbol}, {symbol}_len, {str(gzip_encoded).lower()}}},'
-    )
+    compact_asset=asset_path in peripheral_svg_manifest
+    if compact_asset:
+        source_lines.append(f"#if APP_PERIPHERAL_SVG_MASK & {1 << peripheral_svg_paths.index(asset_path)}")
+    source_lines.append(f'    {{"/{route_path}", "{mime}", {symbol}, {symbol}_len, {str(gzip_encoded).lower()}}},')
+    if compact_asset:
+        source_lines.extend(["#else",f'    {{"/{route_path}", "{mime}", elma_default_peripheral_svg, elma_default_peripheral_svg_len, true}},',"#endif"])
     if guard:
         source_lines.append("#endif")
 source_lines.append("};")

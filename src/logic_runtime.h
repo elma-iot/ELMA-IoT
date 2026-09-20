@@ -22,6 +22,7 @@ public:
     bool controlGroup(const char* id, const char* mode, uint32_t now);
     void observe(JsonVariantConst status);
     void telemetry(JsonObject target) const;
+    bool testAction(const char* nodeId, const char* command, std::string& error);
     bool paused() const { return paused_; }
     bool active() const { return graph_["nodes"].size() != 0; }
     const std::string& error() const { return error_; }

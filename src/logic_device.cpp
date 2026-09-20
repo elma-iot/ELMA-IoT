@@ -13,6 +13,7 @@ namespace {
 constexpr uint32_t kLogicActivityMagic = 0x454c4d41u;
 constexpr uint32_t kLogicActionStableMs = 30000u;
 constexpr char kLogicRecoveryNamespace[] = "logic_guard";
+constexpr char kLogicStorageSafetyKey[] = "storageV2";
 struct LogicActivityMarker {uint32_t magic;char node[64];char group[64];};
 RTC_NOINIT_ATTR LogicActivityMarker logicActivityMarker;
 
@@ -46,7 +47,9 @@ std::string LogicDevice::groupForNode(const char* nodeId) const {
 
 void LogicDevice::clearRecoveryState() {
     Preferences preferences;
-    if(preferences.begin(kLogicRecoveryNamespace,false)){preferences.clear();preferences.end();}
+    if(preferences.begin(kLogicRecoveryNamespace,false)){
+        preferences.remove("active");preferences.remove("group");preferences.remove("node");preferences.remove("warning");preferences.end();
+    }
     quarantinedGroup_.clear();quarantinedNode_.clear();recoveryWarning_.clear();
     recoveryConfirmationRequired_=false;recoveryAppliedThisBoot_=false;
 }
@@ -95,8 +98,17 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     mode_=compiled["mode"]|"playing";
     if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
     std::string restored=program;
+    const bool unexplainedAbnormalReset=abnormalRuntimeReset()&&logicActivityMarker.magic!=kLogicActivityMagic;
+    bool storageSafetyMigration=false;
+    Preferences migration;
+    if(migration.begin(kLogicRecoveryNamespace,false)){
+        storageSafetyMigration=!migration.getBool(kLogicStorageSafetyKey,false);
+        if(storageSafetyMigration)migration.putBool(kLogicStorageSafetyKey,true);
+        migration.end();
+    }
     JsonDocument data;
-    if(loadLogicRecord(data)) {
+    bool restoredSavedGraph=false;
+    if(!unexplainedAbnormalReset&&loadLogicRecord(data)) {
         if(data["source"]==source_) {
 #ifdef APP_LEGACY_OTA_FIT
             // Compatibility builds retain the compiled graph; only saved control modes are restored.
@@ -111,9 +123,34 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
             if(ElmaLogic::validateEditable(data["graph"],devices_.as<JsonArrayConst>(),accepted,message)) {
                 restored.clear();serializeJson(accepted,restored);mode_=data["mode"]|"playing";
                 if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
+                restoredSavedGraph=true;
             }
 #endif
         }
+    }
+    if(unexplainedAbnormalReset){
+        mode_="stopped";
+        compiled["mode"]="stopped";
+        restored.clear();serializeJson(compiled,restored);
+        recoveryWarning_="Saved Logics were quarantined after an abnormal restart during startup. The compiled graph is loaded stopped; review it before starting automations.";
+        recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
+        Preferences writer;
+        if(writer.begin(kLogicRecoveryNamespace,false)){
+            writer.putBool("active",true);writer.putString("group","");writer.putString("node","");
+            writer.putString("warning",recoveryWarning_.c_str());writer.end();
+        }
+        DebugLog.println("[logic-guard] skipped saved Logics after unexplained abnormal startup reset");
+    } else if(storageSafetyMigration&&restoredSavedGraph){
+        JsonDocument migrationGraph;deserializeJson(migrationGraph,restored);migrationGraph["mode"]="stopped";
+        restored.clear();serializeJson(migrationGraph,restored);mode_="stopped";
+        recoveryWarning_="Saved Logics were restored stopped after the storage safety upgrade. Review the graph, then explicitly start it.";
+        recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
+        Preferences writer;
+        if(writer.begin(kLogicRecoveryNamespace,false)){
+            writer.putBool("active",true);writer.putString("group","");writer.putString("node","");
+            writer.putString("warning",recoveryWarning_.c_str());writer.end();
+        }
+        DebugLog.println("[logic-guard] restored legacy saved Logics in stopped mode for storage safety migration");
     }
     JsonDocument guarded;deserializeJson(guarded,restored);loadRecoveryState(guarded);restored.clear();serializeJson(guarded,restored);
     state_=&state;status_=std::move(status);actions_=std::move(actions);std::string error;
@@ -240,7 +277,11 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
     bool saved=true;
     std::string mode=command["mode"]|mode_.c_str();
     if(mode!="playing"&&mode!="paused"&&mode!="stopped"){error="Invalid Logics control state";return false;}
-    if(!command["group"].isNull()) {
+    if(!command["test"].isNull()) {
+        const char* nodeId=command["test"]["nodeId"]|"";const char* action=command["test"]["action"]|"";
+        std::string message;if(!runtime_.testAction(nodeId,action,message)){error=message.c_str();return false;}
+        response["tested"]=action;response["nodeId"]=nodeId;runtime_.telemetry(response["live"].to<JsonObject>());
+    } else if(!command["group"].isNull()) {
         const char* id=command["group"]["id"]|"";const char* groupMode=command["group"]["mode"]|"";
         if(std::string(groupMode)!="playing"&&std::string(groupMode)!="paused"&&std::string(groupMode)!="stopped"){error="Invalid group control state";return false;}
         if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&quarantinedGroup_==id&&!(command["confirmUnsafeRestart"]|false)){error=(std::string("RECOVERY_CONFIRMATION_REQUIRED: ")+recoveryWarning_+" Confirm to retry this automation.").c_str();return false;}

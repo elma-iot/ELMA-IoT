@@ -165,16 +165,21 @@ const esp_partition_t* flashFilesystemPartition() {
 }
 
 void mountFlashStorage() {
-    if (flashFilesystemPartition() == nullptr) {
+    const esp_partition_t* partition = flashFilesystemPartition();
+    if (partition == nullptr) {
         flashMounted = false;
         DebugLog.println("[storage] Flash filesystem disabled by partition table");
         return;
     }
 
-    flashMounted = LittleFS.begin(false);
+    // Arduino's LittleFS wrapper defaults to the partition label "spiffs".
+    // ELMA names this generic data partition "storage", so mount the actual
+    // label discovered from the partition table instead of relying on that
+    // unrelated default.
+    flashMounted = LittleFS.begin(false, "/littlefs", 10, partition->label);
     if (!flashMounted) {
         DebugLog.println("[storage] LittleFS mount failed, attempting format");
-        flashMounted = LittleFS.begin(true);
+        flashMounted = LittleFS.begin(true, "/littlefs", 10, partition->label);
     }
 
     if (flashMounted) {

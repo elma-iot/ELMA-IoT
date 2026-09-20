@@ -1,4 +1,4 @@
-"""Replace unused firmware illustrations, preserving routes and electrical pin labels."""
+"""Replace unused firmware illustrations while preserving their HTTP routes."""
 import json
 def escape(value):return value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 from pathlib import Path
@@ -17,3 +17,6 @@ def block_svg(specification):
   y=44+index*18
   parts.append(f'<circle cx="12" cy="{y-3}" r="3" fill="#438deb"/><text x="24" y="{y}" fill="#edf2fb" font-family="sans-serif" font-size="11">{escape(pin)}</text>')
  return ''.join(parts)+'</svg>'
+
+def default_svg():
+ return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 100" aria-hidden="true"><rect x="4" y="4" width="172" height="92" rx="10" fill="#222c39" stroke="#94a3b8"/><circle cx="90" cy="50" r="18" fill="none" stroke="#f59e0b" stroke-width="5"/><path d="M90 38v24M78 50h24" stroke="#edf2fb" stroke-width="5"/></svg>'

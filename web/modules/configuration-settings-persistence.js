@@ -166,7 +166,9 @@ export function createConfigurationSettingsPersistenceModule({
     populateAudioI2sPinOptions(data);
     populateSdPinOptions(data);
     populateStatusLedPinOptions(data);
-    populateOledPinOptions(data);
+    // Loading a saved project must win over stale values left in the live DOM.
+    // Later interactive refreshes preserve the user's current selections.
+    populateOledPinOptions(data, true);
     populateWapeTriggerPinOptions(data);
     populateButtonActionSelects();
     for (const [section, sectionValue] of Object.entries(data)) {
@@ -312,9 +314,10 @@ export function createConfigurationSettingsPersistenceModule({
     payload.oled.height = Number(payload.oled.height || 64);
     payload.oled.rotation = Number(payload.oled.rotation || 0);
     const preferredOledPins = choosePreferredOledPins(state.settings);
-    payload.oled.sdaPin = Number(elements.oledSdaPin?.value || payload.oled.sdaPin || preferredOledPins.sda);
-    payload.oled.sclPin = Number(elements.oledSclPin?.value || payload.oled.sclPin || preferredOledPins.scl);
-    payload.oled.resetPin = Number(elements.oledResetPin?.value || payload.oled.resetPin || -1);
+    const selectedOledPin=(field,saved,fallback)=>field&&field.value!==''?field.value:(saved!==undefined&&saved!==null?saved:fallback);
+    payload.oled.sdaPin = Number(selectedOledPin(elements.oledSdaPin,payload.oled.sdaPin,preferredOledPins.sda));
+    payload.oled.sclPin = Number(selectedOledPin(elements.oledSclPin,payload.oled.sclPin,preferredOledPins.scl));
+    payload.oled.resetPin = Number(selectedOledPin(elements.oledResetPin,payload.oled.resetPin,-1));
     payload.oled.dimTimeoutSeconds = Number(payload.oled.dimTimeoutSeconds || 0);
     payload.oled.wapeTriggerPin = Number(elements.wapeTriggerPin?.value || payload.oled.wapeTriggerPin || 0);
     payload.oled.displayType = String(elements.displayType?.value || payload.oled.displayType || "oled");

@@ -12,8 +12,8 @@ test('device Help routes use the active locale and stable topic IDs',()=>{
  assert.equal(helpIdForNode({type:'peripheral.play',peripheral:{group:'control',profile:'buzzer'}}),'peripheral.control-buzzer');
 });
 
-test('device section Help uses compact accessible information controls',()=>{
+test('device section Help uses contextual right-click and long-press targets',()=>{
  const source=readFileSync(new URL('../web/modules/online-help.js',import.meta.url),'utf8');
- assert.match(source,/online-help-button/);assert.match(source,/button\.textContent='i'/);assert.match(source,/button\.title=label/);
- assert.doesNotMatch(source,/\? Help/);
+ assert.match(source,/bindContextHelp/);assert.match(source,/contextmenu/);assert.match(source,/long-press/);
+ assert.doesNotMatch(source,/button\.textContent='i'/);
 });

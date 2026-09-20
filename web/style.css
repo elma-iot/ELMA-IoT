@@ -5379,7 +5379,39 @@ select option, select optgroup {background-color:var(--panel);color:var(--ink)}
 :root {--diagram-ground-color:#111827;--diagram-ground-text:#ffffff;--diagram-ground-glow:rgba(17,24,39,.18)}
 :root[data-elma-theme="dark"] {--diagram-ground-color:#eee7d8;--diagram-ground-text:#19222d;--diagram-ground-glow:rgba(238,231,216,.18)}
 :root[data-elma-theme="dark"] :is(.peripheral-diagram-frame,.peripheral-diagram-placeholder,.peripheral-diagram-editor-stage) {background:var(--panel);color:var(--ink);border-color:var(--line)}
+:root[data-elma-theme="dark"] .peripheral-diagram-frame {background-color:var(--panel)!important;background-image:none!important}
+:root[data-elma-theme="dark"] :is(.peripheral-diagram-placeholder,.peripheral-diagram-editor-stage,.diagram-viewport) {background-color:var(--panel-soft)!important;background-image:none!important}
+:root[data-elma-theme="dark"] .peripheral-diagram-frame > .peripheral-diagram-placeholder,
+:root[data-elma-theme="dark"] .peripheral-diagram-placeholder > .diagram-viewport {background-color:var(--panel-soft)!important;background-image:none!important}
 @media(prefers-color-scheme:dark){
  :root:not([data-elma-theme="light"]) {--diagram-ground-color:#eee7d8;--diagram-ground-text:#19222d;--diagram-ground-glow:rgba(238,231,216,.18)}
  :root:not([data-elma-theme="light"]) :is(.peripheral-diagram-frame,.peripheral-diagram-placeholder,.peripheral-diagram-editor-stage) {background:var(--panel);color:var(--ink);border-color:var(--line)}
+ :root:not([data-elma-theme="light"]) .peripheral-diagram-frame {background-color:var(--panel)!important;background-image:none!important}
+ :root:not([data-elma-theme="light"]) :is(.peripheral-diagram-placeholder,.peripheral-diagram-editor-stage,.diagram-viewport) {background-color:var(--panel-soft)!important;background-image:none!important}
+ :root:not([data-elma-theme="light"]) .peripheral-diagram-frame > .peripheral-diagram-placeholder,
+ :root:not([data-elma-theme="light"]) .peripheral-diagram-placeholder > .diagram-viewport {background-color:var(--panel-soft)!important;background-image:none!important}
+}
+
+/* Configuration diagram and GPIO editor use the active application theme. */
+:root[data-elma-theme="dark"] :is(.peripheral-diagram-title,.peripheral-diagram-node-label) {color:var(--ink)}
+:root[data-elma-theme="dark"] .diagram-viewport::before {filter:brightness(1.35);opacity:.08}
+:root[data-elma-theme="dark"] .peripheral-diagram-wire:not(.peripheral-diagram-wire-glow) {filter:brightness(1.28) saturate(1.12) drop-shadow(0 0 2px rgba(255,255,255,.26))}
+:root[data-elma-theme="dark"] .gpio-pin-row select[data-gpio-role-select] {background:color-mix(in srgb,var(--gpio-wire-color,#64748b) 16%,var(--panel-soft));color:var(--ink);-webkit-text-fill-color:var(--ink);border-color:color-mix(in srgb,var(--gpio-wire-color,#64748b) 70%,var(--line))}
+:root[data-elma-theme="dark"] :is(.gpio-pin-fixed,.gpio-board-recommendations) {background:var(--panel-soft);color:var(--ink);border-color:var(--line)}
+:root[data-elma-theme="dark"] .gpio-extra-shell {background:var(--panel);border-color:var(--line)}
+:root[data-elma-theme="dark"] .gpio-extra-toggle {background:linear-gradient(180deg,color-mix(in srgb,var(--warn) 18%,var(--panel-soft)),var(--panel));color:var(--ink)}
+:root[data-elma-theme="dark"] .gpio-extra-toggle-icon {background:var(--panel-soft);color:var(--warn);border:1px solid var(--line)}
+:root[data-elma-theme="dark"] .gpio-extra-panel {background:var(--panel)}
+:root[data-elma-theme="dark"] :is(.gpio-extra-side-label,.gpio-extra-center-note) {color:var(--ink)}
+@media(prefers-color-scheme:dark){
+ :root:not([data-elma-theme="light"]) :is(.peripheral-diagram-title,.peripheral-diagram-node-label) {color:var(--ink)}
+ :root:not([data-elma-theme="light"]) .diagram-viewport::before {filter:brightness(1.35);opacity:.08}
+ :root:not([data-elma-theme="light"]) .peripheral-diagram-wire:not(.peripheral-diagram-wire-glow) {filter:brightness(1.28) saturate(1.12) drop-shadow(0 0 2px rgba(255,255,255,.26))}
+ :root:not([data-elma-theme="light"]) .gpio-pin-row select[data-gpio-role-select] {background:color-mix(in srgb,var(--gpio-wire-color,#64748b) 16%,var(--panel-soft));color:var(--ink);-webkit-text-fill-color:var(--ink);border-color:color-mix(in srgb,var(--gpio-wire-color,#64748b) 70%,var(--line))}
+ :root:not([data-elma-theme="light"]) :is(.gpio-pin-fixed,.gpio-board-recommendations) {background:var(--panel-soft);color:var(--ink);border-color:var(--line)}
+ :root:not([data-elma-theme="light"]) .gpio-extra-shell {background:var(--panel);border-color:var(--line)}
+ :root:not([data-elma-theme="light"]) .gpio-extra-toggle {background:linear-gradient(180deg,color-mix(in srgb,var(--warn) 18%,var(--panel-soft)),var(--panel));color:var(--ink)}
+ :root:not([data-elma-theme="light"]) .gpio-extra-toggle-icon {background:var(--panel-soft);color:var(--warn);border:1px solid var(--line)}
+ :root:not([data-elma-theme="light"]) .gpio-extra-panel {background:var(--panel)}
+ :root:not([data-elma-theme="light"]) :is(.gpio-extra-side-label,.gpio-extra-center-note) {color:var(--ink)}
 }

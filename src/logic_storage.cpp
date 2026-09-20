@@ -4,9 +4,46 @@
 #include <Preferences.h>
 #endif
 #include <string>
+#include <cstdio>
+#include <algorithm>
 
-namespace {uint32_t latestRevision=0;
-void rememberRevision(uint32_t revision){latestRevision=revision;Preferences prefs;if(prefs.begin("elma-logics",false)){prefs.putUInt("revision",revision);prefs.end();}}}
+namespace {
+constexpr size_t kNvsLogicChunkBytes=1000;
+constexpr uint8_t kNvsLogicMaxChunks=40;
+uint32_t latestRevision=0;
+void rememberRevision(uint32_t revision){latestRevision=revision;Preferences prefs;if(prefs.begin("elma-logics",false)){prefs.putUInt("revision",revision);prefs.end();}}
+std::string chunkKey(char bank,uint8_t index){char key[8];std::snprintf(key,sizeof(key),"%c%02u",bank,unsigned(index));return key;}
+bool readChunkBank(Preferences& prefs,char bank,std::string& data){
+    char countKey[3]={bank,'c','\0'};uint8_t count=prefs.getUChar(countKey,0);
+    if(!count||count>kNvsLogicMaxChunks)return false;
+    data.clear();
+    for(uint8_t i=0;i<count;++i){
+        std::string key=chunkKey(bank,i);size_t size=prefs.getBytesLength(key.c_str());
+        if(!size||size>kNvsLogicChunkBytes){data.clear();return false;}
+        size_t at=data.size();data.resize(at+size);
+        if(prefs.getBytes(key.c_str(),&data[at],size)!=size){data.clear();return false;}
+    }
+    return !data.empty();
+}
+void removeChunkBank(Preferences& prefs,char bank){
+    char countKey[3]={bank,'c','\0'};uint8_t count=prefs.getUChar(countKey,kNvsLogicMaxChunks);
+    if(!count||count>kNvsLogicMaxChunks)count=kNvsLogicMaxChunks;
+    prefs.remove(countKey);
+    for(uint8_t i=0;i<count;++i){std::string key=chunkKey(bank,i);prefs.remove(key.c_str());}
+}
+bool writeChunkBank(Preferences& prefs,char bank,const std::string& data){
+    size_t count=(data.size()+kNvsLogicChunkBytes-1)/kNvsLogicChunkBytes;
+    if(!count||count>kNvsLogicMaxChunks)return false;
+    removeChunkBank(prefs,bank);
+    for(size_t i=0;i<count;++i){
+        size_t at=i*kNvsLogicChunkBytes,size=std::min(kNvsLogicChunkBytes,data.size()-at);
+        std::string key=chunkKey(bank,uint8_t(i));
+        if(prefs.putBytes(key.c_str(),data.data()+at,size)!=size){removeChunkBank(prefs,bank);return false;}
+    }
+    char countKey[3]={bank,'c','\0'};
+    return prefs.putUChar(countKey,uint8_t(count))==sizeof(uint8_t);
+}
+}
 bool loadLogicRecord(JsonDocument& record) {
     bool found=false;uint32_t revision=0;
     auto accept=[&](JsonDocument& candidate){
@@ -27,6 +64,11 @@ bool loadLogicRecord(JsonDocument& record) {
     Preferences prefs;
     if(prefs.begin("elma-logics",true)){
         uint32_t remembered=prefs.getUInt("revision",0);if(remembered>latestRevision)latestRevision=remembered;
+        uint8_t active=prefs.getUChar("bank",0)&1;
+        for(char bank:{active?'b':'a',active?'a':'b'}){
+            std::string data;JsonDocument candidate;
+            if(readChunkBank(prefs,bank,data)&&!deserializeMsgPack(candidate,data))accept(candidate);
+        }
         for(const char* key:{"compact","record"}) {
             size_t size=prefs.getBytesLength(key);std::string data;
             if(size && size<=40000){data.resize(size);if(prefs.getBytes(key,&data[0],size)!=size)data.clear();}
@@ -66,8 +108,17 @@ bool saveLogicRecord(JsonVariantConst record,String& error) {
     // MessagePack is substantially smaller than the editable JSON and NVS
     // already journals blob updates atomically. Keep the legacy JSON reader
     // above so graphs saved by older firmware migrate on their next save.
-    String data;serializeMsgPack(record,data);
-    auto writeCompact=[&](){Preferences prefs;bool saved=prefs.begin("elma-logics",false);if(saved){saved=prefs.putBytes("compact",data.c_str(),data.length())==data.length();if(saved)prefs.remove("record");prefs.end();}return saved;};
+    String packed;serializeMsgPack(record,packed);std::string data(packed.c_str(),packed.length());
+    auto writeCompact=[&](){
+        Preferences prefs;bool saved=prefs.begin("elma-logics",false);
+        if(saved){
+            uint8_t active=prefs.getUChar("bank",0)&1,next=active^1;char bank=next?'b':'a';
+            saved=writeChunkBank(prefs,bank,data);
+            if(saved){saved=prefs.putUChar("bank",next)==sizeof(uint8_t);if(saved){removeChunkBank(prefs,active?'b':'a');prefs.remove("compact");prefs.remove("record");}}
+            prefs.end();
+        }
+        return saved;
+    };
     bool ok=writeCompact();
     if(!ok) {
         // Persistent Logics are more important than the inactive copy of the
@@ -75,6 +126,8 @@ bool saveLogicRecord(JsonVariantConst record,String& error) {
         // live serial/RAM log and current boot checkpoint remain available.
         Preferences logs;
         if(logs.begin("rebootlog",false)){uint8_t active=logs.getUChar("active",0)&1;logs.remove(active?"boot0":"boot1");logs.end();}
+        Preferences stale;
+        if(stale.begin("elma-logics",false)){stale.remove("compact");stale.remove("record");removeChunkBank(stale,stale.getUChar("bank",0)&1?'b':'a');stale.end();}
         ok=writeCompact();
     }
     if(ok){rememberRevision(next);error="";return true;}

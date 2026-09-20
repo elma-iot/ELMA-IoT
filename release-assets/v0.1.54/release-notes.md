@@ -12,7 +12,11 @@ Configured buzzers now appear under Active peripherals and provide a Play action
 
 The generic Buzzer hardware profile now correctly represents a bare two-wire buzzer with SIG and GND. Powered three-pin buzzer modules remain distinct hardware and are not shown under the generic profile.
 
-Device-edited Logics now use a compact MessagePack record in NVS Preferences when no filesystem or SD card is mounted. Rebuildable contracts are omitted, older JSON records remain readable, and an inactive reboot-log checkpoint can be reclaimed if NVS is fragmented. OTA application-slot headroom is reported separately and no longer implies that a small graph cannot be persisted.
+Device-edited Logics now have a visible Save & apply control. Full 4 MiB USB installations reserve the final 64 KiB as LittleFS for editable graphs; compact chunked MessagePack in NVS remains the fallback when no filesystem or SD card is mounted. Rebuildable contracts are omitted, older records remain readable, and an inactive reboot-log checkpoint can be reclaimed if NVS is fragmented. OTA application-slot headroom is reported separately and does not describe graph-storage capacity. Existing saved graphs migrate in the stopped state, and an abnormal startup reset quarantines saved Logics until the user reviews and deliberately restarts them.
+
+Nodes inside an automation group can now be repositioned individually. Dragging the group frame continues to move every contained node, and Ctrl-drag remains available for deliberate multi-node movement.
+
+The Dynamic Peripheral Diagram now removes both light background gradients in dark mode. Saved legacy wire-control points are validated and excessive detours are replaced with orthogonal automatic routing, preventing power wires from cutting diagonally across the diagram.
 
 Planned asset names:
 - `esp32-notifier-v0.1.54.bin`
@@ -26,4 +30,4 @@ Planned asset names:
 - `esp32-ota-bridge-v0.1.54.bin`
 - `esp32s3-ota-bridge-v0.1.54.bin`
 - `esp32c3-ota-bridge-v0.1.54.bin`
-- `ELMA-Flasher-v0.1.57.exe`
+- `ELMA-Flasher-v0.1.58.exe`

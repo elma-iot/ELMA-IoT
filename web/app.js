@@ -5337,12 +5337,15 @@ function choosePreferredOledPins(settings = state.settings) {
   };
 }
 
-function populateOledPinOptions(settings = state.settings) {
+function populateOledPinOptions(settings = state.settings, preferSettings = false) {
   if (!elements.oledSdaPin || !elements.oledSclPin || !elements.oledResetPin) return;
   const reserved = reservedOledPins(settings);
-  fillBoardPinSelect(elements.oledSdaPin, elements.oledSdaPin.value || settings?.oled?.sdaPin || 4, true, reserved);
-  fillBoardPinSelect(elements.oledSclPin, elements.oledSclPin.value || settings?.oled?.sclPin || 5, true, reserved);
-  fillBoardPinSelect(elements.oledResetPin, elements.oledResetPin.value || settings?.oled?.resetPin || -1, true, reserved, -1);
+  const selected=(field,saved,fallback)=>preferSettings&&saved!==undefined&&saved!==null
+    ? String(saved)
+    : (field.value!==''?field.value:(saved!==undefined&&saved!==null?String(saved):String(fallback)));
+  fillBoardPinSelect(elements.oledSdaPin, selected(elements.oledSdaPin,settings?.oled?.sdaPin,4), true, reserved);
+  fillBoardPinSelect(elements.oledSclPin, selected(elements.oledSclPin,settings?.oled?.sclPin,5), true, reserved);
+  fillBoardPinSelect(elements.oledResetPin, selected(elements.oledResetPin,settings?.oled?.resetPin,-1), true, reserved, -1);
 }
 
 function availableWapeTriggerPins(settings = state.settings) {
@@ -9797,4 +9800,4 @@ window.elmaRefreshFlashSettings = async () => {
 installOnlineHelpLinks();
 startStatusPolling();
 
-const logicsTab=createLogicsTab();if(logicsTab)installLogicLayout(logicsTab);
+const logicsTab=createLogicsTab();if(logicsTab){installLogicLayout(logicsTab);window.elmaLogicsTab=logicsTab;}

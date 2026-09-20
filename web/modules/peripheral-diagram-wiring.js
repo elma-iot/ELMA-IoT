@@ -300,6 +300,37 @@ function cloneCurvePoints(points) {
     : [];
 }
 
+export function normalizeManualRoutePoints(points, start, end) {
+  const route = cloneCurvePoints(points);
+  if (!route.length) {
+    return [];
+  }
+  const anchors = [start, ...route, end].map((point) => ({
+    x: Number(point?.x || 0),
+    y: Number(point?.y || 0),
+  }));
+  const direct = Math.max(1, Math.abs(end.x - start.x) + Math.abs(end.y - start.y));
+  const distance = anchors.slice(1).reduce((total, point, index) => (
+    total + Math.abs(point.x - anchors[index].x) + Math.abs(point.y - anchors[index].y)
+  ), 0);
+  // Earlier releases stored a single Bezier control point. Some of those
+  // points sit far outside both endpoints and become a long diagonal when
+  // interpreted as a polyline. Treat an excessive detour as legacy data and
+  // let the automatic router rebuild the connection.
+  if (distance > direct * 3) {
+    return [];
+  }
+  const orthogonal = [anchors[0]];
+  for (const point of anchors.slice(1)) {
+    const previous = orthogonal[orthogonal.length - 1];
+    if (Math.abs(point.x - previous.x) > 0.75 && Math.abs(point.y - previous.y) > 0.75) {
+      orthogonal.push({ x: point.x, y: previous.y });
+    }
+    orthogonal.push(point);
+  }
+  return dedupeAdjacentPoints(orthogonal).slice(1, -1);
+}
+
 function dedupeAdjacentPoints(points, threshold = 0.75) {
   const deduped = [];
   points.forEach((point) => {
@@ -422,7 +453,7 @@ function defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRe
 }
 
 function connectionGeometry(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect, manualCurvePoints = [], laneIndex = 0, bounds = {}) {
-  const routePoints = cloneCurvePoints(manualCurvePoints);
+  const routePoints = normalizeManualRoutePoints(manualCurvePoints, nodeAnchor, boardAnchor);
   const defaultPoints = defaultRoutePoints(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRect, laneIndex,bounds);
   const points = dedupeAdjacentPoints([
     { x: nodeAnchor.x, y: nodeAnchor.y },
@@ -433,7 +464,10 @@ function connectionGeometry(nodeAnchor, boardAnchor, nodeOwnerRect, boardOwnerRe
   bounds.usedRoutes?.push(points);
 
   return {
-    path: routePoints.length ? smoothBezierPath(points) : roundedPolylinePath(points),
+    // Keep user-adjusted wires in the same rounded, orthogonal visual language
+    // as automatically routed wires. A saved control point previously changed
+    // one connection into a Bezier curve, making it look unrelated to the rest.
+    path: roundedPolylinePath(points),
     controlPoint: routePoints[0] || points[Math.min(2, points.length - 2)] || boardAnchor,
     handlePoint: routePoints[0] || points[Math.min(2, points.length - 2)] || boardAnchor,
     handlePoints: routePoints.length ? routePoints : defaultPoints,
@@ -2512,7 +2546,11 @@ export function createPeripheralDiagramWiringModule({
         }
         const palette = classifyWireColor(connection);
         const connectionKey = connectionStorageKey(connection);
-        const savedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
+        const storedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
+        const savedCurvePoints = normalizeManualRoutePoints(storedCurvePoints, nodeAnchor, boardAnchor);
+        if (storedCurvePoints.length && !savedCurvePoints.length) {
+          clearStoredWireCurveByKey(state, connectionKey);
+        }
         let targetOwnerRect=boardRect;
         const railParent=railParents.get(connectionKey);
         // Edited wire curves retain their original board endpoint.
@@ -2632,7 +2670,11 @@ export function createPeripheralDiagramWiringModule({
 
       const palette = normalizeWirePalette(sourceEntry.palette);
       const connectionKey = `custom:${customLabelConnectionKey(connection)}`;
-      const savedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
+      const storedCurvePoints = readStoredWireCurve(state, connectionKey, stageRect);
+      const savedCurvePoints = normalizeManualRoutePoints(storedCurvePoints, sourceAnchor, targetAnchor);
+      if (storedCurvePoints.length && !savedCurvePoints.length) {
+        clearStoredWireCurveByKey(state, connectionKey);
+      }
       const geometry = connectionGeometry(sourceAnchor, targetAnchor, sourceEntry.nodeRect, targetEntry.nodeRect, savedCurvePoints, 0, routingBounds);
       if (!hasFiniteAnchorPoint(geometry?.controlPoint) || !hasFiniteAnchorPoint(geometry?.handlePoint)) {
         return;

@@ -140,6 +140,28 @@ void Runtime::emit(size_t n, const char* port) {
     }
 }
 
+bool Runtime::testAction(const char* nodeId, const char* command, std::string& error) {
+    const int found=index(nodeId ? nodeId : "");
+    if(found<0){error="Logics test node was not found; save the canvas first";return false;}
+    const size_t n=size_t(found);const std::string type=node(n)["type"]|"";
+    const std::string profile=node(n)["peripheral"]["profile"]|"";
+    if(type!="peripheral.play" || profile.find("buzzer")==std::string::npos){error="Only a configured Buzzer Play node can be tested here";return false;}
+    const std::string requested=command ? command : "";
+    if(requested!="play"&&requested!="stop"){error="Buzzer test action must be play or stop";return false;}
+    JsonDocument args;args["action"]=requested;
+    if(requested=="play"){
+        cache_.clear();budget_=0;depth_=0;
+        auto source=input(n,"source");
+        if(source.is<const char*>()&&std::strlen(source.as<const char*>()))args["source"]["path"].set(source);
+        else if(!source.isNull())args["source"].set(source);
+        else setBuzzerPreset(args["source"].to<JsonObject>(),node(n)["parameters"]["preset"]|"beep");
+    }
+    const bool ok=action_&&action_(node(n),args.as<JsonVariantConst>(),error);
+    activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=!ok;
+    if(!ok&&error.empty())error="Buzzer test action failed";
+    return ok;
+}
+
 void Runtime::execute(size_t n, const char*) {
     if(!allowed(n))return;
     auto& state = states_[n]; std::string type = node(n)["type"].as<std::string>();

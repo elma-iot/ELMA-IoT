@@ -5,16 +5,27 @@ export function helpIdForNode(node){if(node?.helpId)return node.helpId;const typ
 export function helpUrl(helpId='home',locale=helpLocale()){const topic=String(helpId||'home').replace(/^\.+|\.+$/g,'');return BASE+'/'+locale+'/'+(topic==='home'?'':topic.split('.').map(encodeURIComponent).join('/')+'/');}
 export function openOnlineHelp(helpId='home'){if(navigator.onLine===false){alert('Online documentation requires an Internet connection.');return false;}const url=helpUrl(helpId),opened=window.open(url,'_blank','noopener,noreferrer');if(!opened&&!window.ElmaAndroidConfig){alert('Unable to open online documentation. Check the Internet connection and allow pop-ups for this device.');return false;}return true;}
 const TAB_HELP={gpio:'setup.gpio',logics:'logics.overview',motor:'setup.peripherals',playback:'audio.overview',effects:'audio.overview',wifi:'wifi',mqtt:'mqtt.overview',battery:'peripheral.voltage-divider',device:'web-interface',oled:'setup.peripherals',hardware:'web-interface','storage-internal':'setup.peripherals','storage-external':'setup.peripherals',migration:'setup.overview',firmware:'flash.ota',logs:'serial-monitor',info:'about'};
+function bindContextHelp(element,helpId){
+ if(!element||element.dataset.contextHelpId)return;
+ const label=window.ElmaI18n?.t?.('Help / Documentation')||'Help / Documentation';
+ element.dataset.contextHelpId=helpId;element.title=(element.title?element.title+'\n':'')+label+': right-click or long-press';
+ element.addEventListener('contextmenu',event=>{event.preventDefault();event.stopPropagation();openOnlineHelp(helpId);});
+ let timer=0,start=null;
+ element.addEventListener('pointerdown',event=>{if(event.pointerType!=='touch')return;start={x:event.clientX,y:event.clientY};clearTimeout(timer);timer=setTimeout(()=>{timer=0;start=null;openOnlineHelp(helpId);},600);},{capture:true});
+ element.addEventListener('pointermove',event=>{if(start&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>8){clearTimeout(timer);timer=0;start=null;}},{capture:true});
+ for(const type of ['pointerup','pointercancel'])element.addEventListener(type,()=>{clearTimeout(timer);timer=0;start=null;},{capture:true});
+}
 export function installOnlineHelpLinks(){
  if(document.getElementById('elma-online-help-style'))return;
- const style=document.createElement('style');style.id='elma-online-help-style';
- style.textContent='.online-help-heading{display:flex;align-items:center;gap:.48rem;width:max-content;max-width:100%;margin:0 0 .65rem}.online-help-heading>h1,.online-help-heading>h2,.online-help-heading>h3{margin:0}.online-help-button{box-sizing:border-box;display:inline-flex;flex:0 0 1.55rem;width:1.55rem!important;height:1.55rem;min-width:1.55rem;min-height:1.55rem;margin:0!important;padding:0!important;align-items:center;justify-content:center;border:2px solid #ef9a00!important;border-radius:50%!important;background:transparent!important;color:#ffc04a!important;font:700 .95rem/1 Georgia,serif!important;box-shadow:none!important}.online-help-button:hover,.online-help-button:focus-visible{background:#ef9a00!important;color:#101821!important;outline:none;box-shadow:0 0 0 3px #ef9a0040!important}.logic-context-menu .online-help-menu{border-color:#ef8b00}';document.head.append(style);
+ const style=document.createElement('style');style.id='elma-online-help-style';style.textContent='[data-context-help-id]{cursor:help}.logic-context-menu .online-help-menu{border-color:#ef8b00}';document.head.append(style);
+ // Remove controls created by earlier builds without disturbing their headings.
+ for(const button of document.querySelectorAll('.online-help-button'))button.remove();
+ for(const row of document.querySelectorAll('.online-help-heading')){const heading=row.querySelector(':scope > h1,:scope > h2,:scope > h3');if(heading)row.replaceWith(heading);}
  for(const [tab,id] of Object.entries(TAB_HELP)){
   const panel=document.getElementById('tab-'+tab);if(!panel)continue;
   let heading=panel.querySelector(':scope > h1,:scope > h2,:scope > h3,:scope > .device-log-heading > h2');
   if(!heading){heading=document.createElement('h2');heading.textContent=panel.getAttribute('aria-label')||document.querySelector(`[aria-controls="tab-${tab}"]`)?.getAttribute('aria-label')||tab;panel.prepend(heading);}
-  let row=heading.parentElement?.classList.contains('online-help-heading')?heading.parentElement:null;
-  if(!row){row=document.createElement('div');row.className='online-help-heading';heading.before(row);row.append(heading);}
-  const label=window.ElmaI18n?.t?.('Help')||'Help';const button=document.createElement('button');button.type='button';button.className='online-help-button';button.textContent='i';button.title=label;button.setAttribute('aria-label',label);button.dataset.helpId=id;button.onclick=()=>openOnlineHelp(id);row.append(button);
+  bindContextHelp(heading,id);
+  bindContextHelp(document.querySelector(`[aria-controls="tab-${tab}"],[data-tab="${tab}"]`),id);
  }
 }
