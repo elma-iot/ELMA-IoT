@@ -39,3 +39,6 @@ release.env
 include/generated_project_defaults.h
 
 .elma-project-defaults.json
+
+# Local one-off hardware diagnostics
+.buzzer-gpio7-test/
