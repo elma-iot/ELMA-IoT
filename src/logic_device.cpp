@@ -179,13 +179,13 @@ bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::strin
     return ok;
 }
 
-void LogicDevice::loop(uint32_t now, bool updating) {
+void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs) {
     if(!mutex_ || xSemaphoreTake(mutex_,0)!=pdTRUE)return;
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
     updating_=updating;
     if (!runtime_.active() || !state_)return;
     if (updating) {runtime_.suspend();polled_=false;return;}
-    if (polled_ && uint32_t(now-lastPoll_)<100)return;
+    if (polled_ && uint32_t(now-lastPoll_)<minimumPollIntervalMs)return;
     polled_=true;lastPoll_=now;
     JsonDocument snapshot;JsonObject root=snapshot.to<JsonObject>();state_->toJson(root);appendSystemMetricsJson(root);
     root["system"]["lastError"]=state_->snapshot().system.lastError;

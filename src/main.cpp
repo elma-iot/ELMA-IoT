@@ -568,6 +568,7 @@ constexpr uint8_t kCpuBurstDownshiftSamples = 8;
 constexpr unsigned long kRuntimeStateServiceIntervalMs = 20UL;
 constexpr uint32_t kActiveLoopDelayMs = 1;
 constexpr uint32_t kIdleLoopDelayMs = 5;
+constexpr uint32_t kLogicPollIntervalDuringAudioMs = 250;
 constexpr size_t kCloneConfigurationMaxBytes = 32768;
 constexpr char kCloneConfigurationCommand[] = "ELMA_CLONE_CONFIG ";
 
@@ -854,6 +855,30 @@ void applyCpuFrequencyPolicy() {
     const uint32_t measuredFrequencyMhz = ESP.getCpuFreqMHz();
     if (measuredFrequencyMhz != 0 && measuredFrequencyMhz != activeCpuFrequencyMhz) {
         activeCpuFrequencyMhz = measuredFrequencyMhz;
+    }
+
+    // Connection setup and buffer filling can be network-bound and therefore
+    // look like low CPU load. Audio demand is explicit: hold the maximum clock
+    // from the first buffering request until playback has stopped.
+    const String playbackState = audioPlayer != nullptr ? audioPlayer->currentState() : String("idle");
+    const bool audioDemand = playbackState == "buffering" || playbackState == "playing";
+    if (audioDemand) {
+        cpuGovernorHighSamples = 0;
+        cpuGovernorLowSamples = 0;
+        if (activeCpuFrequencyMhz < kCpuFrequencyBurstMhz &&
+            (lastCpuFrequencyFailureAt == 0 || now - lastCpuFrequencyFailureAt >= kCpuFrequencyRetryDelayMs)) {
+            if (setCpuFrequencyMhz(kCpuFrequencyBurstMhz)) {
+                activeCpuFrequencyMhz = ESP.getCpuFreqMHz();
+                lastCpuFrequencyChangeAt = now;
+                lastCpuFrequencyFailureAt = 0;
+                DebugLog.printf("[power] cpu frequency set to %lu MHz reason=audio-active\n",
+                                static_cast<unsigned long>(activeCpuFrequencyMhz));
+            } else {
+                lastCpuFrequencyFailureAt = now;
+                DebugLog.println("[power] cpu frequency change to 240 MHz failed reason=audio-active");
+            }
+        }
+        return;
     }
 
     const SystemMetricsSnapshot metrics = getSystemMetricsSnapshot();
@@ -4535,8 +4560,20 @@ void loop() {
     } else if (!otaManager->isFirmwareTransferActive()) {
         audioReleasedForUpdate = false;
     }
-    logicDevice.loop(now,otaManager->isFirmwareTransferActive());
+    // Feed the decoder before any graph evaluation or peripheral polling.
+    // Logics remains active, but its snapshot/evaluation cadence is reduced
+    // while audio is latency-sensitive so it cannot starve the stream.
+    if (activeAudioOutputEnabled) {
+        audioPlayer->loop();
+    }
+    const String playbackStateBeforeLogic = audioPlayer->currentState();
+    const bool audioLatencySensitive = playbackStateBeforeLogic == "playing" || playbackStateBeforeLogic == "buffering";
+    logicDevice.loop(now, otaManager->isFirmwareTransferActive(),
+                     audioLatencySensitive ? kLogicPollIntervalDuringAudioMs : 100U);
     processDeferredActions();
+    if (activeAudioOutputEnabled) {
+        audioPlayer->loop();
+    }
     serviceWapeTriggerPulse();
     if (now - lastInputPollAt >= kInputPollIntervalMs) {
         lastInputPollAt = now;
@@ -4547,9 +4584,6 @@ void loop() {
     serviceMotorStateRepublish();
     wifiManager->loop();
     serviceAudioDiagnosticTest();
-    if (activeAudioOutputEnabled) {
-        audioPlayer->loop();
-    }
     static unsigned long lastPlaybackProgressAt = 0;
     if (now - lastPlaybackProgressAt >= 500UL) {
         lastPlaybackProgressAt = now;

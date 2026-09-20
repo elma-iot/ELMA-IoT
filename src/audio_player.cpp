@@ -7,6 +7,7 @@
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
+#include <esp32-hal-cpu.h>
 #include <driver/gpio.h>
 #include <memory>
 #include <driver/i2s.h>
@@ -23,6 +24,10 @@ AudioPlayer::Impl* g_impl = nullptr;
 constexpr unsigned long kSwitchFadeOutMs = 70UL;
 constexpr unsigned long kStartFadeInMs = 90UL;
 constexpr unsigned long kSwitchQuietTimeMs = 18UL;
+constexpr unsigned long kStreamWarmupMinimumMs = 350UL;
+constexpr unsigned long kStreamWarmupMaximumMs = 3500UL;
+constexpr size_t kStreamWarmupReadyBytesPsram = 48U * 1024U;
+constexpr size_t kStreamWarmupReadyBytesRam = 3U * 1600U;
 constexpr uint8_t kMaximumStreamRedirects = 4;
 constexpr uint32_t kPreferredDiagnosticSampleRateHz = DefaultConfig::AUDIO_DIAGNOSTIC_PREFERRED_SAMPLE_RATE_HZ;
 
@@ -43,6 +48,17 @@ bool isRedirectStatus(int status) {
     return status == HTTP_CODE_MOVED_PERMANENTLY || status == HTTP_CODE_FOUND ||
         status == HTTP_CODE_SEE_OTHER || status == HTTP_CODE_TEMPORARY_REDIRECT ||
         status == HTTP_CODE_PERMANENT_REDIRECT;
+}
+
+void requestAudioPerformanceClock() {
+    const uint32_t currentMhz = ESP.getCpuFreqMHz();
+    if (currentMhz >= 240U) return;
+    if (setCpuFrequencyMhz(240U)) {
+        DebugLog.printf("[power] cpu frequency set to %u MHz reason=audio-demand\n",
+                        static_cast<unsigned>(ESP.getCpuFreqMHz()));
+    } else {
+        DebugLog.println("[power] unable to raise cpu frequency for audio demand");
+    }
 }
 
 String resolveStreamRedirects(const String& requestedUrl) {
@@ -181,6 +197,9 @@ class AudioPlayer::Impl {
     String completedPlaybackSource;
     uint32_t cachedDurationSeconds = 0;
     bool durationProbePending = false;
+    bool streamWarmupPending = false;
+    unsigned long streamWarmupStartedAt = 0;
+    size_t streamWarmupHighWaterBytes = 0;
     OverlayState overlay;
 
     void publish() {
@@ -579,6 +598,25 @@ void AudioPlayer::loop() {
         }
     }
     impl_->audio.loop();
+    if (impl_->streamWarmupPending) {
+        const unsigned long elapsed = millis() - impl_->streamWarmupStartedAt;
+        const size_t buffered = impl_->audio.inBufferFilled();
+        impl_->streamWarmupHighWaterBytes = max(impl_->streamWarmupHighWaterBytes, buffered);
+        const size_t readyBytes = ESP.getPsramSize() > 0 ? kStreamWarmupReadyBytesPsram : kStreamWarmupReadyBytesRam;
+        const bool bufferReady = impl_->streamWarmupHighWaterBytes >= readyBytes && elapsed >= kStreamWarmupMinimumMs;
+        const bool warmupExpired = elapsed >= kStreamWarmupMaximumMs && impl_->streamWarmupHighWaterBytes > 0;
+        if (!impl_->audio.isRunning()) {
+            impl_->streamWarmupPending = false;
+        } else if (bufferReady || warmupExpired) {
+            impl_->streamWarmupPending = false;
+            DebugLog.printf("[audio] prebuffer ready high_water=%u bytes elapsed=%lu ms%s\n",
+                            static_cast<unsigned>(impl_->streamWarmupHighWaterBytes),
+                            elapsed,
+                            warmupExpired && !bufferReady ? " fallback" : "");
+            impl_->markPlaying();
+            impl_->fadeToPercent(impl_->volume, kStartFadeInMs);
+        }
+    }
     const uint32_t decodedRate=impl_->audio.getSampleRate();
     const uint32_t clock=static_cast<uint32_t>(decodedRate*impl_->playbackSpeed);
     if (impl_->audio.isRunning() && clock && clock!=impl_->clockRate) {if(i2s_set_sample_rates(I2S_NUM_0,clock)==ESP_OK){impl_->clockRate=clock;impl_->activeSampleRateHz=clock;}else if(impl_->appState)impl_->appState->setLastError("Unsupported audio playback clock");}
@@ -593,6 +631,10 @@ void AudioPlayer::loop() {
         recreateAudioEngine(impl_);
         impl_->audio.connecttohost((impl_->connectionUrl.isEmpty() ? impl_->url : impl_->connectionUrl).c_str());
         impl_->state = "buffering";
+        impl_->streamWarmupPending = true;
+        impl_->streamWarmupStartedAt = millis();
+        impl_->streamWarmupHighWaterBytes = 0;
+        impl_->applyHardwareVolumePercent(0);
         impl_->publish();
     }
 }
@@ -609,6 +651,7 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
         impl_->playbackSpeed=1;impl_->pitchShift.reset(1);impl_->clockRate=0;
         impl_->volume=impl_->defaultVolume;
     }
+    requestAudioPerformanceClock();
     const String normalizedUrl = PlaybackText::normalizeUrl(url);
     const String normalizedTitle = PlaybackText::normalizeTitle(title, normalizedUrl);
 
@@ -634,6 +677,9 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     impl_->type = mediaType;
     impl_->source = source;
     impl_->state = "buffering";
+    impl_->streamWarmupPending = true;
+    impl_->streamWarmupStartedAt = millis();
+    impl_->streamWarmupHighWaterBytes = 0;
     impl_->cachedDurationSeconds = 0;
     impl_->durationProbePending = false;
     impl_->publish();
@@ -657,13 +703,10 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     impl_->bitsPerSample = impl_->audio.getBitsPerSample();
     impl_->channelCount = impl_->audio.getChannels();
     DebugLog.printf("[audio] connecttohost ok for %s\n", normalizedUrl.c_str());
-    DebugLog.printf("[audio] playback started rate=%lu bits=%u channels=%u lib_volume=%u\n",
+    DebugLog.printf("[audio] stream connected rate=%lu bits=%u channels=%u; waiting for prebuffer\n",
                   static_cast<unsigned long>(impl_->activeSampleRateHz),
                   static_cast<unsigned>(impl_->bitsPerSample),
-                  static_cast<unsigned>(impl_->channelCount),
-                  static_cast<unsigned>(impl_->hardwareAudioVolume));
-    impl_->markPlaying();
-    impl_->fadeToPercent(impl_->volume, kStartFadeInMs);
+                  static_cast<unsigned>(impl_->channelCount));
     return true;
 }
 
@@ -679,6 +722,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
         impl_->playbackSpeed=1;impl_->pitchShift.reset(1);impl_->clockRate=0;
         impl_->volume=impl_->defaultVolume;
     }
+    requestAudioPerformanceClock();
     fs::FS* fs = getStorageFs(target);
     if (fs == nullptr || !storageMounted(target)) {
         return false;
@@ -793,6 +837,7 @@ void AudioPlayer::stop() {
     if (impl_->speechRendering) {impl_->speechFile.close();endStorageWrite(impl_->speechTarget);impl_->speechRendering=false;}
     impl_->stopRequested = true;
     impl_->retryPending = false;
+    impl_->streamWarmupPending = false;
     if (impl_->audio.isRunning() || impl_->state == "playing" || impl_->state == "buffering") {
         impl_->fadeToPercent(0, kSwitchFadeOutMs);
         delay(kSwitchQuietTimeMs);
@@ -919,7 +964,7 @@ void AudioPlayer::setVolumePercent(uint8_t volumePercent) {
     }
     impl_->defaultVolume = constrain(volumePercent, static_cast<uint8_t>(0), static_cast<uint8_t>(100));
     impl_->volume = nextVolume;
-    impl_->applyHardwareVolumePercent(impl_->volume);
+    impl_->applyHardwareVolumePercent(impl_->streamWarmupPending ? 0 : impl_->volume);
     DebugLog.printf("[audio] volume percent=%u lib_volume=%u\n", impl_->volume, impl_->hardwareAudioVolume);
     impl_->publish();
 }

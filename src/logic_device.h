@@ -8,7 +8,7 @@ class LogicDevice {
 public:
     using StatusWriter = std::function<void(JsonObject)>;
     bool begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions);
-    void loop(uint32_t now, bool updating);
+    void loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs = 100);
     void shuttingDown();
     bool request(JsonVariantConst command, JsonDocument& response, String& error);
     void snapshot(JsonDocument& response, bool graph);
