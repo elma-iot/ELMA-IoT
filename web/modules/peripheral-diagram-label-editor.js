@@ -347,12 +347,16 @@ export function resolvePeripheralDiagramNodeLabels(state, nodeId, defaultLabels 
     .map((entry, index) => {
       const id = String(entry.id || peripheralDiagramLabelId(entry.label));
       const saved = savedById.get(id)
-        || (entry.legacyIds || []).map((legacyId) => savedById.get(String(legacyId))).find(Boolean);
+        || (entry.legacyIds || []).map((legacyId) => savedById.get(String(legacyId))).find(Boolean)
+        || savedLabels.find((candidate) => normalizePeripheralDiagramLabelName(candidate.label).toUpperCase()
+          === normalizePeripheralDiagramLabelName(entry.label).toUpperCase());
       return { ...mergeDefaultLabel(entry, saved, index), legacyIds: entry.legacyIds || [] };
     })
     .filter((entry) => {
       const saved = savedById.get(entry.id)
-        || entry.legacyIds.map((legacyId) => savedById.get(String(legacyId))).find(Boolean);
+        || entry.legacyIds.map((legacyId) => savedById.get(String(legacyId))).find(Boolean)
+        || savedLabels.find((candidate) => normalizePeripheralDiagramLabelName(candidate.label).toUpperCase()
+          === normalizePeripheralDiagramLabelName(entry.label).toUpperCase());
       return !saved?.isRemoved;
     });
   const defaultIds = new Set(defaults.flatMap((entry) => [entry.id, ...entry.legacyIds.map(String)]));

@@ -25,6 +25,22 @@ const ASSET_CONTACTS = {
     VCC: [0.9286, 0.8670, "bottom"],
     VIN: [0.9286, 0.8670, "bottom"],
   },
+  "microsd-spi-module.svg": {
+    CS: [0.9653, 0.2550, "right"],
+    SCK: [0.9653, 0.5550, "right"],
+    MOSI: [0.9653, 0.3550, "right"],
+    MISO: [0.9653, 0.4550, "right"],
+    VCC: [0.9653, 0.8550, "right"],
+    GND: [0.9653, 0.6550, "right"],
+  },
+  "drv8833-motor-driver-breadboard.svg": {
+    IN1: [0.1429, 0.8500, "left"],
+    IN2: [0.1429, 0.7500, "left"],
+    IN3: [0.1429, 0.4500, "left"],
+    IN4: [0.1429, 0.5500, "left"],
+    VCC: [0.1429, 0.1500, "left"],
+    GND: [0.1429, 0.2500, "left"],
+  },
   "i2c-oled-breadboard.svg": {
     GND: [0.3585, 0.0610, "top"],
     VCC: [0.4526, 0.0610, "top"],

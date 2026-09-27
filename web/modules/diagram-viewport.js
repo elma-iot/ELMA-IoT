@@ -29,12 +29,13 @@ export function setupDiagramViewport(stage){
   const pair=()=>{const [a,b]=[...pointers.values()].map(local);return {center:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},distance:Math.hypot(a.x-b.x,a.y-b.y)};};
   const interactive=target=>target.closest?.('.peripheral-diagram-node,.peripheral-diagram-board-shell,.peripheral-diagram-floating-label,.peripheral-diagram-wire-hit,.peripheral-diagram-wire-handle,button,input,select,textarea,a');
   viewport.addEventListener('pointerdown',event=>{
-    if(event.button!==0)return;
+    if(event.button!==0&&event.button!==1)return;
+    const forcePan=event.button===1;
     pointers.set(event.pointerId,{clientX:event.clientX,clientY:event.clientY,target:event.target});
     if(pointers.size===2){
       for(const [id,point] of pointers){point.target.dispatchEvent(new PointerEvent('pointercancel',{pointerId:id,bubbles:true}));}
       const initial=pair();gesture={kind:'pinch',...initial,view:{...view}};
-    }else if(!interactive(event.target))gesture={kind:'pan',start:local(event),view:{...view}};
+    }else if(forcePan||!interactive(event.target))gesture={kind:'pan',start:local(event),view:{...view}};
     else return;
     event.preventDefault();event.stopPropagation();viewport.setPointerCapture(event.pointerId);viewport.classList.add('is-panning');
   },true);

@@ -1564,6 +1564,7 @@ peripheralDiagramWiringModule = createPeripheralDiagramWiringModule({
   savePeripheralDiagramPositions,
   syncGpioMappingControls,
   queueSettingsSave,
+  rerenderPeripheralDiagram: renderPeripheralDiagram,
 });
 
 peripheralDiagramLabelEditorModule = createPeripheralDiagramLabelEditorModule({
@@ -3861,13 +3862,14 @@ function peripheralDiagramSlotStyle(groupKey, index) {
 
 function peripheralDiagramInlineStyle(node) {
   const savedPosition = state.peripheralDiagramPositions?.[node.id];
+  const zStyle = Number.isFinite(Number(savedPosition?.z)) ? `z-index:${Number(savedPosition.z)};` : "";
   if (savedPosition
       && !Number.isFinite(Number(savedPosition.centerXFactor))
       && Number.isFinite(savedPosition.x)
       && Number.isFinite(savedPosition.y)) {
-    return `left:${savedPosition.x}px; top:${savedPosition.y}px; right:auto; bottom:auto; transform:none;`;
+    return `left:${savedPosition.x}px; top:${savedPosition.y}px; right:auto; bottom:auto; transform:none;${zStyle}`;
   }
-  return node.style || "";
+  return `${node.style || ""}${zStyle}`;
 }
 
 function peripheralDiagramRotation(nodeId) {
@@ -4682,7 +4684,18 @@ function renderPeripheralDiagramNow() {
   });
 
   state.peripheralDiagramNodeMap = Object.fromEntries(nodes.map((node) => [node.id, node]));
-  elements.peripheralDiagramItems.innerHTML = nodes.map((node) => peripheralDiagramNodeMarkup(node)).join("");
+  const hiddenNodes = state.peripheralDiagramPositions?.__hiddenNodes || {};
+  const visibleNodes = nodes.filter((node) => !hiddenNodes[node.id]);
+  const canvasObjects = Object.values(state.peripheralDiagramPositions?.__canvasObjects || {}).filter((entry) => entry && !entry.hidden);
+  const canvasObjectMarkup = canvasObjects.map((entry) => {
+    const left = Number(entry.x || 0), top = Number(entry.y || 0), z = Number(entry.z || 0), label = escapeHtml(entry.label || "Element");
+    const kind = String(entry.kind || "text");
+    const content = kind === "pin" ? `<span class="peripheral-diagram-node-block-pin">${label}</span>` : kind === "element" ? `<div class="peripheral-diagram-node-block"><div class="peripheral-diagram-node-block-title">${label}</div></div>` : label;
+    return `<div class="peripheral-diagram-canvas-object peripheral-diagram-canvas-object-${escapeHtml(kind)}" data-canvas-object-id="${escapeHtml(entry.id || "")}" style="position:absolute;left:${left}px;top:${top}px;z-index:${z};">${content}</div>`;
+  }).join("");
+  elements.peripheralDiagramItems.innerHTML = visibleNodes.map((node) => peripheralDiagramNodeMarkup(node)).join("") + canvasObjectMarkup;
+  const boardNodeId = peripheralDiagramBoardNodeId(activeGpioBoardProfile());
+  if (elements.peripheralDiagramBoardShell) elements.peripheralDiagramBoardShell.hidden = Boolean(hiddenNodes[boardNodeId]);
   applyResponsivePeripheralDiagramPositions();
   if (elements.peripheralDiagramBoardEdit) {
     const boardNode = peripheralDiagramBoardEditorNode();
@@ -4694,7 +4707,7 @@ function renderPeripheralDiagramNow() {
     elements.peripheralDiagramPlaceholderText.hidden = nodes.length > 0;
   }
   updateConfiguredFeatureVisibility();
-  renderPeripheralDiagramWiring(nodes);
+  renderPeripheralDiagramWiring(visibleNodes);
 }
 
 function renderPeripheralAudioOutputControls() {

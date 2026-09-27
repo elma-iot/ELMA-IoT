@@ -80,16 +80,18 @@ if selected_board_id and selected_board_id not in BOARD_ASSET_IDS.values():
     raise SystemExit(f"Unknown ELMA selected board identifier: {selected_board_id}")
 env.Append(CPPDEFINES=[("APP_COMPILED_BOARD_PROFILE_ID", selected_board_id)])
 sys.path.insert(0,str(ROOT / "scripts"))
-from compact_peripheral_assets import load_manifest,active_mask,default_svg
+from compact_peripheral_assets import load_manifest,budgeted_mask,default_svg
 from share_compact_peripheral_svg import BEGIN as SHARED_FALLBACK_BEGIN, END as SHARED_FALLBACK_END, install_shared_fallback
 peripheral_svg_manifest=load_manifest(ROOT)
 peripheral_svg_paths=sorted(peripheral_svg_manifest)
 active_profiles_text=os.environ.get("ELMA_ACTIVE_PERIPHERAL_PROFILES")
 # No configured peripherals means no detailed illustrations; explicit project masks still win.
 active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else []
-peripheral_svg_mask=active_mask(peripheral_svg_manifest,active_profiles)
+try:peripheral_svg_budget=int(os.environ.get("ELMA_PERIPHERAL_SVG_BUDGET_BYTES","98304"))
+except ValueError:raise SystemExit("ELMA_PERIPHERAL_SVG_BUDGET_BYTES must be a byte count")
+peripheral_svg_mask=budgeted_mask(ROOT,peripheral_svg_manifest,active_profiles,peripheral_svg_budget)
 env.Append(CPPDEFINES=[("APP_PERIPHERAL_SVG_MASK",peripheral_svg_mask)])
-if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)}; unconfigured routes share one compact default image")
+if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)} within {peripheral_svg_budget} bytes compressed; omitted routes share one compact default image")
 
 
 if env.get("PIOENV") == "esp32_notifier_hacs_legacy_ota":
@@ -252,7 +254,7 @@ def build_web_assets() -> None:
         target_path.write_bytes(prepare_payload(path))
 
     subprocess.run(
-        ["node", str(ROOT / "scripts" / "build_board_web.mjs"), str(ROOT), str(BUILD_WEB_DIR)],
+        [os.environ.get("ELMA_NODE_EXECUTABLE", "node"), str(ROOT / "scripts" / "build_board_web.mjs"), str(ROOT), str(BUILD_WEB_DIR)],
         cwd=ROOT, check=True,
     )
 

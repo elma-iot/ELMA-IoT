@@ -1,4 +1,5 @@
 import {diagramRect,canvasClientPoint} from './diagram-viewport.js';
+import {exactBoardAnchors} from './board-contact-layout.js';
 import {powerRailTree,obstacleAwareRoute} from './diagram-routing-layout.js';
 import {voltageDividerMaximum} from './voltage-divider.js';
 import {
@@ -31,6 +32,7 @@ import {
 const PERIPHERAL_DIAGRAM_WIRE_CURVES_KEY = "__wireCurves";
 const PERIPHERAL_DIAGRAM_CUSTOM_LABEL_WIRES_KEY = "__customLabelWires";
 const PERIPHERAL_DIAGRAM_HIDDEN_CONNECTIONS_KEY = "__hiddenConnections";
+const PERIPHERAL_DIAGRAM_HIDDEN_NODES_KEY = "__hiddenNodes";
 
 function normalizeSignalLabel(label) {
   return String(label || "")
@@ -1078,6 +1080,7 @@ export function createPeripheralDiagramWiringModule({
   savePeripheralDiagramPositions,
   syncGpioMappingControls,
   queueSettingsSave,
+  rerenderPeripheralDiagram,
 }) {
   let lastRenderedNodes = [];
   let lastRenderedLabelEntries = new Map();
@@ -1636,20 +1639,10 @@ export function createPeripheralDiagramWiringModule({
       return false;
     }
     const connectionKind = String(connectionGroup.dataset.connectionKind || "auto");
-    const connectionType = String(connectionGroup.dataset.connectionType || "");
     const connectionKey = String(connectionGroup.dataset.connectionKey || "");
 
     if (connectionKind === "custom") {
       return removeCustomLabelConnection(connectionKey);
-    }
-
-    if (connectionType === "gpio") {
-      const changed = clearConnectionPinAssignment(connectionGroup);
-      if (changed) {
-        clearStoredWireCurveByKey(state, connectionKey);
-        savePeripheralDiagramPositions?.();
-      }
-      return changed;
     }
 
     const hidden = hideConnection(state, connectionKey);
@@ -1893,11 +1886,26 @@ export function createPeripheralDiagramWiringModule({
     const clearedCurves = clearWireCurveStore(state);
     const clearedCustomConnections = clearCustomLabelWireStore(state);
     const clearedHiddenConnections = clearHiddenConnectionStore(state);
-    const cleared = clearedCurves || clearedCustomConnections || clearedHiddenConnections;
+    const positions = state.peripheralDiagramPositions || {};
+    const clearedHiddenNodes = Boolean(positions[PERIPHERAL_DIAGRAM_HIDDEN_NODES_KEY] && Object.keys(positions[PERIPHERAL_DIAGRAM_HIDDEN_NODES_KEY]).length);
+    delete positions[PERIPHERAL_DIAGRAM_HIDDEN_NODES_KEY];
+    let clearedLabels = false;
+    const layouts = positions.__diagramLabelLayouts;
+    if (layouts && typeof layouts === "object") Object.keys(layouts).forEach((nodeId) => {
+      const entries = layouts[nodeId];
+      if (!entries || typeof entries !== "object") return;
+      Object.keys(entries).forEach((key) => { if (entries[key]?.isRemoved) { delete entries[key]; clearedLabels = true; } });
+      if (!Object.keys(entries).length) delete layouts[nodeId];
+    });
+    if (layouts && !Object.keys(layouts).length) delete positions.__diagramLabelLayouts;
+    let restoredCanvasObjects = false;
+    const canvasObjects = positions.__canvasObjects;
+    if (canvasObjects && typeof canvasObjects === "object") Object.values(canvasObjects).forEach((entry) => { if (entry?.hidden) { entry.hidden = false; restoredCanvasObjects = true; } });
+    const cleared = clearedCurves || clearedCustomConnections || clearedHiddenConnections || clearedHiddenNodes || clearedLabels || restoredCanvasObjects;
     if (cleared) {
       savePeripheralDiagramPositions?.();
     }
-    render(nodes);
+    if (cleared && rerenderPeripheralDiagram) rerenderPeripheralDiagram(); else render(nodes);
     return { cleared };
   }
 
@@ -1927,13 +1935,28 @@ export function createPeripheralDiagramWiringModule({
     return overlay;
   }
 
-  function boardAnchors(stageRect, boardRect) {
+  function boardAnchors(stageRect, boardRect, boardImage) {
     const boardProfile = activeGpioBoardProfile();
     const primary = normalizeBoardRails(boardProfile, gpioBoardLayouts[boardProfile] || { left: [], right: [] });
     const extra = gpioBoardExtraLayouts[boardProfile] || { left: [], right: [] };
     const calibration = boardAnchorCalibration(boardProfile);
     const anchorsByKey = new Map();
 
+    // Build-time SVG inspection is the source of truth for supported boards.
+    // Both desktop and device web renderers consume these same normalized pad
+    // coordinates, avoiding a second hand-maintained visual pin model.
+    const exact=exactBoardAnchors({profile:boardProfile,boardRect,primary,extra,offset:calibration.outerOffset,signalKey,boardRailForPeripheral});
+    if(exact)return exact;
+
+    const transform = getComputedStyle(boardImage).transform;
+    const matrix = transform && transform !== "none" ? new DOMMatrixReadOnly(transform) : null;
+    const turns = matrix ? ((Math.round(Math.atan2(matrix.b, matrix.a) / (Math.PI / 2)) % 4) + 4) % 4 : 0;
+    const rotatePoint = (x, y, side) => {
+      const sides = ["top", "right", "bottom", "left"];
+      let nx=x,ny=y;
+      for(let turn=0;turn<turns;turn+=1)[nx,ny]=[1-ny,nx];
+      return {x:nx,y:ny,side:sides[(sides.indexOf(side)+turns)%4]};
+    };
     const buildSideAnchors = (entries, side, lane) => {
       const validEntries = entries.filter((entry) => entry && (entry.pin !== undefined || entry.label));
       if (!validEntries.length) {
@@ -1944,11 +1967,15 @@ export function createPeripheralDiagramWiringModule({
       const usableHeight = Math.max(boardRect.height - topInset - bottomInset, 0);
       const step = validEntries.length > 1 ? (usableHeight / (validEntries.length - 1)) : 0;
       validEntries.forEach((entry, index) => {
-        const y = boardRect.top + topInset + (step * index);
+        const yFactor = boardRect.height ? (topInset + (step * index))/boardRect.height : 0.5;
+        const rotated=rotatePoint(side === "left" ? 0 : 1,yFactor,side);
         const outerOffset = calibration.outerOffset + (lane * calibration.extraLaneGap);
-        const x = side === "left"
-          ? boardRect.left - outerOffset
-          : boardRect.left + boardRect.width + outerOffset;
+        let x=boardRect.left+rotated.x*boardRect.width;
+        let y=boardRect.top+rotated.y*boardRect.height;
+        if(rotated.side==="left")x-=outerOffset;
+        if(rotated.side==="right")x+=outerOffset;
+        if(rotated.side==="top")y-=outerOffset;
+        if(rotated.side==="bottom")y+=outerOffset;
         const boardLabel = String(entry.label || (entry.pin != null ? `GPIO${entry.pin}` : "")).trim();
         if (!boardLabel) {
           return;
@@ -1959,7 +1986,7 @@ export function createPeripheralDiagramWiringModule({
         if (!anchorsByKey.has(key)) {
           anchorsByKey.set(key, []);
         }
-        anchorsByKey.get(key).push({ x, y, side, lane, boardLabel, pin: entry.pin, key });
+        anchorsByKey.get(key).push({ x, y, side:rotated.side, lane, boardLabel, pin: entry.pin, key });
       });
     };
 
@@ -2228,7 +2255,7 @@ export function createPeripheralDiagramWiringModule({
     }
 
     const boardRect = relativeContainedImageRect(boardImage, stageRect);
-    const anchorCandidates = boardAnchors(stageRect, boardRect);
+    const anchorCandidates = boardAnchors(stageRect, boardRect, boardImage);
     const nodeRects = new Map(
       nodes.map((node) => {
         const element = elements.peripheralDiagramItems?.querySelector(`[data-node-id="${node.id}"]`);
@@ -2258,7 +2285,9 @@ export function createPeripheralDiagramWiringModule({
     const signalLabels = new Map();
     const labelEntriesByRef = new Map();
     const boardProfile = activeGpioBoardProfile();
-    const activeConnections = collectConnections(nodes).filter((connection) => !isConnectionHidden(state, connectionStorageKey(connection)));
+    if (state.peripheralDiagramPositions?.[PERIPHERAL_DIAGRAM_HIDDEN_NODES_KEY]?.[peripheralDiagramBoardNodeId(boardProfile)]) { overlay.innerHTML = ""; labelLayer.innerHTML = ""; return; }
+    const removedFor = (nodeId, label, extraId = "") => readPeripheralDiagramNodeLabels(state, nodeId).some((entry) => entry.isRemoved && (entry.id === extraId || signalKey(entry.label) === signalKey(label)));
+    const activeConnections = collectConnections(nodes).filter((connection) => !isConnectionHidden(state, connectionStorageKey(connection)) && !removedFor(connection.nodeId, connection.signalLabel) && !removedFor(peripheralDiagramBoardNodeId(boardProfile), connection.boardLabel, connection.type === "gpio" ? `BOARD_GPIO_${Number(connection.pin)}` : ""));
     const usedBoardTargets = new Set(activeConnections.map(boardTargetKey));
     const boardLabelDefaults = editableBoardLabels(boardProfile);
     const savedBoardLabelIds = new Set(
@@ -2482,7 +2511,12 @@ export function createPeripheralDiagramWiringModule({
     lastRenderedLabelRects = new Map(actualLabelRects);
     bindLabelConnectionInteractions(labelLayer, overlay);
     const automaticLaneCounts = new Map();
-    const routingBounds = {width:stageRect.width,height:stageRect.height,usedRoutes:[]};
+    const routingBounds = {
+      width:stageRect.width,
+      height:stageRect.height,
+      usedRoutes:[],
+      obstacles:[...visualRects.values(),...actualLabelRects.values()],
+    };
     const railRoots=new Map(),railEndpoints=new Map(),railParents=new Map();
     for(const node of nodes){
       const owner=visualRects.get(node.id)||nodeRects.get(node.id);

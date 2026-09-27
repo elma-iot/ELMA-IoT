@@ -12,6 +12,7 @@ const boards = ["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32
   "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6"];
 const app = fs.readFileSync(path.join(root, "web/app.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
+const boardContacts = JSON.parse(fs.readFileSync(path.join(root, "web/board-pin-contacts.json"), "utf8"));
 const policy = await import("data:text/javascript;base64," + fs.readFileSync(path.join(root, "web/modules/board-pin-policy.js")).toString("base64"));
 const evaluate = expression => vm.runInNewContext(`(${expression})`, {}, {timeout: 1000});
 
@@ -49,6 +50,10 @@ for (const [index, board] of boards.entries()) {
         if (filename === "board-pin-policy.js") {
           source = replaceFunction(source, "boardChipFamily", `export function boardChipFamily() { return ${JSON.stringify(chip)}; }`);
           source = replaceFunction(source, "chipPins", `export function chipPins(chip, output = false) { return output ? ${JSON.stringify(policy.chipPins(chip, true, board))} : ${JSON.stringify(policy.chipPins(chip, false, board))}; }`);
+        }
+        if (filename === "board-contact-layout.js") {
+          source = source.replace("import boardPinContacts from '../board-pin-contacts.json';",
+            `const boardPinContacts = ${JSON.stringify({[board]: boardContacts[board] || {}})};`);
         }
         if (filename === "configuration-gpio-tab.js") {
           const match = source.match(/^  function inferBoardAdcHint\([^]*?^  \}/m);
