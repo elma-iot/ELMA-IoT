@@ -313,6 +313,7 @@ export function createConfigurationSettingsPersistenceModule({
     payload.oled.width = Number(payload.oled.width || 128);
     payload.oled.height = Number(payload.oled.height || 64);
     payload.oled.rotation = Number(payload.oled.rotation || 0);
+    payload.oled.brightness = Number(payload.oled.brightness ?? state.settings?.oled?.brightness ?? 100);
     const preferredOledPins = choosePreferredOledPins(state.settings);
     const selectedOledPin=(field,saved,fallback)=>field&&field.value!==''?field.value:(saved!==undefined&&saved!==null?saved:fallback);
     payload.oled.sdaPin = Number(selectedOledPin(elements.oledSdaPin,payload.oled.sdaPin,preferredOledPins.sda));

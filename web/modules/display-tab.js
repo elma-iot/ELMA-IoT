@@ -74,6 +74,10 @@ export function createDisplayTab({
   function updateDisplayModeUi() {
     const displayType = String(elements.displayType?.value || state.settings?.oled?.displayType || "oled").toLowerCase();
     const oledSelected = displayType !== "wape";
+    const panelSelected=displayType==='panel';
+    const panelControls=document.getElementById('panelControls');if(panelControls)panelControls.hidden=!panelSelected;
+    for(const key of ['driver','i2cAddress','width','height','sdaPin','sclPin','resetPin']){const field=namedField('oled.'+key);if(field)field.disabled=panelSelected;}
+    if(elements.oledPreviewCard)elements.oledPreviewCard.hidden=panelSelected;
     const oledEnabledField = namedField("oled.enabled");
     if (elements.oledModeSection) {
       elements.oledModeSection.hidden = !oledSelected;

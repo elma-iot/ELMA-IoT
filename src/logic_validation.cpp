@@ -1,13 +1,47 @@
 #include "logic_validation.h"
 #include "logic_catalog.h"
+#include <set>
 #include <cmath>
 #include <vector>
 #include <functional>
 #include <cctype>
 
+bool validateLogicHardware(JsonObject n,std::string& error) {
+    const std::string type=n["type"]|"";
+    if(type!="hardware.gpio"&&type!="hardware.led")return true;
+    std::set<std::string> enabled;
+    if(type=="hardware.gpio") {
+        if(!n["parameters"]["pin"].is<int>()){error="GPIO must be an integer";return false;}
+        int pin=n["parameters"]["pin"];
+        auto caps=n["binding"]["allowedPins"][std::to_string(pin)];
+        std::string mode=n["parameters"]["mode"]|"";
+        bool valid=(mode=="input"&&caps["input"]==true)||((mode=="input_pullup"||mode=="input_pulldown")&&caps["pull"]==true)||((mode=="output"||mode=="pwm")&&caps["output"]==true)||(mode=="analog"&&caps["analog"]==true);
+        if(mode=="pwm" && n["binding"]["pwmAllowed"]==false)valid=false;
+        if(!valid){error="GPIO or mode is unavailable; recompile for changed hardware";return false;}
+        double duty=n["parameters"]["duty"]|-1.0,frequency=n["parameters"]["frequency"]|0.0;
+        if(!std::isfinite(duty)||duty<0||duty>100||!std::isfinite(frequency)||frequency<100||frequency>20000){error="Invalid GPIO PWM parameters";return false;}
+        enabled={"digital"};
+        if(mode=="output"||mode=="pwm")enabled.insert("out");
+        if(mode=="output")enabled.insert({"toggle","write","state"});
+        if(mode=="pwm")enabled.insert({"pwm","duty"});
+        if(mode=="analog")enabled.insert({"analog","millivolts"});
+    } else {
+        if((n["binding"]["pin"]|-1)<0){error="Built-in LED is unavailable";return false;}
+        enabled={"on","off","toggle","write","release","out","digital"};
+        if(n["binding"]["ledType"]!="regular")enabled.insert({"red","green","blue","brightness"});
+        for(const char* key:{"red","green","blue","brightness"}) {
+            double value=n["parameters"][key]|-1.0;
+            if(!std::isfinite(value)||value<0||value>(std::string(key)=="brightness"?100:255)){error="Invalid LED color/brightness";return false;}
+        }
+    }
+    for(JsonObject p:n["ports"].as<JsonArray>())p["enabled"]=enabled.count(p["id"]|"")!=0;
+    return true;
+}
+
+
 namespace ElmaLogic {
 namespace {
-bool compatible(const char* a,const char* b) {return std::string(b)=="scalar"&&(std::string(a)=="number"||std::string(a)=="integer"||std::string(a)=="analog"||std::string(a)=="boolean"||std::string(a)=="string") || std::string(a)==b || std::string(b)=="number" && (std::string(a)=="analog" || std::string(a)=="integer") || std::string(a)=="path" && std::string(b)=="audio";}
+bool compatible(const char* a,const char* b) {return std::string(b)=="measurement"&&(std::string(a)=="number"||std::string(a)=="integer"||std::string(a)=="analog"||std::string(a)=="boolean") || std::string(b)=="scalar"&&(std::string(a)=="number"||std::string(a)=="integer"||std::string(a)=="analog"||std::string(a)=="boolean"||std::string(a)=="string") || std::string(a)==b || std::string(b)=="number" && (std::string(a)=="analog" || std::string(a)=="integer") || std::string(a)=="path" && std::string(b)=="audio";}
 JsonObjectConst port(JsonObjectConst node,const char* name,const char* direction) {for(JsonObjectConst p:node["ports"].as<JsonArrayConst>())if(p["id"]==name&&p["direction"]==direction)return p;return {};}
 }
 bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument& output,std::string& error) {
@@ -24,6 +58,10 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         JsonObjectConst spec=definition[type].as<JsonObjectConst>();
         if(std::string(type).find("peripheral.")==0) {
             for(JsonObjectConst d:devices)if(d["type"]==type && d["peripheral"]["id"]==n["peripheral"]["id"]) {spec=d;break;}
+        }
+        if(std::string(type).find("hardware.")==0) {
+            spec=JsonObjectConst();
+            for(JsonObjectConst d:devices)if(d["type"]==type){spec=d;break;}
         }
         if(spec.isNull())return fail("Unsupported node or peripheral reference; recompile for changed hardware");
 #ifdef APP_DISABLE_AUDIO
@@ -42,13 +80,22 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             target["parameters"][p.key()].set(value);
         }
     }
+    std::set<int> gpioPins;int pwmCount=0;
+    for(JsonObject n:nodes) {
+        if(!validateLogicHardware(n,error))return false;
+        if(n["type"]=="hardware.gpio") {
+            if(!gpioPins.insert(n["parameters"]["pin"].as<int>()).second)return fail("GPIO already owned by another Logics element");
+            if(n["parameters"]["mode"]=="pwm" && ++pwmCount>2)return fail("At most two GPIO PWM outputs");
+        }
+    }
     std::vector<std::vector<size_t>> adjacency(nodes.size());std::vector<bool> root(nodes.size(),false),reached(nodes.size(),false);
     auto index=[&](const char* id){for(size_t i=0;i<nodes.size();++i)if(nodes[i]["id"]==id)return int(i);return -1;};
     for(JsonObjectConst e:input["connections"].as<JsonArrayConst>()) {
         int a=index(e["source"]["node"]|""),b=index(e["target"]["node"]|"");
         if(a<0||b<0||a==b)return fail("Invalid connection endpoints");
         auto ap=port(nodes[a],e["source"]["port"]|"","output"),bp=port(nodes[b],e["target"]["port"]|"","input");
-        if(ap.isNull()||bp.isNull()||!compatible(ap["type"]|"",bp["type"]|""))return fail("Incompatible connector types");
+        if(ap.isNull()||bp.isNull()||ap["enabled"]==false||bp["enabled"]==false||!compatible(ap["type"]|"",bp["type"]|""))return fail("Incompatible connector types");
+        if(nodes[a]["type"]=="recording.interval" && !(nodes[b]["type"]=="mainboard.save_data" && e["target"]["port"]=="value"))return fail("Recording Interval output connects only to Save Data.Value");
         for(JsonObjectConst old:links)if(old["target"]["node"]==e["target"]["node"]&&old["target"]["port"]==e["target"]["port"])return fail("Input has multiple connections");
         links.add(e);adjacency[a].push_back(size_t(b));
     }
@@ -59,8 +106,29 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         auto n=nodes[i];const char* id=n["id"]|"";std::string type=n["type"]|"";
         for(JsonObjectConst p:n["ports"].as<JsonArrayConst>())if(p["direction"]=="input" && p["required"].as<bool>()&&!linked(id,p["id"]|""))return fail("Required input is disconnected");
         if(type.find("timing.")==0 && !linked(id,"seconds")) {double seconds=n["parameters"]["seconds"]|0.0;if(seconds<=0||seconds>86400)return fail("Interval must be >0 and <=86400 seconds");}
+        if(type=="recording.interval") {
+            std::string unit=n["parameters"]["timeUnit"]|"";
+            double factor=unit=="milliseconds"?1:unit=="seconds"?1000:unit=="minutes"?60000:unit=="hours"?3600000:unit=="days"?86400000:0;
+            double ms=n["parameters"]["duration"].as<double>()*factor;
+            if(!std::isfinite(ms)||ms<1||ms>31536000000.0)return fail("Recording interval must be 1 ms to 365 days");
+            bool output=false;for(JsonObjectConst e:links)if(e["source"]["node"]==id)output=true;
+            if(!output)return fail("Connect Recording Interval to Save Data.Value");
+        }
         if(type=="timing.repeat"&&!linked(id,"count")){double count=n["parameters"]["count"]|0.0;if(count<1||count>128||count!=std::floor(count))return fail("Repeat count must be a whole number 1-128");}
         if(type=="condition.between"&&!linked(id,"minimum")&&!linked(id,"maximum")&&n["parameters"]["minimum"].as<double>()>n["parameters"]["maximum"].as<double>())return fail("Minimum exceeds maximum");
+        if(type=="mainboard.plot"||type=="mainboard.save_data") {
+            for(const char* key:{"plot","series","unit"}) {
+                if(!n["parameters"][key].is<const char*>())return fail("Plot labels must be text");
+                size_t length=strlen(n["parameters"][key].as<const char*>());
+                bool unit=std::string(key)=="unit";
+                if(length>(unit?16u:32u)||(!unit&&!length))return fail("Invalid Plot label length");
+            }
+        }
+        if(type=="mainboard.save_data") {
+            const char* path=n["parameters"]["path"]|"/";
+            if(*path!='/'||strlen(path)>128||strstr(path,"..")||strchr(path,'\\'))return fail("Invalid external recording folder");
+            for(const unsigned char* c=(const unsigned char*)path;*c;++c)if(*c<32)return fail("Invalid recording folder character");
+        }
         if(type=="mainboard.mqtt.publish") {
             if(!linked(id,"topic")){std::string topic=n["parameters"]["topic"]|"";if(topic.empty()||topic.size()>192||topic.find_first_of("+#")!=std::string::npos)return fail("Enter an exact MQTT topic without wildcards");for(unsigned char c:topic)if(c<32)return fail("MQTT topic contains a control character");}
             if(!linked(id,"qos")&&n["parameters"]["qos"]!=1)return fail("MQTT QoS must be 1");
@@ -92,7 +160,7 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             for(JsonObjectConst d:devices)if(d["type"]==capability&&d["peripheral"]["id"]==device["peripheral"]["id"])supported=true;
             if(device["type"]!="peripheral.reference"||!supported)return fail("Action is unsupported for this peripheral reference");
         }
-        root[i]=type.find("event.")==0 || n["binding"]["kind"]=="transition" || n["binding"]["kind"]=="lifecycle" || type=="peripheral.rising" || type=="peripheral.falling" || type=="condition.if"&&!linked(id,"in") || type=="timing.timer"&&linked(id,"enabled");
+        root[i]=type=="mainboard.save_data"&&!linked(id,"in") || type.find("event.")==0 || n["binding"]["kind"]=="transition" || n["binding"]["kind"]=="lifecycle" || type=="peripheral.rising" || type=="peripheral.falling" || type=="condition.if"&&!linked(id,"in") || type=="timing.timer"&&linked(id,"enabled");
     }
     std::function<void(size_t)> reach=[&](size_t i){if(reached[i])return;reached[i]=true;for(auto next:adjacency[i])reach(next);};
     for(size_t i=0;i<nodes.size();++i)if(root[i])reach(i);

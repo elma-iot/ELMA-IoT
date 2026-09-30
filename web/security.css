@@ -1,0 +1,12 @@
+.grid { position:relative; }
+.security-blocked > :not(.security-mask) { filter:blur(7px);pointer-events:none;user-select:none; }
+.security-mask { position:absolute;inset:0;z-index:900;min-height:490px;background:rgba(15,23,42,.35);display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;box-sizing:border-box; }
+.security-mask[hidden] { display:none; }
+.security-dialog { position:sticky;top:16px;width:320px;max-width:100%;box-sizing:border-box;background:#172332;color:#f4f7fb;border:1px solid #65758a;border-radius:16px;padding:20px;box-shadow:0 12px 48px #0008;display:flex;flex-direction:column;gap:12px; }
+.security-dialog h2,.security-dialog p { margin:0; }
+.security-dialog [data-pin] { width:100%;box-sizing:border-box;text-align:center;font-size:28px;letter-spacing:.6em;height:52px; }
+.security-keypad { display:grid;grid-template-columns:repeat(3,1fr);gap:8px; }
+.security-keypad button { min-height:44px;font-size:18px; }
+.security-dialog [data-error] { min-height:20px;color:#ffbcae;font-size:14px; }
+#tab-security .security-actions { display:flex;flex-wrap:wrap;gap:12px;margin:16px 0; }
+#tab-security [hidden] { display:none; }

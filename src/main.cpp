@@ -1,9 +1,12 @@
 #include "buzzer_melody.h"
+#include "plot_telemetry.h"
+#include "plot_storage.h"
 #include "logic_device.h"
 #include "logic_audio_dispatch.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
 #include <Arduino.h>
+#include <map>
 #include <Adafruit_NeoPixel.h>
 #include <soc/soc_caps.h>
 #include <Preferences.h>
@@ -47,6 +50,7 @@ uint8_t lastStatusLedGreen = 0;
 uint8_t lastStatusLedBlue = 0;
 
 void initializeStatusLed() {
+    if (activeStatusLedPin == 255) { statusLedInitialized = false; return; }
     if (activeStatusLedIsNeoPixel) {
         statusLedPixel.setPin(activeStatusLedPin);
         statusLedPixel.begin();
@@ -122,7 +126,9 @@ bool apStatusLedBluePhase(unsigned long now) {
     return ((now / kApStatusLedBlinkIntervalMs) % 2UL) != 0;
 }
 
+bool logicLedOwned=false;
 void updateStatusLedForNetwork(bool wifiConnected, bool apMode, unsigned long now = millis()) {
+    if(logicLedOwned)return;
     if (wifiConnected) {
         writeStatusLedColor(0, 0, kStatusLedBrightness);
         return;
@@ -4003,11 +4009,45 @@ void setup() {
     audioPlayer->begin(activeI2sBclkPin, activeI2sWsPin, activeI2sDoutPin, settings->device.savedVolumePercent, activeAudioOutputEnabled, *appState);
     logicDevice.begin(ELMA_COMPILED_LOGICS,*appState,[](JsonObject root){
         root["firmware"]["version"]=APP_VERSION;
+        root["builtinLed"]["digital"]=lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue;
         root["battery"]["available"]=batteryMonitor->enabled() && batteryMonitor->latest().filteredVoltage>0;
         root["battery"]["percentage"]=estimateBatteryPercent(root["battery"]["voltage"] | 0.0f);
     },[](JsonObjectConst node,JsonVariantConst args,std::string& message){
         String error;bool ok=false;std::string type=node["type"] | "";
-        if(std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos) {
+        if(type=="mainboard.save_data") {
+            return queuePlotRecording(args, message);
+        }
+        if(type=="mainboard.plot") {
+            if(!args["value"].is<double>() || !std::isfinite(args["value"].as<double>())){message="Plot requires a finite numeric value";return false;}
+            const char* plot=args["plot"]|"Plot 1";const char* series=args["series"]|"Value";const char* unit=args["unit"]|"";
+            if(!*plot || !*series || strlen(plot)>32 || strlen(series)>32 || strlen(unit)>16){message="Plot/series names must be 1-32 bytes; unit at most 16 bytes";return false;}
+            static std::map<std::string,uint32_t> lastSamples;
+            std::string id=node["id"]|"";uint32_t now=millis();auto found=lastSamples.find(id);
+            if(found!=lastSamples.end() && uint32_t(now-found->second)<50)return true;
+            if(found==lastSamples.end() && lastSamples.size()>=64)lastSamples.clear();
+            lastSamples[id]=now;
+            publishPlotSample(plot,series,unit,now,args["value"].as<double>());
+            if(!Serial)return true;
+            JsonDocument sample;sample["plot"]=plot;sample["series"]=series;sample["unit"]=unit;sample["t"]=now;sample["value"].set(args["value"]);
+            String packet="@ELMA_PLOT ";serializeJson(sample,packet);packet+='\n';
+            // Never stall the control loop when the host is absent or reading slowly.
+            if(Serial.availableForWrite()>=static_cast<int>(packet.length()))Serial.write(reinterpret_cast<const uint8_t*>(packet.c_str()),packet.length());
+            return true;
+        }
+        if(type=="hardware.led") {
+            int pin=node["binding"]["pin"]|-1;
+            if(pin<0){message="Built-in LED unavailable";return false;}
+            std::string action=args["action"]|"";
+            if(action=="release"){writeStatusLed(false);logicLedOwned=false;applyStatusLedConfig(settings->device.statusLedPin,settings->device.statusLedGreenPin,settings->device.statusLedBluePin,settings->device.statusLedType);return true;}
+            applyStatusLedConfig(pin,node["binding"]["greenPin"]|255,node["binding"]["bluePin"]|255,node["binding"]["ledType"]|"regular");
+            logicLedOwned=true;bool on=action!="off";
+            if(action=="toggle")on=!(lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue);
+            if(action!="on"&&action!="off"&&action!="toggle"&&action!="write"){message="Unsupported LED action";return false;}
+            double brightness=args["brightness"]|20.0;
+            double red=args["red"]|0.0,green=args["green"]|255.0,blue=args["blue"]|0.0;
+            if(!std::isfinite(brightness)||brightness<0||brightness>100||!std::isfinite(red)||red<0||red>255||!std::isfinite(green)||green<0||green>255||!std::isfinite(blue)||blue<0||blue>255){message="Invalid LED color";return false;}
+            writeStatusLedColor(on?uint8_t(red*brightness/100):0,on?uint8_t(green*brightness/100):0,on?uint8_t(blue*brightness/100):0);return true;
+        } else if(std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos) {
             std::string command=args["action"]|"";
             if(command=="stop"){bool stopped=queueLogicAudioStop(node,error,args["all"]|false);if(!stopped)message=error.c_str();return stopped;}
             if(command=="play"){JsonDocument source;source.set(args["source"]);source["output"]["kind"]=node["parameters"]["buzzerMode"]|"passive";source["output"]["slot"]=(std::string(node["binding"]["group"]|"")+":"+std::to_string(node["binding"]["index"]|0));ok=queueAudioSourceOwned(source.as<JsonVariantConst>(),error,node["id"]|"");}
@@ -4023,7 +4063,9 @@ void setup() {
             else if(command=="stop")ok=queueLogicAudioStop(node,error,args["all"]|false);
             else if(command=="volume" || command=="set"){double value=args["value"] | -1.0;if(value>=0&&value<=100){audioPlayer->setVolumePercent(uint8_t(value));ok=true;}else error="Invalid Logics volume";}
         } else if(node["binding"]["group"]=="display") {
-            if(!displayManager||!displayManager->available()||node["binding"]["index"]!=0||node["peripheral"]["profile"]!="i2c-oled"||node["binding"]["pins"]["SDA"]!=settings->oled.sdaPin||node["binding"]["pins"]["SCL"]!=settings->oled.sclPin){message="Configured OLED is unavailable or Logics pins do not match";return false;}
+            const bool oledBinding = node["peripheral"]["profile"]=="i2c-oled" && settings->oled.displayType=="oled" && node["binding"]["pins"]["SDA"]==settings->oled.sdaPin && node["binding"]["pins"]["SCL"]==settings->oled.sclPin;
+            const bool panelBinding = node["peripheral"]["profile"]=="viewe-onboard-lcd" && settings->oled.displayType=="panel";
+            if(!displayManager||!displayManager->available()||node["binding"]["index"]!=0||!(oledBinding||panelBinding)){message="Configured display is unavailable or Logics binding does not match";return false;}
             if(type=="peripheral.clear")ok=displayManager->clearLogicText();
             else if(type=="peripheral.text") {
                 double seconds=args["seconds"]|0.0;const char* text=args["text"]|nullptr;
@@ -4072,6 +4114,32 @@ void setup() {
     if (!logicAudioQueue) logicAudioQueue=xQueueCreate(9,sizeof(char*));
     webServer->setLogicsHandlers([](JsonDocument& result,bool graph){logicDevice.snapshot(result,graph);},
         [](JsonVariantConst command,JsonDocument& result,String& error){return logicDevice.request(command,result,error);});
+
+#if APP_HAS_ONBOARD_PANEL
+    displayManager->setPanelHandlers([](JsonObject root){
+        root["version"]=APP_VERSION;root["ssid"]=settings->wifi.ssid;
+        root["mqttHost"]=settings->mqtt.host;root["mqttPort"]=settings->mqtt.port;root["mqttUsername"]=settings->mqtt.username;
+        root["brightness"]=settings->oled.brightness;root["rotation"]=settings->oled.rotation;
+        root["lastUrl"]=settings->audio.lastPlayback.url;
+        JsonDocument logics;logicDevice.snapshot(logics,false);root["logics"].set(logics);
+    },[](const String& action,JsonVariantConst args,String& error){
+        if(action=="settings")return saveSettingsFromJson(args,error);
+        if(action=="logics"){JsonDocument result;return logicDevice.request(args,result,error);}
+        if(action=="volume"){deferredActions->pendingVolume=constrain(args["value"]|0,0,100);deferredActions->volumePending=true;return true;}
+        if(action=="stop"){deferredActions->stopPending=true;deferredActions->playPending=false;return true;}
+        if(action=="play"){clearPreviewResumeState();return playRequest(args["url"]|"","","media","",error,true);}
+        if(action=="mqttRediscover")return mqttManager->requestRediscovery(error);
+        if(action=="mqttConnect"||action=="mqttDisconnect"){
+            const bool connect=action=="mqttConnect";
+            const String host=deferredActions->settingsApplyPending?deferredActions->pendingSettings.mqtt.host:settings->mqtt.host;
+            if(connect&&host.isEmpty()){error="Enter an MQTT host first.";return false;}
+            deferredActions->mqttConnectRequested=connect;deferredActions->mqttConnectionChangePending=true;return true;
+        }
+        if(action=="otaCheck"){bool ok=otaManager->triggerCheck(false);if(!ok)error="Update check unavailable or already running";return ok;}
+        if(action=="reboot"){requestRestartSequence("lcd",false);return true;}
+        error="Unsupported touchscreen action";return false;
+    });
+#endif
     webServer->setAudioSourceHandler(queueAudioSource);
     webServer->begin(
         *appState,
@@ -4549,6 +4617,7 @@ void loop() {
     }
 
     const unsigned long now = millis();
+    webServer->securityTick();
     serviceCloneProvisioningSerial();
     static bool audioReleasedForUpdate = false;
     if (otaManager->isFirmwareTransferActive() && !audioReleasedForUpdate) {
@@ -4624,6 +4693,10 @@ void loop() {
         sampleSystemMetrics();
         appState->setFreeHeap(getSystemMetricsSnapshot().freeHeapBytes);
         mqttManager->publishChipTemperature();
+        if(logicLedOwned && String(logicDevice.mode())=="stopped") {
+            writeStatusLed(false);logicLedOwned=false;
+            applyStatusLedConfig(settings->device.statusLedPin,settings->device.statusLedGreenPin,settings->device.statusLedBluePin,settings->device.statusLedType);
+        }
         updateStatusLedForNetwork(wifiManager->isConnected(), wifiManager->isApMode());
     }
 

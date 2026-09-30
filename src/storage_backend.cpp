@@ -1,11 +1,18 @@
+#if !APP_DISABLE_SD
 #include "device_log.h"
 #include "storage_backend.h"
 
 #include <LittleFS.h>
 #include <SD.h>
+#if APP_HAS_ONBOARD_PANEL
+#include <SD_MMC.h>
+#endif
 #include <SPI.h>
 #include <esp_partition.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+void serviceStorageBackends();
 
 namespace {
 constexpr uint32_t kSdFrequenciesHz[] = {80000000UL, 40000000UL, 20000000UL, 10000000UL, 4000000UL, 1000000UL, 400000UL};
@@ -18,20 +25,37 @@ bool sdSpiStarted = false;
 unsigned long lastSdHotplugPollAt = 0;
 unsigned long nextSdMountAttemptAt = 0;
 SdSettings activeSdSettings;
+// Both bus implementations expose the Arduino filesystem API used below.
+template <typename Operation> auto onSd(Operation operation) {
+#if APP_HAS_ONBOARD_PANEL
+    if (activeSdSettings.sdmmc) return operation(SD_MMC);
+#endif
+    return operation(SD);
+}
+
 StorageBackendSummary sdSummaryCache;
 portMUX_TYPE storageStateMux = portMUX_INITIALIZER_UNLOCKED;
 uint32_t sdWriteDepth = 0;
 uint32_t sdReadDepth = 0;
 uint8_t sdConsecutiveMountFailures = 0;
+bool sdSummaryDirty = false;
+bool sdMaintenance = false;
+bool sdSettingsPending = false;
+SdSettings pendingSdSettings;
+TaskHandle_t summaryTask = nullptr;
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if APP_HAS_ONBOARD_PANEL
+SPIClass sdSpi(HSPI); // LCD owns SPI2/FSPI on this board.
+#else
 SPIClass sdSpi(FSPI);
+#endif
 #else
 SPIClass sdSpi(HSPI);
 #endif
 
 bool sameSdSettings(const SdSettings& left, const SdSettings& right) {
-    return left.enabled == right.enabled && left.csPin == right.csPin && left.sckPin == right.sckPin &&
+    return left.sdmmc == right.sdmmc && left.enabled == right.enabled && left.csPin == right.csPin && left.sckPin == right.sckPin &&
         left.mosiPin == right.mosiPin && left.misoPin == right.misoPin;
 }
 
@@ -43,7 +67,7 @@ bool sdSettingsUsePin(const SdSettings& settings, uint8_t pin) {
     if (!settings.enabled) {
         return false;
     }
-    return settings.csPin == pin || settings.sckPin == pin || settings.mosiPin == pin || settings.misoPin == pin;
+    return settings.csPin == pin || settings.sckPin == pin || settings.mosiPin == pin || settings.misoPin == pin || (settings.sdmmc && (pin == 15 || pin == 18));
 }
 
 unsigned long sdRetryDelayForFailureCount(uint8_t failureCount) {
@@ -66,13 +90,12 @@ bool sdFilesystemHealthy() {
         return false;
     }
 
-    const uint64_t cardBytes = SD.cardSize();
-    const size_t totalBytes = SD.totalBytes();
-    if (cardBytes == 0 || totalBytes == 0) {
+    const uint64_t cardBytes = onSd([](auto& card) { return card.cardSize(); });
+    if (cardBytes == 0) {
         return false;
     }
 
-    File root = SD.open("/");
+    File root = onSd([](auto& card) { return card.open("/"); });
     const bool healthy = root && root.isDirectory();
     if (root) {
         root.close();
@@ -149,15 +172,29 @@ StorageBackendSummary readLiveSdSummary() {
         return summary;
     }
 
-    summary.cardSizeBytes = SD.cardSize();
-    summary.totalBytes = static_cast<uint64_t>(SD.totalBytes());
-    summary.usedBytes = static_cast<uint64_t>(SD.usedBytes());
+    summary.cardSizeBytes = onSd([](auto& card) { return card.cardSize(); });
+    summary.totalBytes = static_cast<uint64_t>(onSd([](auto& card) { return card.totalBytes(); }));
+    summary.usedBytes = static_cast<uint64_t>(onSd([](auto& card) { return card.usedBytes(); }));
     summary.freeBytes = summary.totalBytes > summary.usedBytes ? summary.totalBytes - summary.usedBytes : 0;
     return summary;
 }
 
 void refreshSdSummaryCache() {
     cacheSdSummary(readLiveSdSummary());
+}
+void summaryWorker(void*) {
+    uint32_t lastSummary=millis();
+    for(;;) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        serviceStorageBackends();
+        if(uint32_t(millis()-lastSummary)<30000)continue;
+        lastSummary=millis();
+        portENTER_CRITICAL(&storageStateMux);
+        bool refresh=sdSummaryDirty && !sdMaintenance && sdWriteDepth==0 && sdReadDepth==0;
+        if(refresh){sdSummaryDirty=false;++sdReadDepth;}
+        portEXIT_CRITICAL(&storageStateMux);
+        if(refresh){if(sdMounted)refreshSdSummaryCache();decrementSdReadDepth();}
+    }
 }
 
 const esp_partition_t* flashFilesystemPartition() {
@@ -193,7 +230,7 @@ void mountFlashStorage() {
 
 void unmountSdStorage() {
     if (sdMounted) {
-        SD.end();
+        onSd([](auto& card) { return card.end(); });
         sdMounted = false;
     }
     if (sdSpiStarted) {
@@ -209,21 +246,42 @@ void unmountSdStorage() {
     cacheSdSummary(summary);
 }
 
-void mountSdStorage(const SdSettings& settings) {
+bool mountSdStorage(const SdSettings& settings) {
+    portENTER_CRITICAL(&storageStateMux);
+    const bool busy=sdMaintenance || sdWriteDepth || sdReadDepth;
+    if(!busy)sdMaintenance=true;
+    portEXIT_CRITICAL(&storageStateMux);
+    if(busy){portENTER_CRITICAL(&storageStateMux);pendingSdSettings=settings;sdSettingsPending=true;portEXIT_CRITICAL(&storageStateMux);return false;}
+    struct Release {~Release(){portENTER_CRITICAL(&storageStateMux);sdMaintenance=false;portEXIT_CRITICAL(&storageStateMux);}} release;
     unmountSdStorage();
     activeSdSettings = settings;
     lastSdHotplugPollAt = millis();
-    setSdWriteDepth(0);
-    portENTER_CRITICAL(&storageStateMux);
-    sdReadDepth = 0;
-    portEXIT_CRITICAL(&storageStateMux);
 
     if (!settings.enabled) {
         resetSdMountRetryState();
         cacheSdSummary(StorageBackendSummary{});
-        return;
+        return true;
     }
 
+#if APP_HAS_ONBOARD_PANEL
+    if (settings.sdmmc) {
+        SD_MMC.setPins(14, 17, 16, 18, 15, 21);
+        sdMounted = SD_MMC.begin("/sd", false, false, 20000, 5);
+        if (sdMounted) {
+            resetSdMountRetryState();
+            refreshSdSummaryCache();
+        } else {
+            SD_MMC.end();
+            sdConsecutiveMountFailures=min<uint8_t>(254,sdConsecutiveMountFailures)+1;
+            nextSdMountAttemptAt = millis() + sdRetryDelayForFailureCount(sdConsecutiveMountFailures);
+            StorageBackendSummary summary;
+            summary.available = true;
+            cacheSdSummary(summary);
+            DebugLog.println("[storage] SDMMC mount failed");
+        }
+        return sdMounted;
+    }
+#endif
     pinMode(settings.csPin, OUTPUT);
     digitalWrite(settings.csPin, HIGH);
     sdSpi.begin(settings.sckPin, settings.misoPin, settings.mosiPin, settings.csPin);
@@ -240,8 +298,8 @@ void mountSdStorage(const SdSettings& settings) {
             continue;
         }
 
-        const uint64_t cardBytes = SD.cardSize();
-        const size_t totalBytes = SD.totalBytes();
+        const uint64_t cardBytes = onSd([](auto& card) { return card.cardSize(); });
+        const size_t totalBytes = onSd([](auto& card) { return card.totalBytes(); });
         if (cardBytes == 0 || totalBytes == 0) {
             DebugLog.printf("[storage] SD detected but filesystem unavailable cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u\n",
                           static_cast<unsigned>(settings.csPin),
@@ -251,7 +309,7 @@ void mountSdStorage(const SdSettings& settings) {
                           static_cast<unsigned long>(frequencyHz),
                           static_cast<unsigned long long>(cardBytes),
                           static_cast<unsigned>(totalBytes));
-            SD.end();
+            onSd([](auto& card) { return card.end(); });
             continue;
         }
 
@@ -265,13 +323,13 @@ void mountSdStorage(const SdSettings& settings) {
                       static_cast<unsigned long>(frequencyHz),
                       static_cast<unsigned long long>(cardBytes),
                       static_cast<unsigned>(totalBytes),
-                      static_cast<unsigned>(SD.usedBytes()));
+                      static_cast<unsigned>(onSd([](auto& card) { return card.usedBytes(); })));
         refreshSdSummaryCache();
         break;
     }
 
     if (!sdMounted) {
-        ++sdConsecutiveMountFailures;
+        sdConsecutiveMountFailures=min<uint8_t>(254,sdConsecutiveMountFailures)+1;
         const unsigned long retryDelayMs = sdRetryDelayForFailureCount(sdConsecutiveMountFailures);
         nextSdMountAttemptAt = millis() + retryDelayMs;
         DebugLog.printf("[storage] SD mount failed cs=%u sck=%u mosi=%u miso=%u retry_in=%lu failure=%u\n",
@@ -285,24 +343,23 @@ void mountSdStorage(const SdSettings& settings) {
         summary.available = settings.enabled;
         cacheSdSummary(summary);
     }
+    return sdMounted;
 }
 }  // namespace
 
 void beginStorageBackends(const SettingsBundle& settings) {
     mountFlashStorage();
     mountSdStorage(effectiveSdSettings(settings.sd));
+    if(!summaryTask)xTaskCreate(summaryWorker,"storage-summary",3072,nullptr,1,&summaryTask);
 }
 
 void applyStorageSettings(const SettingsBundle& settings) {
-    const SdSettings effective = effectiveSdSettings(settings.sd);
-    if (!flashMounted) {
-        mountFlashStorage();
-    }
-    if (!sameSdSettings(activeSdSettings, effective)) {
-        mountSdStorage(effective);
-    } else if (effective.enabled && !sdMounted) {
-        mountSdStorage(effective);
-    }
+    const SdSettings effective=effectiveSdSettings(settings.sd);
+    // Reconfiguration and retry probing run in the maintenance task, never
+    // in the ESP main loop. Active reads/writes postpone the change.
+    portENTER_CRITICAL(&storageStateMux);
+    pendingSdSettings=effective;sdSettingsPending=true;
+    portEXIT_CRITICAL(&storageStateMux);
 }
 
 bool remountActiveStorageBackend(StorageTarget target) {
@@ -319,8 +376,7 @@ bool remountActiveStorageBackend(StorageTarget target) {
         return false;
     }
 
-    mountSdStorage(activeSdSettings);
-    return sdMounted;
+    return mountSdStorage(activeSdSettings);
 }
 
 bool remountStorageBackend(StorageTarget target, const SettingsBundle& settings) {
@@ -337,11 +393,21 @@ bool remountStorageBackend(StorageTarget target, const SettingsBundle& settings)
         return false;
     }
 
-    mountSdStorage(effectiveSdSettings(settings.sd));
-    return sdMounted;
+    return mountSdStorage(effectiveSdSettings(settings.sd));
 }
 
 void pollStorageBackends() {
+    // Retry task allocation without falling back to synchronous card probing.
+    static uint32_t lastAttempt=0;
+    if(!summaryTask&&uint32_t(millis()-lastAttempt)>=30000){lastAttempt=millis();if(xTaskCreate(summaryWorker,"storage-summary",3072,nullptr,1,&summaryTask)!=pdPASS)DebugLog.println("[storage] Maintenance task memory unavailable");}
+}
+void serviceStorageBackends() {
+    portENTER_CRITICAL(&storageStateMux);
+    bool apply=sdSettingsPending&&!sdMaintenance&&!sdReadDepth&&!sdWriteDepth;
+    SdSettings requested=pendingSdSettings;
+    if(apply)sdSettingsPending=false;
+    portEXIT_CRITICAL(&storageStateMux);
+    if(apply&&!sameSdSettings(activeSdSettings,requested))mountSdStorage(requested);
     if (!activeSdSettings.enabled) {
         return;
     }
@@ -357,11 +423,13 @@ void pollStorageBackends() {
     lastSdHotplugPollAt = now;
 
     if (sdMounted) {
-        if (!sdFilesystemHealthy()) {
-            DebugLog.println("[storage] SD card removed or became unavailable");
-            unmountSdStorage();
-            resetSdMountRetryState();
-        }
+        portENTER_CRITICAL(&storageStateMux);
+        bool check=!sdMaintenance&&!sdReadDepth&&!sdWriteDepth;
+        if(check)++sdReadDepth;
+        portEXIT_CRITICAL(&storageStateMux);
+        if(!check)return;
+        bool healthy=sdFilesystemHealthy();decrementSdReadDepth();
+        if(!healthy){DebugLog.println("[storage] SD card unavailable; retrying in maintenance task");mountSdStorage(activeSdSettings);}
         return;
     }
 
@@ -410,8 +478,8 @@ StorageBackendSummary getStorageSummary(StorageTarget target) {
     summary.available = activeSdSettings.enabled;
     summary = cachedSdSummary();
     summary.available = activeSdSettings.enabled;
-    summary.mounted = sdMounted;
-    if (!sdMounted) {
+    summary.mounted = storageMounted(StorageTarget::Sd);
+    if (!summary.mounted) {
         summary.usedBytes = 0;
         summary.freeBytes = summary.totalBytes;
     }
@@ -430,9 +498,11 @@ void endStorageWrite(StorageTarget target) {
     }
 
     decrementSdWriteDepth();
-    if (sdMounted && !sdWriteInProgress()) {
-        refreshSdSummaryCache();
-    }
+    // Never scan the FAT from a writer or network callback. Summary refresh
+    // is deferred to the idle maintenance worker.
+    portENTER_CRITICAL(&storageStateMux);
+    sdSummaryDirty = true;
+    portEXIT_CRITICAL(&storageStateMux);
 }
 
 void beginStorageRead(StorageTarget target) {
@@ -448,19 +518,20 @@ void endStorageRead(StorageTarget target) {
 }
 
 bool storageBusy(StorageTarget target) {
-    return target == StorageTarget::Sd ? (sdWriteInProgress() || sdReadInProgress()) : false;
+    if(target!=StorageTarget::Sd)return false;
+    portENTER_CRITICAL(&storageStateMux);bool busy=sdMaintenance||sdWriteDepth||sdReadDepth;portEXIT_CRITICAL(&storageStateMux);return busy;
 }
 
 fs::FS* getStorageFs(StorageTarget target) {
     if (target == StorageTarget::Sd) {
-        return sdMounted ? static_cast<fs::FS*>(&SD) : nullptr;
+        return storageMounted(StorageTarget::Sd) ? onSd([](auto& card) { return static_cast<fs::FS*>(&card); }) : nullptr;
     }
     return LittleFS.totalBytes() > 0 ? static_cast<fs::FS*>(&LittleFS) : nullptr;
 }
 
 bool storageMounted(StorageTarget target) {
     if (target == StorageTarget::Sd) {
-        return sdMounted;
+        portENTER_CRITICAL(&storageStateMux);bool ready=sdMounted&&!sdMaintenance;portEXIT_CRITICAL(&storageStateMux);return ready;
     }
     return LittleFS.totalBytes() > 0;
 }
@@ -470,8 +541,8 @@ bool storageConfigured(StorageTarget target) {
 }
 
 bool storageExists(StorageTarget target, const String& path) {
-    fs::FS* fs = getStorageFs(target);
-    return fs != nullptr && fs->exists(path);
+    beginStorageRead(target);fs::FS* fs=getStorageFs(target);
+    bool exists=fs&&fs->exists(path);endStorageRead(target);return exists;
 }
 
 File storageOpen(StorageTarget target, const String& path, const char* mode) {
@@ -483,10 +554,12 @@ File storageOpen(StorageTarget target, const String& path, const char* mode) {
 }
 
 bool storageRemove(StorageTarget target, const String& path) {
-    fs::FS* fs = getStorageFs(target);
-    return fs != nullptr && fs->remove(path);
+    beginStorageWrite(target);fs::FS* fs=getStorageFs(target);
+    bool removed=fs&&fs->remove(path);endStorageWrite(target);return removed;
 }
 
 bool sdStorageUsesPin(uint8_t pin) {
     return sdSettingsUsePin(activeSdSettings, pin);
 }
+
+#endif

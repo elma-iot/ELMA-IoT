@@ -16,6 +16,7 @@
 #include "default_config.h"
 #include "playback_text.h"
 #include "psram_allocator.h"
+#include "storage_memory.h"
 #include "storage_backend.h"
 
 namespace {
@@ -304,8 +305,8 @@ bool loadWavOverlay(StorageTarget target, const String& path, AudioPlayer::Impl:
         return false;
     }
 
-    std::unique_ptr<uint8_t[]> header(new uint8_t[12]);
-    if (file.read(header.get(), 12) != 12 || memcmp(header.get(), "RIFF", 4) != 0 || memcmp(header.get() + 8, "WAVE", 4) != 0) {
+    uint8_t header[12];
+    if (file.read(header, 12) != 12 || memcmp(header, "RIFF", 4) != 0 || memcmp(header + 8, "WAVE", 4) != 0) {
         file.close();
         endStorageRead(target);
         return false;
@@ -320,24 +321,27 @@ bool loadWavOverlay(StorageTarget target, const String& path, AudioPlayer::Impl:
     uint32_t dataOffset = 0;
     uint32_t dataSize = 0;
 
-    while (file.available()) {
+    unsigned chunks=0;
+    while (file.available() && chunks++<256) {
         uint8_t chunkHeader[8];
         if (file.read(chunkHeader, 8) != 8) {
             break;
         }
         const uint32_t chunkSize = readLe32(chunkHeader + 4);
         const uint32_t chunkDataPos = file.position();
+        if (chunkDataPos>file.size() || chunkSize>file.size()-chunkDataPos) break;
 
         if (memcmp(chunkHeader, "fmt ", 4) == 0 && chunkSize >= 16) {
-            std::unique_ptr<uint8_t[]> fmtData(new uint8_t[chunkSize]);
-            if (file.read(fmtData.get(), chunkSize) != static_cast<int>(chunkSize)) {
+            uint8_t fmtData[16];
+            if (file.read(fmtData, sizeof(fmtData)) != sizeof(fmtData)) {
                 break;
             }
-            audioFormat = readLe16(fmtData.get());
-            channelCount = readLe16(fmtData.get() + 2);
-            sampleRate = readLe32(fmtData.get() + 4);
-            bitsPerSample = readLe16(fmtData.get() + 14);
+            audioFormat = readLe16(fmtData);
+            channelCount = readLe16(fmtData + 2);
+            sampleRate = readLe32(fmtData + 4);
+            bitsPerSample = readLe16(fmtData + 14);
             fmtFound = true;
+            if (!file.seek(chunkDataPos+chunkSize+(chunkSize&1U))) break;
         } else if (memcmp(chunkHeader, "data", 4) == 0) {
             dataOffset = chunkDataPos;
             dataSize = chunkSize;
@@ -367,44 +371,32 @@ bool loadWavOverlay(StorageTarget target, const String& path, AudioPlayer::Impl:
     }
 
     const uint32_t frameCount = dataSize / bytesPerFrame;
-    const size_t stereoSampleCount = static_cast<size_t>(frameCount) * 2U;
-    const size_t allocBytes = stereoSampleCount * sizeof(int16_t);
-    int16_t* samples = static_cast<int16_t*>(heap_caps_malloc(allocBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (samples == nullptr) {
-        samples = static_cast<int16_t*>(heap_caps_malloc(allocBytes, MALLOC_CAP_8BIT));
-    }
+    // Reject oversized/corrupt clips before multiplication or allocation.
+    if (frameCount > 1048576U) {file.close();endStorageRead(target);return false;}
+    const size_t allocBytes = size_t(frameCount)*2U*sizeof(int16_t);
+    int16_t* samples=static_cast<int16_t*>(allocateStorageBuffer(allocBytes,32768));
     if (samples == nullptr) {
         file.close();
         endStorageRead(target);
         return false;
     }
 
-    file.seek(dataOffset);
-    const size_t rawBytes = static_cast<size_t>(frameCount) * bytesPerFrame;
-    std::unique_ptr<uint8_t[]> raw(new uint8_t[rawBytes]);
-    if (file.read(raw.get(), rawBytes) != static_cast<int>(rawBytes)) {
-        file.close();
-        endStorageRead(target);
-        heap_caps_free(samples);
-        return false;
-    }
-    file.close();
-    endStorageRead(target);
-
-    for (uint32_t frame = 0; frame < frameCount; ++frame) {
-        const size_t rawIndex = static_cast<size_t>(frame) * bytesPerFrame;
-        int16_t left = 0;
-        int16_t right = 0;
-        if (bitsPerSample == 16) {
-            left = static_cast<int16_t>(readLe16(raw.get() + rawIndex));
-            right = channelCount == 2 ? static_cast<int16_t>(readLe16(raw.get() + rawIndex + 2)) : left;
-        } else {
-            left = static_cast<int16_t>((static_cast<int>(raw[rawIndex]) - 128) << 8);
-            right = channelCount == 2 ? static_cast<int16_t>((static_cast<int>(raw[rawIndex + 1]) - 128) << 8) : left;
+    if (!file.seek(dataOffset)) {file.close();endStorageRead(target);heap_caps_free(samples);return false;}
+    uint8_t raw[512];
+    uint32_t frame=0;
+    while(frame<frameCount) {
+        const size_t frames=min<size_t>(sizeof(raw)/bytesPerFrame,frameCount-frame);
+        const size_t bytes=frames*bytesPerFrame;
+        if(file.read(raw,bytes)!=bytes){file.close();endStorageRead(target);heap_caps_free(samples);return false;}
+        for(size_t i=0;i<frames;++i) {
+            const size_t at=i*bytesPerFrame;
+            int16_t left=bitsPerSample==16?int16_t(readLe16(raw+at)):int16_t((int(raw[at])-128)*256);
+            int16_t right=channelCount==1?left:bitsPerSample==16?int16_t(readLe16(raw+at+2)):int16_t((int(raw[at+1])-128)*256);
+            samples[(frame+i)*2]=left;samples[(frame+i)*2+1]=right;
         }
-        samples[frame * 2U] = left;
-        samples[frame * 2U + 1U] = right;
+        frame+=frames;delay(1);
     }
+    file.close();endStorageRead(target);
 
     overlay.clear();
     overlay.samples = samples;
@@ -745,6 +737,8 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
         recreateAudioEngine(impl_);
     }
     acquireStorageLease(impl_, target);
+    fs=getStorageFs(target);
+    if(!fs){releaseStorageLease(impl_);return false;}
 
     impl_->stopRequested = false;
     impl_->retryPending = false;

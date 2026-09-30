@@ -1,3 +1,4 @@
+import './modules/security-tab.js';
 import {createLogicsTab} from './modules/logic-editor.js';
 import {installOnlineHelpLinks} from './modules/online-help.js';
 import {installLogicLayout} from './modules/logic-layout.js';
@@ -6,6 +7,8 @@ import {adcGpioPins, peripheralPinRequirement, safePeripheralPins, occupiedPinCh
 import {diagramRect,canvasClientPoint,setupDiagramViewport,focusDiagramViewport} from './modules/diagram-viewport.js';
 import { createAudioTab } from "./modules/audio-tab.js";
 import {createVoltageDividerControls,voltageDividerMaximum,resistorLabel,resistorBands} from './modules/voltage-divider.js';
+import { createPlotsTab } from "./modules/plots-tab.js";
+let plotsTab;
 import { createLogsTab } from "./modules/logs-tab.js";
 import { boardChipFamily, chipPins, pinChoices } from "./modules/board-pin-policy.js";
 import { freePeripheralPin, occupiedPeripheralPins } from "./modules/peripheral-gpio-defaults.js";
@@ -8674,7 +8677,7 @@ function oledPinsConflictWithAudio(payload) {
   const displayType = String(payload?.oled?.displayType || state.settings?.oled?.displayType || "oled").toLowerCase();
   const oledEnabled = Boolean(payload?.oled?.enabled ?? state.settings?.oled?.enabled ?? false);
   const audioEnabled = Boolean(payload?.audio?.enabled ?? state.settings?.audio?.enabled ?? true);
-  if (!oledEnabled || !audioEnabled || displayType === "wape") {
+  if (!oledEnabled || !audioEnabled || displayType !== "oled") {
     return false;
   }
 
@@ -8696,7 +8699,7 @@ function oledPinsConflictWithAudio(payload) {
 function oledPinsConflictInternally(payload) {
   const displayType = String(payload?.oled?.displayType || state.settings?.oled?.displayType || "oled").toLowerCase();
   const oledEnabled = Boolean(payload?.oled?.enabled ?? state.settings?.oled?.enabled ?? false);
-  if (!oledEnabled || displayType === "wape") {
+  if (!oledEnabled || displayType !== "oled") {
     return false;
   }
 
@@ -9144,10 +9147,12 @@ function updatePlaybackActionButton() {
 
 function setupTabs() {
   logsTab ||= createLogsTab({ request });
+  plotsTab ||= createPlotsTab({ request });
   tabNavigation = initTabNavigation({
     storageKey: ACTIVE_TAB_STORAGE_KEY,
     onActivate(resolvedTabName) {
       logsTab.setActive(resolvedTabName === "logs");
+      plotsTab.setActive(resolvedTabName === "plots");
       if (resolvedTabName === "gpio") {
         renderGpioOverview();
         refreshVisiblePeripheralDiagram();

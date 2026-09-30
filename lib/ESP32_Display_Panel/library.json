@@ -1,0 +1,36 @@
+{
+  "name": "ESP32_Display_Panel",
+  "version": "1.0.3",
+  "license": "Apache-2.0",
+  "frameworks": [
+    "arduino"
+  ],
+  "platforms": [
+    "espressif32"
+  ],
+  "build": {
+    "srcFilter": [
+      "-<*>",
+      "+<board/*.cpp>",
+      "+<drivers/backlight/esp_panel_backlight.cpp>",
+      "+<drivers/backlight/esp_panel_backlight_factory.cpp>",
+      "+<drivers/backlight/esp_panel_backlight_pwm_ledc.cpp>",
+      "+<drivers/bus/esp_panel_bus.cpp>",
+      "+<drivers/bus/esp_panel_bus_factory.cpp>",
+      "+<drivers/bus/esp_panel_bus_i2c.cpp>",
+      "+<drivers/bus/esp_panel_bus_spi.cpp>",
+      "+<drivers/host/esp_panel_host_i2c.cpp>",
+      "+<drivers/host/esp_panel_host_spi.cpp>",
+      "+<drivers/io_expander/*.cpp>",
+      "+<drivers/lcd/esp_panel_lcd.cpp>",
+      "+<drivers/lcd/esp_panel_lcd_factory.cpp>",
+      "+<drivers/lcd/esp_panel_lcd_gc9a01.cpp>",
+      "+<drivers/lcd/port/esp_lcd_gc9a01.c>",
+      "+<drivers/touch/esp_panel_touch.cpp>",
+      "+<drivers/touch/esp_panel_touch_factory.cpp>",
+      "+<drivers/touch/esp_panel_touch_chsc6540.cpp>",
+      "+<drivers/touch/port/esp_lcd_touch.c>",
+      "+<drivers/touch/port/esp_lcd_touch_chsc6540.c>"
+    ]
+  }
+}

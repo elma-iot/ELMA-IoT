@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+<defs>
+<linearGradient id="pcb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d789d"/><stop offset="1" stop-color="#075f82"/></linearGradient>
+<linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#edf1f3"/><stop offset="0.5" stop-color="#aab4ba"/><stop offset="1" stop-color="#6f7b82"/></linearGradient>
+<linearGradient id="flex" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#df9f17"/><stop offset="1" stop-color="#a86a08"/></linearGradient>
+<filter id="shadow"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-opacity="0.25"/></filter>
+</defs>
+<rect width="100%" height="100%" fill="#f1f2f3"/>
+<g filter="url(#shadow)"><rect x="115" y="70" width="770" height="860" rx="22" fill="url(#pcb)" stroke="#064d69" stroke-width="6"/></g>
+<circle cx="150" cy="105" r="24" fill="#e9ecef" stroke="#2b4653" stroke-width="8"/><circle cx="150" cy="105" r="11" fill="#9da8ae"/>
+<circle cx="850" cy="105" r="24" fill="#e9ecef" stroke="#2b4653" stroke-width="8"/><circle cx="850" cy="105" r="11" fill="#9da8ae"/>
+<circle cx="150" cy="895" r="24" fill="#e9ecef" stroke="#2b4653" stroke-width="8"/><circle cx="150" cy="895" r="11" fill="#9da8ae"/>
+<circle cx="850" cy="895" r="24" fill="#e9ecef" stroke="#2b4653" stroke-width="8"/><circle cx="850" cy="895" r="11" fill="#9da8ae"/>
+<g id="connector_gpio21" data-pin="IO21"><circle cx="210.0" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="210.0" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="210.0" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 210.0 153)">IO21</text>
+<g id="connector_gpio14" data-pin="IO14"><circle cx="245.9" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="245.9" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="245.9" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 245.9 153)">IO14</text>
+<g id="connector_gpio12" data-pin="IO12"><circle cx="281.8" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="281.8" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="281.8" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 281.8 153)">IO12</text>
+<g id="connector_gpio11" data-pin="IO11"><circle cx="317.6" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="317.6" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="317.6" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 317.6 153)">IO11</text>
+<g id="connector_gpio10" data-pin="IO10"><circle cx="353.5" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="353.5" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="353.5" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 353.5 153)">IO10</text>
+<g id="connector_gpio9" data-pin="IO9"><circle cx="389.4" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="389.4" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="389.4" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 389.4 153)">IO9</text>
+<g id="connector_gpio8" data-pin="IO8"><circle cx="425.3" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="425.3" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="425.3" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 425.3 153)">IO8</text>
+<g id="connector_gpio18" data-pin="IO18"><circle cx="461.2" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="461.2" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="461.2" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 461.2 153)">IO18</text>
+<g id="connector_gpio17" data-pin="IO17"><circle cx="497.1" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="497.1" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="497.1" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 497.1 153)">IO17</text>
+<g id="connector_gpio16" data-pin="IO16"><circle cx="532.9" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="532.9" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="532.9" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 532.9 153)">IO16</text>
+<g id="connector_gpio15" data-pin="IO15"><circle cx="568.8" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="568.8" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="568.8" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 568.8 153)">IO15</text>
+<g id="connector_gpio7" data-pin="IO7"><circle cx="604.7" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="604.7" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="604.7" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 604.7 153)">IO7</text>
+<g id="connector_gpio6" data-pin="IO6"><circle cx="640.6" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="640.6" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="640.6" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 640.6 153)">IO6</text>
+<g id="connector_gpio5" data-pin="IO5"><circle cx="676.5" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="676.5" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="676.5" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 676.5 153)">IO5</text>
+<g id="connector_gpio4" data-pin="IO4"><circle cx="712.4" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="712.4" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="712.4" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 712.4 153)">IO4</text>
+<g id="connector_gpio47" data-pin="IO47"><circle cx="748.2" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="748.2" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="748.2" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 748.2 153)">IO47</text>
+<g id="connector_3v3" data-pin="3V3"><circle cx="784.1" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="784.1" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="784.1" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 784.1 153)">3V3</text>
+<g id="connector_gnd" data-pin="GND"><circle cx="820.0" cy="125" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="820.0" cy="125" r="4" fill="#a8b0b3"/></g>
+<text x="820.0" y="153" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(90 820.0 153)">GND</text>
+<g id="connector_5v" data-pin="5V"><circle cx="210.0" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="210.0" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="210.0" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 210.0 850)">5V</text>
+<g id="connector_ledk" data-pin="LEDK"><circle cx="248.1" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="248.1" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="248.1" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 248.1 850)">LEDK</text>
+<g id="connector_gpio0" data-pin="IO0"><circle cx="286.2" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="286.2" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="286.2" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 286.2 850)">IO0</text>
+<g id="connector_gpio3" data-pin="IO3"><circle cx="324.4" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="324.4" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="324.4" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 324.4 850)">IO3</text>
+<g id="connector_gpio45" data-pin="IO45"><circle cx="362.5" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="362.5" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="362.5" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 362.5 850)">IO45</text>
+<g id="connector_gpio43" data-pin="IO43"><circle cx="400.6" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="400.6" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="400.6" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 400.6 850)">IO43</text>
+<g id="connector_gpio47" data-pin="IO47"><circle cx="438.8" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="438.8" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="438.8" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 438.8 850)">IO47</text>
+<g id="connector_gpio38" data-pin="IO38"><circle cx="476.9" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="476.9" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="476.9" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 476.9 850)">IO38</text>
+<g id="connector_gpio39" data-pin="IO39"><circle cx="515.0" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="515.0" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="515.0" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 515.0 850)">IO39</text>
+<g id="connector_gpio40" data-pin="IO40"><circle cx="553.1" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="553.1" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="553.1" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 553.1 850)">IO40</text>
+<g id="connector_gpio41" data-pin="IO41"><circle cx="591.2" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="591.2" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="591.2" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 591.2 850)">IO41</text>
+<g id="connector_gpio42" data-pin="IO42"><circle cx="629.4" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="629.4" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="629.4" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 629.4 850)">IO42</text>
+<g id="connector_tx" data-pin="TX"><circle cx="667.5" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="667.5" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="667.5" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 667.5 850)">TX</text>
+<g id="connector_rx" data-pin="RX"><circle cx="705.6" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="705.6" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="705.6" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 705.6 850)">RX</text>
+<g id="connector_gpio2" data-pin="IO2"><circle cx="743.8" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="743.8" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="743.8" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 743.8 850)">IO2</text>
+<g id="connector_gpio1" data-pin="IO1"><circle cx="781.9" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="781.9" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="781.9" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 781.9 850)">IO1</text>
+<g id="connector_gnd" data-pin="GND"><circle cx="820.0" cy="875" r="10" fill="#f5f5f5" stroke="#23343b" stroke-width="4"/><circle cx="820.0" cy="875" r="4" fill="#a8b0b3"/></g>
+<text x="820.0" y="850" font-family="Arial,sans-serif" font-size="13" fill="#f7f5ef" text-anchor="middle" transform="rotate(-90 820.0 850)">GND</text>
+<g id="microsd"><rect x="150" y="175" width="145" height="205" rx="10" fill="url(#metal)" stroke="#52616a" stroke-width="5"/><rect x="165" y="195" width="115" height="155" rx="8" fill="#7a8489" opacity="0.45"/><text x="222" y="286" fill="#36434a" font-size="24" font-family="Arial" text-anchor="middle" transform="rotate(-90 222 286)">microSD</text></g>
+<g id="usb_c"><rect x="145" y="408" width="82" height="58" rx="15" fill="url(#metal)" stroke="#536069" stroke-width="5"/><rect x="158" y="421" width="56" height="32" rx="12" fill="#40494e"/><text x="186" y="495" fill="white" font-size="17" font-family="Arial" text-anchor="middle">USB-C</text></g>
+<g id="esp32"><rect x="615" y="175" width="205" height="200" rx="8" fill="url(#metal)" stroke="#5a666e" stroke-width="5"/><rect x="781" y="175" width="39" height="200" fill="#262c30"/><path d="M790 188 h20 v14 h-20 v14 h20 v14 h-20 v14 h20 v14 h-20 v14 h20 v14 h-20 v14 h20" fill="none" stroke="#879197" stroke-width="4"/><text x="705" y="245" fill="#47545a" font-family="Arial" font-size="22" text-anchor="middle">ESP32-S3</text><text x="705" y="273" fill="#47545a" font-family="Arial" font-size="15" text-anchor="middle">WROOM-1 N16R8</text><text x="705" y="316" fill="#47545a" font-family="Arial" font-size="14" text-anchor="middle">16MB FLASH</text><text x="705" y="338" fill="#47545a" font-family="Arial" font-size="14" text-anchor="middle">8MB OPI PSRAM</text></g>
+<g id="uart"><rect x="805" y="430" width="48" height="64" rx="6" fill="#f0f0e8" stroke="#6e767b" stroke-width="4"/><line x1="815" y1="442" x2="843" y2="442" stroke="#999" stroke-width="3"/><line x1="815" y1="462" x2="843" y2="462" stroke="#999" stroke-width="3"/><line x1="815" y1="482" x2="843" y2="482" stroke="#999" stroke-width="3"/><text x="786" y="468" fill="white" font-size="16" font-family="Arial" text-anchor="end">UART</text></g>
+<g id="rs485"><rect x="805" y="515" width="48" height="64" rx="6" fill="#f0f0e8" stroke="#6e767b" stroke-width="4"/><line x1="815" y1="527" x2="843" y2="527" stroke="#999" stroke-width="3"/><line x1="815" y1="547" x2="843" y2="547" stroke="#999" stroke-width="3"/><line x1="815" y1="567" x2="843" y2="567" stroke="#999" stroke-width="3"/><text x="786" y="553" fill="white" font-size="16" font-family="Arial" text-anchor="end">RS485</text></g>
+<g><rect x="148" y="575" width="58" height="31" rx="5" fill="url(#metal)" stroke="#59666d" stroke-width="4"/><rect x="163" y="583" width="28" height="15" rx="4" fill="#e8ecef"/><text x="220" y="597" fill="white" font-size="15" font-family="Arial">BOOT</text></g>
+<g><rect x="148" y="645" width="58" height="31" rx="5" fill="url(#metal)" stroke="#59666d" stroke-width="4"/><rect x="163" y="653" width="28" height="15" rx="4" fill="#e8ecef"/><text x="220" y="667" fill="white" font-size="15" font-family="Arial">RESET</text></g>
+<g id="rgb_led"><circle cx="177" cy="746" r="27" fill="#eef4f4" stroke="#879196" stroke-width="5"/><circle cx="177" cy="746" r="14" fill="#d8f4ff"/><text x="220" y="753" fill="white" font-size="15" font-family="Arial">WS2812</text></g>
+<g id="buzzer"><rect x="798" y="650" width="62" height="80" rx="7" fill="#20272b" stroke="#111" stroke-width="4"/><circle cx="829" cy="689" r="20" fill="#121719" stroke="#333" stroke-width="3"/><text x="787" y="697" fill="white" font-size="15" font-family="Arial" text-anchor="end">BUZZER</text></g>
+<g id="lcd_fpc"><rect x="350" y="205" width="300" height="56" rx="8" fill="#ece7d9" stroke="#b6aaa0" stroke-width="5"/><rect x="364" y="218" width="272" height="15" fill="#d4cdbf"/>
+<path d="M382 260 H620 V475 H690 V635 H320 V260 Z" fill="url(#flex)" stroke="#8f5e08" stroke-width="5"/>
+<path d="M338.0 270 V430 Q338.0 455 378.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M349.5 270 V430 Q349.5 455 389.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M361.0 270 V430 Q361.0 455 401.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M372.5 270 V430 Q372.5 455 412.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M384.0 270 V430 Q384.0 455 424.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M395.5 270 V430 Q395.5 455 435.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M407.0 270 V430 Q407.0 455 447.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M418.5 270 V430 Q418.5 455 458.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M430.0 270 V430 Q430.0 455 470.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M441.5 270 V430 Q441.5 455 481.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M453.0 270 V430 Q453.0 455 493.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M464.5 270 V430 Q464.5 455 504.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M476.0 270 V430 Q476.0 455 516.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M487.5 270 V430 Q487.5 455 527.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M499.0 270 V430 Q499.0 455 539.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M510.5 270 V430 Q510.5 455 550.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M522.0 270 V430 Q522.0 455 562.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M533.5 270 V430 Q533.5 455 573.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M545.0 270 V430 Q545.0 455 585.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M556.5 270 V430 Q556.5 455 596.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M568.0 270 V430 Q568.0 455 608.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M579.5 270 V430 Q579.5 455 619.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M591.0 270 V430 Q591.0 455 631.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M602.5 270 V430 Q602.5 455 642.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M614.0 270 V430 Q614.0 455 654.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M625.5 270 V430 Q625.5 455 665.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M637.0 270 V430 Q637.0 455 677.0 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<path d="M648.5 270 V430 Q648.5 455 688.5 475 V585" fill="none" stroke="#f3c85b" stroke-width="2" opacity="0.8"/>
+<rect x="430" y="493" width="100" height="65" rx="6" fill="#2a2419" opacity="0.85"/><text x="480" y="530" fill="#d7c79d" font-family="Arial" font-size="16" text-anchor="middle">TOUCH</text>
+</g>
+<text x="500" y="675" fill="white" opacity="0.96" font-family="Arial,sans-serif" font-weight="700" font-size="72" text-anchor="middle">viewe</text>
+<text x="500" y="712" fill="white" font-family="Arial,sans-serif" font-size="20" text-anchor="middle" letter-spacing="4">DISPLAY EXPERT</text>
+<text x="500" y="760" fill="white" font-family="Arial,sans-serif" font-size="24" text-anchor="middle">UEDX24320028E-WB-A  V1.1</text>
+<g opacity="0.85"><rect x="300" y="190" width="22" height="10" fill="#d8d1ba"/><rect x="329" y="190" width="22" height="10" fill="#d8d1ba"/><rect x="304" y="208" width="16" height="9" fill="#1a2024"/><rect x="330" y="208" width="16" height="9" fill="#1a2024"/></g>
+<g opacity="0.85"><rect x="315" y="555" width="22" height="10" fill="#d8d1ba"/><rect x="344" y="555" width="22" height="10" fill="#d8d1ba"/><rect x="319" y="573" width="16" height="9" fill="#1a2024"/><rect x="345" y="573" width="16" height="9" fill="#1a2024"/></g>
+<g opacity="0.85"><rect x="690" y="420" width="22" height="10" fill="#d8d1ba"/><rect x="719" y="420" width="22" height="10" fill="#d8d1ba"/><rect x="694" y="438" width="16" height="9" fill="#1a2024"/><rect x="720" y="438" width="16" height="9" fill="#1a2024"/></g>
+<g opacity="0.85"><rect x="730" y="580" width="22" height="10" fill="#d8d1ba"/><rect x="759" y="580" width="22" height="10" fill="#d8d1ba"/><rect x="734" y="598" width="16" height="9" fill="#1a2024"/><rect x="760" y="598" width="16" height="9" fill="#1a2024"/></g>
+<g opacity="0.85"><rect x="275" y="715" width="22" height="10" fill="#d8d1ba"/><rect x="304" y="715" width="22" height="10" fill="#d8d1ba"/><rect x="279" y="733" width="16" height="9" fill="#1a2024"/><rect x="305" y="733" width="16" height="9" fill="#1a2024"/></g>
+<g opacity="0.85"><rect x="580" y="725" width="22" height="10" fill="#d8d1ba"/><rect x="609" y="725" width="22" height="10" fill="#d8d1ba"/><rect x="584" y="743" width="16" height="9" fill="#1a2024"/><rect x="610" y="743" width="16" height="9" fill="#1a2024"/></g>
+<g id="legend"><rect x="150" y="930" width="700" height="44" rx="10" fill="#ffffff" stroke="#d2d7da"/><text x="500" y="958" font-family="Arial" font-size="18" fill="#263238" text-anchor="middle">LCD SPI: SCK 40 · MOSI 45 · CS 42 · DC 41 · RST 39 · BL 13 · IM0 47 · IM1 48</text></g>
+</svg>

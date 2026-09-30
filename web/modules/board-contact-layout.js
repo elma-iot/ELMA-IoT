@@ -1,4 +1,4 @@
-import boardPinContacts from '../board-pin-contacts.json';
+import boardPinContacts from '../board-pin-contacts.json' with { type: 'json' };
 
 export function exactBoardAnchors({profile,boardRect,primary,extra,offset,signalKey,boardRailForPeripheral}){
   const contacts=boardPinContacts[profile];

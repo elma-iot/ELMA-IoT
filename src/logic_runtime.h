@@ -23,6 +23,7 @@ public:
     void observe(JsonVariantConst status);
     void telemetry(JsonObject target) const;
     bool testAction(const char* nodeId, const char* command, std::string& error);
+    uint32_t recordingPollInterval(uint32_t normal) const;
     bool paused() const { return paused_; }
     bool active() const { return graph_["nodes"].size() != 0; }
     const std::string& error() const { return error_; }
@@ -35,6 +36,9 @@ private:
         uint32_t frozenAt = 0;
         uint32_t due = 0, interval = 0;
         unsigned remaining = 0;
+        uint64_t recordingElapsed = 0;
+        uint32_t recordingAt = 0;
+        bool recordingStarted = false, recordingWritten = false;
     };
     struct Pulse { size_t node; std::string port; };
     JsonDocument graph_, cache_, previous_;
@@ -58,6 +62,7 @@ private:
     JsonVariantConst value(size_t n, const char* port);
     JsonVariantConst path(const char* name) const;
     uint32_t interval(size_t n);
+    uint64_t recordingInterval(size_t n) const;
     void emit(size_t n, const char* port = "out");
     void execute(size_t n, const char* port);
     void drain();

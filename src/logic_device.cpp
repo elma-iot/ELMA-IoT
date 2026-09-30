@@ -173,6 +173,7 @@ bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::strin
         if(command=="set"){if(!args["value"].is<double>() || (args["value"]!=0 && args["value"]!=1)){error="Relay Set Value accepts 0 or 1";return false;}on=args["value"].as<double>()!=0;}
         pinMode(gpio,OUTPUT);digitalWrite(gpio,on?HIGH:LOW);return true;
     }
+    if(node["type"]=="hardware.gpio")return gpio_.action(node,args,error);
     bool ok=actions_ && actions_(node,args,error);
     if(ok && (node["binding"]["group"]=="audio" || std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos))audioOwned_=args["action"]=="play" || (audioOwned_ && args["action"]!="stop");
     if(ok && args["action"]=="play")audioOwner_=node["id"]|"";
@@ -185,12 +186,13 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     updating_=updating;
     if (!runtime_.active() || !state_)return;
     if (updating) {runtime_.suspend();polled_=false;return;}
-    if (polled_ && uint32_t(now-lastPoll_)<minimumPollIntervalMs)return;
+    if (polled_ && uint32_t(now-lastPoll_)<(mode_=="playing"?runtime_.recordingPollInterval(minimumPollIntervalMs):minimumPollIntervalMs))return;
     polled_=true;lastPoll_=now;
     JsonDocument snapshot;JsonObject root=snapshot.to<JsonObject>();state_->toJson(root);appendSystemMetricsJson(root);
     root["system"]["lastError"]=state_->snapshot().system.lastError;
     if(status_)status_(root);
     for(JsonObjectConst n:runtime_.nodes()) {
+        if(n["type"]=="hardware.gpio" && mode_=="playing")gpio_.sample(n,root["gpio"][n["id"].as<std::string>()].to<JsonObject>());
         if(n["binding"]["kind"]!="peripheral")continue;
         std::string id=n["peripheral"]["id"].as<std::string>();auto target=root["peripherals"][id];
         if(n["binding"]["group"]=="sensor" && root["battery"]["available"].as<bool>()) {
@@ -237,7 +239,7 @@ void LogicDevice::shuttingDown() {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE)return;
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
     if(shutdown_ || mode_!="playing")return;
-    shutdown_=true;runtime_.lifecycle("shutting_down");runtime_.suspend();
+    shutdown_=true;runtime_.lifecycle("shutting_down");runtime_.suspend();gpio_.reset();
 }
 
 bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String& error) {
@@ -245,6 +247,7 @@ bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String&
     return saveLogicRecord(record.as<JsonVariantConst>(),error);
 }
 void LogicDevice::applyMode(const std::string& mode) {
+    if(mode=="stopped")gpio_.reset();
     if(mode==mode_)return;
     if(mode=="paused")runtime_.pause(millis());
     else if(mode=="stopped") {
@@ -284,12 +287,22 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
     } else if(!command["group"].isNull()) {
         const char* id=command["group"]["id"]|"";const char* groupMode=command["group"]["mode"]|"";
         if(std::string(groupMode)!="playing"&&std::string(groupMode)!="paused"&&std::string(groupMode)!="stopped"){error="Invalid group control state";return false;}
-        if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&quarantinedGroup_==id&&!(command["confirmUnsafeRestart"]|false)){error=(std::string("RECOVERY_CONFIRMATION_REQUIRED: ")+recoveryWarning_+" Confirm to retry this automation.").c_str();return false;}
-        if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&quarantinedGroup_==id)clearRecoveryState();
+        if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&(quarantinedGroup_.empty()||quarantinedGroup_==id)&&!(command["confirmUnsafeRestart"]|false)){error=(std::string("RECOVERY_CONFIRMATION_REQUIRED: ")+recoveryWarning_+" Confirm to retry this automation.").c_str();return false;}
+        if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&(quarantinedGroup_.empty()||quarantinedGroup_==id))clearRecoveryState();
         JsonDocument updated;updated.set(runtime_.graph());bool found=false;
         for(JsonObject group:updated["groups"].as<JsonArray>())if(group["id"]==id){group["mode"]=groupMode;found=true;}
         if(!found){error="Group not found; save the canvas first";return false;}
-        saved=persist(updated.as<JsonVariantConst>(),mode_,error);
+        const bool resumeRuntime=std::string(groupMode)=="playing"&&mode_!="playing";
+        if(resumeRuntime) {
+            // A group Start must resume the scheduler without starting other groups.
+            for(JsonObject group:updated["groups"].as<JsonArray>())if(group["id"]!=id)group["mode"]="stopped";
+        }
+        saved=persist(updated.as<JsonVariantConst>(),resumeRuntime?"playing":mode_,error);
+        if(resumeRuntime) {
+            applyMode("playing");
+            for(JsonObjectConst group:updated["groups"].as<JsonArrayConst>())if(group["id"]!=id)runtime_.controlGroup(group["id"]|"","stopped",millis());
+            polled_=false;
+        }
         runtime_.controlGroup(id,groupMode,millis());
         if(std::string(groupMode)=="stopped" && audioOwned_)for(JsonObjectConst group:runtime_.graph()["groups"].as<JsonArrayConst>())if(group["id"]==id)for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>())for(JsonObjectConst n:runtime_.nodes())if(n["id"]==member&&n["id"]==audioOwner_ ) {
             JsonDocument args;args["action"]="stop";std::string message;actions_(n,args.as<JsonVariantConst>(),message);audioOwned_=false;
@@ -304,6 +317,7 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         if(audioOwned_)for(JsonObjectConst n:runtime_.nodes())if(n["id"]==audioOwner_){JsonDocument stop;stop["action"]="stop";stop["all"]=true;std::string ignored;actions_(n,stop.as<JsonVariantConst>(),ignored);break;}
         audioOwned_=false;
         std::string payload;serializeJson(accepted,payload);
+        gpio_.reset();
         if(!runtime_.begin(payload.c_str(),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
         mode_="stopped";applyMode(mode);polled_=false;
 #endif

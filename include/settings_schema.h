@@ -154,12 +154,15 @@ struct AudioSettings {
 };
 
 struct OledSettings {
+    String interfaceMode = "lvgl";
+    uint8_t brightness = 100;
+    bool touchEnabled = true;
     String displayType = "oled";
     bool enabled = APP_DEFAULT_OLED_ENABLED;
     String driver;
     uint8_t i2cAddress = 0x3C;
-    uint8_t width = 128;
-    uint8_t height = 64;
+    uint16_t width = 128;
+    uint16_t height = 64;
     uint16_t rotation = 0;
     uint8_t sdaPin = 23;
     uint8_t sclPin = 19;
@@ -170,6 +173,7 @@ struct OledSettings {
 };
 
 struct SdSettings {
+    bool sdmmc = false;
     bool enabled = true;
     uint8_t csPin = 4;
     uint8_t sckPin = 5;

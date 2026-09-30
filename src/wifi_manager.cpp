@@ -4,6 +4,7 @@
 #include "default_config.h"
 #include "wifi_power_policy.h"
 #include <esp_wifi.h>
+#include <time.h>
 
 namespace {
 String defaultApName() {
@@ -228,6 +229,7 @@ void WiFiManager::loop() {
     const bool connected = WiFi.status() == WL_CONNECTED;
     if (connected) {
         if (!hadConnection_) {
+            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
             applyRadioTxPower();
             if (consecutiveFailureCount_ > 0) {
                 DebugLog.printf("[wifi] connected after %u failed attempt(s)\n", static_cast<unsigned>(consecutiveFailureCount_));

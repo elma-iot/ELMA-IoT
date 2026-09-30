@@ -102,6 +102,7 @@ bool isValidBatteryAdcPin(uint8_t pin) {
 }
 
 bool isValidStatusLedPin(uint8_t pin) {
+    if (pin == 255) return true; // Disabled in the native designer.
     return safeOutputPin(pin);
 }
 
@@ -154,7 +155,7 @@ bool sdUsesPin(const SdSettings& sd, int pin) {
     if (!sd.enabled || pin < 0) {
         return false;
     }
-    return sd.csPin == pin || sd.sckPin == pin || sd.mosiPin == pin || sd.misoPin == pin;
+    return sd.csPin == pin || sd.sckPin == pin || sd.mosiPin == pin || sd.misoPin == pin || (sd.sdmmc && (pin == 15 || pin == 18));
 }
 
 bool hasDistinctSdPins(const SdSettings& sd) {
@@ -206,7 +207,7 @@ bool oledPinConflicts(const OledSettings& oled, const AudioSettings& audio, cons
     String displayType = oled.displayType;
     displayType.trim();
     displayType.toLowerCase();
-    if (!oled.enabled || displayType == "wape") {
+    if (!oled.enabled || displayType == "wape" || displayType == "panel") {
         return false;
     }
 
@@ -249,7 +250,7 @@ bool sdPinConflictsWithRequiredFunctions(const SdSettings& sd, const AudioSettin
         return false;
     }
 
-    return audioUsesPin(audio, sd.csPin) || audioUsesPin(audio, sd.sckPin) || audioUsesPin(audio, sd.mosiPin) || audioUsesPin(audio, sd.misoPin) ||
+    return (sd.sdmmc && (audioUsesPin(audio, 15) || audioUsesPin(audio, 18))) || audioUsesPin(audio, sd.csPin) || audioUsesPin(audio, sd.sckPin) || audioUsesPin(audio, sd.mosiPin) || audioUsesPin(audio, sd.misoPin) ||
         sdUsesPin(sd, battery.adcPin) || sdUsesPin(sd, battery.chargingSensePin) || sdUsesPin(sd, device.statusLedPin) ||
         (device.statusLedType == "rgb" && (sdUsesPin(sd, device.statusLedGreenPin) || sdUsesPin(sd, device.statusLedBluePin)));
 }
@@ -257,6 +258,9 @@ bool sdPinConflictsWithRequiredFunctions(const SdSettings& sd, const AudioSettin
 String normalizeDisplayType(String value) {
     value.trim();
     value.toLowerCase();
+    #if APP_HAS_ONBOARD_PANEL
+    if (value == "panel") return value;
+#endif
     return value == "wape" ? String("wape") : String("oled");
 }
 
@@ -308,7 +312,9 @@ bool usesLegacyOtaRepository(const String& owner, const String& repository) {
 }
 
 String defaultOtaAssetTemplate() {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if APP_HAS_ONBOARD_PANEL
+    return "viewe-uedx24320028e-${version}.bin";
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
     #ifdef APP_ENABLE_HACS_MQTT
     #ifdef APP_DISABLE_WEB_UI
         return "esp32s3-notifier-hacs-slim-${version}.bin";
@@ -636,6 +642,16 @@ SettingsBundle SettingsManager::defaults() const {
     settings.sd.sckPin = 5;
     settings.sd.mosiPin = 6;
     settings.sd.misoPin = 7;
+#if APP_HAS_ONBOARD_PANEL
+    settings.oled.enabled = true;
+    settings.oled.displayType = "panel";
+    settings.oled.width = 240;
+    settings.oled.height = 320;
+    settings.sd.csPin = 21;
+    settings.sd.sckPin = 14;
+    settings.sd.mosiPin = 17;
+    settings.sd.misoPin = 16;
+#endif
 
     settings.device.deviceName = uniqueDeviceName;
     settings.device.friendlyName = uniqueFriendlyName;
@@ -810,6 +826,9 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
         settings.audio.lastPlayback.source = "";
         settings.audio.lastPlayback.resumeAfterBoot = false;
     }
+#if !APP_HAS_ONBOARD_PANEL
+    settings.sd.sdmmc = false;
+#endif
     if (!isValidSdPin(settings.sd.csPin) || !isValidSdPin(settings.sd.sckPin) || !isValidSdPin(settings.sd.mosiPin) ||
         !isValidSdPin(settings.sd.misoPin) || !hasDistinctSdPins(settings.sd)) {
         settings.sd = SdSettings();
@@ -843,15 +862,19 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
         settings.oled.driver = "ssd1306";
     }
     settings.oled.i2cAddress = clampValue<uint8_t>(settings.oled.i2cAddress, static_cast<uint8_t>(1), static_cast<uint8_t>(127));
-    settings.oled.width = clampValue<uint8_t>(settings.oled.width, static_cast<uint8_t>(64), static_cast<uint8_t>(128));
-    settings.oled.height = clampValue<uint8_t>(settings.oled.height, static_cast<uint8_t>(32), static_cast<uint8_t>(64));
+    const bool panel = settings.oled.displayType == "panel";
+    if(settings.oled.interfaceMode!="lvgl" && settings.oled.interfaceMode!="text")settings.oled.interfaceMode="lvgl";
+    settings.oled.brightness = min<uint8_t>(settings.oled.brightness, 100);
+    settings.oled.width = clampValue<uint16_t>(settings.oled.width, static_cast<uint8_t>(64), static_cast<uint8_t>(128));
+    settings.oled.height = clampValue<uint16_t>(settings.oled.height, static_cast<uint8_t>(32), static_cast<uint8_t>(64));
+    if (panel) { settings.oled.width = 240; settings.oled.height = 320; }
     if (settings.oled.rotation != 0 && settings.oled.rotation != 90 && settings.oled.rotation != 180 && settings.oled.rotation != 270) {
         settings.oled.rotation = 0;
     }
     settings.oled.dimTimeoutSeconds = clampValue<uint16_t>(settings.oled.dimTimeoutSeconds, static_cast<uint16_t>(0), static_cast<uint16_t>(3600));
-    if (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
+    if (!panel && (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
         (settings.oled.resetPin >= 0 && !safeOutputPin(settings.oled.resetPin)) ||
-        oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd, settings.ui)) {
+        oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd, settings.ui))) {
         settings.oled.enabled = false;
         settings.oled.sdaPin = DefaultConfig::OLED_SDA_PIN;
         settings.oled.sclPin = DefaultConfig::OLED_SCL_PIN;
@@ -959,6 +982,9 @@ SettingsBundle SettingsManager::load() {
     settings.effects.updateSuccessFile = readString("eff_up_ok", settings.effects.updateSuccessFile);
     settings.effects.updateSuccessVolumePercent = readUInt("eff_us_vol", settings.effects.updateSuccessVolumePercent);
 
+    settings.oled.brightness = readUInt("lcd_light", settings.oled.brightness);
+    settings.oled.interfaceMode = readString("lcd_ui", settings.oled.interfaceMode);
+    settings.oled.touchEnabled = readBool("lcd_touch", settings.oled.touchEnabled);
     settings.oled.enabled = readBool("oled_en", settings.oled.enabled);
     settings.oled.displayType = readString("oled_mode", settings.oled.displayType);
     settings.oled.driver = readString("oled_drv", settings.oled.driver);
@@ -973,6 +999,7 @@ SettingsBundle SettingsManager::load() {
     settings.oled.wapeTriggerPin = readUInt("oled_wape_pin", settings.oled.wapeTriggerPin);
     settings.oled.wapeTriggerEvent = readString("oled_wape_evt", settings.oled.wapeTriggerEvent);
 
+    settings.sd.sdmmc = readBool("sd_mmc", settings.sd.sdmmc);
     settings.sd.enabled = readBool("sd_en", settings.sd.enabled);
     settings.sd.csPin = readUInt("sd_cs", settings.sd.csPin);
     settings.sd.sckPin = readUInt("sd_sck", settings.sd.sckPin);
@@ -1110,6 +1137,9 @@ bool SettingsManager::save(const SettingsBundle& settings) {
     changed |= writeStringIfChanged("eff_up_ok", sanitized.effects.updateSuccessFile);
     changed |= writeUIntIfChanged("eff_us_vol", sanitized.effects.updateSuccessVolumePercent);
 
+    changed |= writeUIntIfChanged("lcd_light", sanitized.oled.brightness);
+    changed |= writeStringIfChanged("lcd_ui", sanitized.oled.interfaceMode);
+    changed |= writeBoolIfChanged("lcd_touch", sanitized.oled.touchEnabled);
     changed |= writeBoolIfChanged("oled_en", sanitized.oled.enabled);
     changed |= writeStringIfChanged("oled_mode", sanitized.oled.displayType);
     changed |= writeStringIfChanged("oled_drv", sanitized.oled.driver);
@@ -1123,6 +1153,7 @@ bool SettingsManager::save(const SettingsBundle& settings) {
     changed |= writeUIntIfChanged("oled_wape_pin", sanitized.oled.wapeTriggerPin);
     changed |= writeStringIfChanged("oled_wape_evt", sanitized.oled.wapeTriggerEvent);
 
+    changed |= writeBoolIfChanged("sd_mmc", sanitized.sd.sdmmc);
     changed |= writeBoolIfChanged("sd_en", sanitized.sd.enabled);
     changed |= writeUIntIfChanged("sd_cs", sanitized.sd.csPin);
     changed |= writeUIntIfChanged("sd_sck", sanitized.sd.sckPin);
@@ -1277,6 +1308,9 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
 
     JsonObject oled = root["oled"].to<JsonObject>();
     oled["enabled"] = settings.oled.enabled;
+    oled["interfaceMode"] = settings.oled.interfaceMode;
+    oled["touchEnabled"] = settings.oled.touchEnabled;
+    oled["brightness"] = settings.oled.brightness;
     oled["displayType"] = settings.oled.displayType;
     oled["driver"] = settings.oled.driver;
     oled["i2cAddress"] = settings.oled.i2cAddress;
@@ -1292,6 +1326,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
 
     JsonObject sd = root["sd"].to<JsonObject>();
     sd["enabled"] = settings.sd.enabled;
+    sd["sdmmc"] = settings.sd.sdmmc;
     sd["csPin"] = settings.sd.csPin;
     sd["sckPin"] = settings.sd.sckPin;
     sd["mosiPin"] = settings.sd.mosiPin;
@@ -1300,7 +1335,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     JsonObject device = root["device"].to<JsonObject>();
     device["deviceName"] = settings.device.deviceName;
     device["friendlyName"] = settings.device.friendlyName;
-    device["statusLedPin"] = settings.device.statusLedPin;
+    device["statusLedPin"] = settings.device.statusLedPin == 255 ? -1 : static_cast<int>(settings.device.statusLedPin);
     device["statusLedGreenPin"] = settings.device.statusLedGreenPin;
     device["statusLedBluePin"] = settings.device.statusLedBluePin;
     device["statusLedType"] = settings.device.statusLedType;
@@ -1487,12 +1522,15 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 
     JsonObjectConst oled = object["oled"];
     if (!oled.isNull()) {
+        copyString(oled, "interfaceMode", settings.oled.interfaceMode);
         copyString(oled, "displayType", settings.oled.displayType);
         copyString(oled, "driver", settings.oled.driver);
+        if (oled["brightness"].is<uint8_t>()) settings.oled.brightness = oled["brightness"].as<uint8_t>();
+        if (oled["touchEnabled"].is<bool>()) settings.oled.touchEnabled = oled["touchEnabled"].as<bool>();
         if (oled["enabled"].is<bool>()) settings.oled.enabled = oled["enabled"].as<bool>();
         if (oled["i2cAddress"].is<uint8_t>()) settings.oled.i2cAddress = oled["i2cAddress"].as<uint8_t>();
-        if (oled["width"].is<uint8_t>()) settings.oled.width = oled["width"].as<uint8_t>();
-        if (oled["height"].is<uint8_t>()) settings.oled.height = oled["height"].as<uint8_t>();
+        if (oled["width"].is<uint16_t>()) settings.oled.width = oled["width"].as<uint16_t>();
+        if (oled["height"].is<uint16_t>()) settings.oled.height = oled["height"].as<uint16_t>();
         if (oled["rotation"].is<uint16_t>()) settings.oled.rotation = oled["rotation"].as<uint16_t>();
         if (oled["sdaPin"].is<uint8_t>()) settings.oled.sdaPin = oled["sdaPin"].as<uint8_t>();
         if (oled["sclPin"].is<uint8_t>()) settings.oled.sclPin = oled["sclPin"].as<uint8_t>();
@@ -1504,6 +1542,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 
     JsonObjectConst sd = object["sd"];
     if (!sd.isNull()) {
+        if (sd["sdmmc"].is<bool>()) settings.sd.sdmmc = sd["sdmmc"].as<bool>();
         if (sd["enabled"].is<bool>()) settings.sd.enabled = sd["enabled"].as<bool>();
         if (sd["csPin"].is<uint8_t>()) settings.sd.csPin = sd["csPin"].as<uint8_t>();
         if (sd["sckPin"].is<uint8_t>()) settings.sd.sckPin = sd["sckPin"].as<uint8_t>();
@@ -1518,7 +1557,8 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         copyString(device, "button1Action", settings.device.button1Action);
         copyString(device, "button2Action", settings.device.button2Action);
         copyString(device, "statusLedType", settings.device.statusLedType);
-        if (device["statusLedPin"].is<uint8_t>()) settings.device.statusLedPin = device["statusLedPin"].as<uint8_t>();
+        if (device["statusLedPin"].is<int>() && device["statusLedPin"].as<int>() == -1) settings.device.statusLedPin = 255;
+        else if (device["statusLedPin"].is<uint8_t>()) settings.device.statusLedPin = device["statusLedPin"].as<uint8_t>();
         if (device["statusLedGreenPin"].is<uint8_t>()) settings.device.statusLedGreenPin = device["statusLedGreenPin"].as<uint8_t>();
         if (device["statusLedBluePin"].is<uint8_t>()) settings.device.statusLedBluePin = device["statusLedBluePin"].as<uint8_t>();
         if (device["savedVolumePercent"].is<uint8_t>()) settings.device.savedVolumePercent = device["savedVolumePercent"].as<uint8_t>();

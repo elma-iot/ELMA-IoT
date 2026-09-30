@@ -13,6 +13,8 @@ Import("env")
 ROOT = Path(env["PROJECT_DIR"])
 sys.path.insert(0,str(ROOT / "scripts"))
 from project_defaults import generate_defaults
+from fit_features import apply as apply_fit_features
+apply_fit_features(env)
 defaults_file=os.environ.get("ELMA_PROJECT_DEFAULTS_FILE","")
 generate_defaults(ROOT,Path(defaults_file).read_text(encoding="utf-8") if defaults_file else os.environ.get("ELMA_PROJECT_DEFAULTS_JSON","{}"))
 WEB_DIR = ROOT / "web"
@@ -43,6 +45,7 @@ SKIPPED_WEB_ASSETS = {
 }
 
 BOARD_ASSET_IDS = {
+    "viewe-uedx24320028e-wb-a.svg": 14,
     "esp32-s3-supermini-breadboard.svg": 1,
     "esp32-s3-zero-breadboard.svg": 2,
     "esp32-s3-psram-breadboard.svg": 3,
@@ -58,7 +61,21 @@ BOARD_ASSET_IDS = {
     "esp32-c6-mini-breadboard.svg": 13,
 }
 
+assert BOARD_ASSET_IDS == json.loads((ROOT / "scripts/mainboard-svg-manifest.json").read_text(encoding="utf-8"))
+
+def audit_board_assets(source, target, env):
+    # Route strings survive LTO, unlike symbol names. Inspect the linked ELF,
+    # before image generation/upload, for every known mainboard SVG route.
+    payload = Path(str(target[0])).read_bytes()
+    unexpected = [name for name, board in BOARD_ASSET_IDS.items()
+                  if selected_board_id and board != selected_board_id
+                  and ("/" + name).encode() + b"\0" in payload]
+    if unexpected:
+        raise RuntimeError("Unexpected mainboard illustrations in firmware: " + ", ".join(unexpected))
+    print("[size-fit] Mainboard SVG audit passed for board " + str(selected_board_id))
+
 default_board_ids = {
+    "viewe_uedx24320028e": "14",
     "esp32_notifier": "8", "esp32_notifier_hacs": "8",
     "esp32_notifier_hacs_slim": "8", "esp32_notifier_hacs_legacy_ota": "8",
     "esp32_notifier_slim": "8", "esp32_designer_noaudio": "8",
@@ -76,9 +93,17 @@ selected_board_id_text = os.environ.get("ELMA_SELECTED_BOARD_PROFILE_ID", defaul
 if not selected_board_id_text.isdigit():
     raise SystemExit("ELMA_SELECTED_BOARD_PROFILE_ID must be a numeric board identifier")
 selected_board_id = int(selected_board_id_text)
-if selected_board_id and selected_board_id not in BOARD_ASSET_IDS.values():
+if selected_board_id and selected_board_id not in (*BOARD_ASSET_IDS.values(), 14):
     raise SystemExit(f"Unknown ELMA selected board identifier: {selected_board_id}")
 env.Append(CPPDEFINES=[("APP_COMPILED_BOARD_PROFILE_ID", selected_board_id)])
+env.AddPostAction("$BUILD_DIR/${PROGNAME}.elf", audit_board_assets)
+if selected_board_id == 14:
+    for bundled in (HEADER, SOURCE):
+        if bundled.is_file():
+            original = bundled.read_text(encoding="utf-8")
+            updated = original.replace("#if APP_COMPILED_BOARD_PROFILE_ID == 0\n", "#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == 14\n")
+            if updated != original: bundled.write_text(updated, encoding="utf-8")
+
 sys.path.insert(0,str(ROOT / "scripts"))
 from compact_peripheral_assets import load_manifest,budgeted_mask,default_svg
 from share_compact_peripheral_svg import BEGIN as SHARED_FALLBACK_BEGIN, END as SHARED_FALLBACK_END, install_shared_fallback
@@ -94,7 +119,8 @@ env.Append(CPPDEFINES=[("APP_PERIPHERAL_SVG_MASK",peripheral_svg_mask)])
 if active_profiles is not None:print(f"[web-assets] Detailed peripheral SVGs: {bin(peripheral_svg_mask).count(chr(49))} of {len(peripheral_svg_paths)} within {peripheral_svg_budget} bytes compressed; omitted routes share one compact default image")
 
 
-if env.get("PIOENV") == "esp32_notifier_hacs_legacy_ota":
+if env.get("PIOENV") == "esp32_notifier_hacs_legacy_ota" or str(env.get("PIOENV", "")).startswith("esp32c3_designer"):
+    # C3 OTA images need cross-object optimization at both compile and link time.
     env.Append(LINKFLAGS=["-flto"])
 
 language_codes = ["en","es","zh","hi","ar","pt","bn","ru","ja","de","fr","ko","tr","it","id","pl","uk","vi","th","fa"]
@@ -340,7 +366,7 @@ def asset_guard(asset_path: str):
     if variant:
         return f"#if APP_COMPILED_BOARD_PROFILE_ID == {variant.group(1)}"
     if asset_path in ("app.js", "index.html"):
-        return "#if APP_COMPILED_BOARD_PROFILE_ID == 0"
+        return "#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == 14"
     board_asset_id = BOARD_ASSET_IDS.get(asset_path)
     if board_asset_id:
         return f"#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == {board_asset_id}"

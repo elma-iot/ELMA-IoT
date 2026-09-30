@@ -42,3 +42,6 @@ include/generated_project_defaults.h
 
 # Local one-off hardware diagnostics
 .buzzer-gpio7-test/
+
+# Compiler dependency output from local syntax checks
+/*.d

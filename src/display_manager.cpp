@@ -1,6 +1,8 @@
 #include "display_manager.h"
+#if !APP_DISABLE_DISPLAY
 
 #include <Wire.h>
+#include "device_log.h"
 
 namespace {
 uint8_t charsForWidth(int16_t width, uint8_t textSize) {
@@ -42,6 +44,10 @@ void DisplayManager::applySettings(const OledSettings& settings) {
     settings_ = settings;
     ssd1306_.reset();
     sh1106_.reset();
+#if APP_HAS_ONBOARD_PANEL
+    dashboard_.reset();
+    panel_.reset();
+#endif
     dimmed_ = false;
     scrollOffset_ = 0;
     lastActivityAt_ = millis();
@@ -49,6 +55,22 @@ void DisplayManager::applySettings(const OledSettings& settings) {
         return;
     }
 
+#if APP_HAS_ONBOARD_PANEL
+    if (settings_.displayType == "panel") {
+        panel_.reset(new PanelDisplay());
+        if (!panel_->begin(settings_.touchEnabled, rotationIndex(), settings_.brightness)) {
+            panel_.reset();
+            DebugLog.println("[display] VIEWE initialization failed");
+        }
+        if(panel_ && settings_.interfaceMode=="lvgl") {
+            dashboard_.reset(new PanelDashboard(*panel_));
+            if(!dashboard_->begin(rotationIndex())) { dashboard_.reset(); DebugLog.println("[display] LVGL allocation failed; using text interface"); }
+        }
+        lastSignature_ = "";
+        lastCenterText_ = "";
+        return;
+    }
+#endif
     Wire.begin(settings_.sdaPin, settings_.sclPin);
     if (settings_.driver == "sh1106") {
         sh1106_.reset(new Adafruit_SH1106G(settings_.width, settings_.height, &Wire, settings_.resetPin));
@@ -91,6 +113,9 @@ void DisplayManager::markActivity() {
 }
 
 void DisplayManager::powerOff() {
+#if APP_HAS_ONBOARD_PANEL
+    if (panel_) panel_->brightness(0);
+#endif
     if (!isEnabled()) {
         return;
     }
@@ -106,10 +131,16 @@ void DisplayManager::powerOff() {
 }
 
 bool DisplayManager::isEnabled() const {
+#if APP_HAS_ONBOARD_PANEL
+    if (panel_) return settings_.enabled;
+#endif
     return settings_.enabled && isOledMode() && (ssd1306_ || sh1106_);
 }
 
 Adafruit_GFX* DisplayManager::gfx() {
+#if APP_HAS_ONBOARD_PANEL
+    if (panel_) return panel_.get();
+#endif
     if (ssd1306_) {
         return ssd1306_.get();
     }
@@ -120,6 +151,9 @@ Adafruit_GFX* DisplayManager::gfx() {
 }
 
 void DisplayManager::clearDisplay() {
+#if APP_HAS_ONBOARD_PANEL
+    if (panel_) panel_->fillScreen(0);
+#endif
     if (ssd1306_) {
         ssd1306_->clearDisplay();
     }
@@ -129,6 +163,9 @@ void DisplayManager::clearDisplay() {
 }
 
 void DisplayManager::flushDisplay() {
+#if APP_HAS_ONBOARD_PANEL
+    if (panel_) panel_->flush();
+#endif
     if (ssd1306_) {
         ssd1306_->display();
     }
@@ -142,6 +179,9 @@ void DisplayManager::setDimmed(bool dimmed) {
         return;
     }
     dimmed_ = dimmed;
+#if APP_HAS_ONBOARD_PANEL
+    if (panel_) panel_->brightness(dimmed ? 0 : settings_.brightness);
+#endif
     if (ssd1306_) {
         ssd1306_->dim(dimmed);
     }
@@ -224,6 +264,23 @@ void DisplayManager::drawWrappedLine(Adafruit_GFX& display, const String& text, 
 }
 
 void DisplayManager::loop(const AppStateSnapshot& state) {
+#if APP_HAS_ONBOARD_PANEL
+    if(dashboard_) {
+        const bool temporary=temporaryCenterTextUntilMs_ && static_cast<int32_t>(temporaryCenterTextUntilMs_-millis())>0;
+        dashboard_->loop(state,panelSnapshot_,panelCommand_,temporary?temporaryCenterText_:String(""));
+        if(dashboard_->touched())markActivity();
+        setDimmed(settings_.dimTimeoutSeconds>0 && millis()-lastActivityAt_>settings_.dimTimeoutSeconds*1000UL);
+        return;
+    }
+    if (panel_ && millis() - lastTouchAt_ >= 30) {
+        lastTouchAt_ = millis();
+        int16_t x, y;
+        if (panel_->readTouch(x, y)) {
+            markActivity();
+            DebugLog.printf("[touch] x=%d y=%d rotation=%u\n", x, y, settings_.rotation);
+        }
+    }
+#endif
     if (!isEnabled()) {
         return;
     }
@@ -290,5 +347,21 @@ bool DisplayManager::available() const {return isEnabled();}
 bool DisplayManager::clearLogicText() {
     if(!isEnabled())return false;
     temporaryCenterText_="";temporaryCenterTextUntilMs_=0;lastSignature_="";
-    clearDisplay();flushDisplay();markActivity();return true;
+    markActivity();
+#if APP_HAS_ONBOARD_PANEL
+    if(dashboard_)return true;
+#endif
+    clearDisplay();flushDisplay();return true;
 }
+
+#else
+void DisplayManager::begin(const OledSettings&) {}
+void DisplayManager::applySettings(const OledSettings&) {}
+void DisplayManager::setBootMessage(const String&) {}
+void DisplayManager::showTemporaryCenterText(const String&, unsigned long) {}
+bool DisplayManager::available() const { return false; }
+bool DisplayManager::clearLogicText() { return false; }
+void DisplayManager::markActivity() {}
+void DisplayManager::powerOff() {}
+void DisplayManager::loop(const AppStateSnapshot&) {}
+#endif

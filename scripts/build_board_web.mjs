@@ -52,7 +52,7 @@ for (const [index, board] of boards.entries()) {
           source = replaceFunction(source, "chipPins", `export function chipPins(chip, output = false) { return output ? ${JSON.stringify(policy.chipPins(chip, true, board))} : ${JSON.stringify(policy.chipPins(chip, false, board))}; }`);
         }
         if (filename === "board-contact-layout.js") {
-          source = source.replace("import boardPinContacts from '../board-pin-contacts.json';",
+          source = source.replace(/import boardPinContacts from '\.\.\/board-pin-contacts\.json'(?:\s+with\s*\{[^}]*\})?;/,
             `const boardPinContacts = ${JSON.stringify({[board]: boardContacts[board] || {}})};`);
         }
         if (filename === "configuration-gpio-tab.js") {

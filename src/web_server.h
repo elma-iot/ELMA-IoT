@@ -13,6 +13,7 @@
 #include "ota_manager.h"
 #include "settings_manager.h"
 #include "storage_backend.h"
+#include "interface_security.h"
 #include "wifi_manager.h"
 
 class WebServerManager {
@@ -58,6 +59,7 @@ class WebServerManager {
         SimpleHandler serverShutdownHandler,
         SimpleHandler rebootHandler,
         SimpleHandler factoryResetHandler);
+    void securityTick();
     void setWebUiLocked(bool locked);
     bool webUiLocked() const;
 
@@ -87,7 +89,11 @@ class WebServerManager {
     SimpleHandler serverShutdownHandler_;
     SimpleHandler rebootHandler_;
     SimpleHandler factoryResetHandler_;
-    bool webUiLocked_ = false;
+    mutable InterfaceSecurity security_;
+    void registerSecurityRoutes();
+    void releaseStorageUploadLease();
+    AsyncWebServerRequest* storageUploadOwner_ = nullptr;
+    bool storageUploadLeased_ = false, storageUploadCreated_ = false, storageUploadFinished_ = false;
     File storageUploadFile_;
     StorageTarget storageUploadTarget_ = StorageTarget::Flash;
     String storageUploadPath_;

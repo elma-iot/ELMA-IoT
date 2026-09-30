@@ -75,12 +75,15 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
         if((!linked(n,"append")||!appended.isNull()) && appendText(input(n,"value").as<std::string>(),appended,input(n,"separator").as<std::string>(),text))result.set(text);
         else error_="Text value unavailable or exceeds 1024 bytes";
     }
+    else if(type=="recording.interval")result.set(input(n,"value"));
     else if (type.compare(0, 6, "value.") == 0) result.set(input(n, "value"));
     else if (type.compare(0, 10, "mainboard.") == 0) {
         auto binding = node(n)["binding"];
         if (binding["kind"] == "status" && (binding["availability"].isNull() || path(binding["availability"]).as<bool>()))
             result.set(path(binding["path"] | ""));
-    } else if (type == "peripheral.reference") result.set(node(n));
+    } else if(type=="hardware.gpio")result.set(status_["gpio"][id][port]);
+    else if(type=="hardware.led")result.set(status_["builtinLed"][port]);
+    else if (type == "peripheral.reference") result.set(node(n));
     else if (type=="peripheral.low" || type=="peripheral.critical") {
         JsonVariantConst voltage=status_["peripherals"][node(n)["peripheral"]["id"].as<std::string>()]["voltage"];
         auto threshold=input(n,"threshold");if(!voltage.isNull()&&!threshold.isNull())result.set(voltage.as<double>()<threshold.as<double>());
@@ -162,7 +165,7 @@ bool Runtime::testAction(const char* nodeId, const char* command, std::string& e
     return ok;
 }
 
-void Runtime::execute(size_t n, const char*) {
+void Runtime::execute(size_t n, const char* trigger) {
     if(!allowed(n))return;
     auto& state = states_[n]; std::string type = node(n)["type"].as<std::string>();
     if (type=="condition.if" || type=="flow.branch") {
@@ -180,7 +183,11 @@ void Runtime::execute(size_t n, const char*) {
             emit(n); state.remaining=unsigned(count-1);state.pending=count>1;state.due=now_+ms;state.interval=ms;
         } else if (type=="timing.timer") { state.enabled=true;state.pending=true;state.interval=ms;state.due=now_+ms; }
         else { state.pending=true;state.due=now_+ms; }
-    } else if (type.compare(0,11,"peripheral.")==0 || type.compare(0,7,"action.")==0 || type.compare(0,10,"mainboard.")==0) {
+    } else if (type.compare(0,11,"peripheral.")==0 || type.compare(0,7,"action.")==0 || type.compare(0,10,"mainboard.")==0 || type.compare(0,9,"hardware.")==0) {
+        if(type=="mainboard.save_data") {
+            if(state.recordingWritten && state.recordingElapsed<recordingInterval(n))return;
+            state.recordingWritten=true;state.recordingElapsed=0;
+        }
         JsonDocument args; auto target = node(n);
         if (type.compare(0,7,"action.")==0) { auto ref=input(n,"device");target=ref.as<JsonObjectConst>();args["action"]=type.substr(7); }
         else args["action"]=type.substr(type.find('.')+1);
@@ -190,6 +197,7 @@ void Runtime::execute(size_t n, const char*) {
             else if(!source.isNull())args["source"].set(source);
             else if(std::string(node(n)["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos)setBuzzerPreset(args["source"].to<JsonObject>(),node(n)["parameters"]["preset"]|"beep");
         }
+        if(type=="mainboard.plot"||type=="mainboard.save_data")for(const char* key:{"plot","series","unit","path"})args[key].set(node(n)["parameters"][key]);
         if(type=="mainboard.mqtt.publish") {
             for(const char* key:{"topic","retained","qos"})args[key].set(input(n,key));
             auto appended=input(n,"value");std::string text;
@@ -201,6 +209,11 @@ void Runtime::execute(size_t n, const char*) {
         if(type=="peripheral.text"){args["text"].set(input(n,"text"));args["seconds"].set(input(n,"seconds"));}
         if (type=="peripheral.volume") args["value"].set(input(n,"volume"));
         else if (linked(n,"value") || !node(n)["parameters"]["value"].isNull()) args["value"].set(input(n,"value"));
+        if((type=="mainboard.plot"||type=="mainboard.save_data")&&args["value"].is<bool>())args["value"]=args["value"].as<bool>()?1:0;
+        if(type=="hardware.gpio" || type=="hardware.led") {
+            args["action"]=trigger;
+            for(const char* key:{"state","duty","red","green","blue","brightness"})args[key].set(input(n,key));
+        }
         std::string error;
         if (action_ && action_(target,args.as<JsonVariantConst>(),error)) emit(n);
         else {error_=error.empty() ? "Logics action failed" : error;activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;}
@@ -222,13 +235,34 @@ void Runtime::suspend() {
     pulses_.clear(); for(auto& state:states_) {state.pending=false;state.enabled=false;state.initialized=false;}
 }
 
+uint64_t Runtime::recordingInterval(size_t n) const {
+    for(JsonObjectConst e:graph_["connections"].as<JsonArrayConst>())if(e["target"]["node"]==node(n)["id"]&&e["target"]["port"]=="value") {
+        int upstream=index(e["source"]["node"]|"");
+        if(upstream<0||node(upstream)["type"]!="recording.interval")break;
+        auto p=node(upstream)["parameters"];std::string unit=p["timeUnit"]|"";
+        double factor=unit=="milliseconds"?1:unit=="seconds"?1000:unit=="minutes"?60000:unit=="hours"?3600000:unit=="days"?86400000:0;
+        double ms=p["duration"].as<double>()*factor;
+        if(std::isfinite(ms)&&ms>=1&&ms<=31536000000.0)return uint64_t(std::ceil(ms));
+    }
+    return 5000;
+}
+uint32_t Runtime::recordingPollInterval(uint32_t normal) const {
+    if(paused_)return normal;
+    for(size_t n=0;n<states_.size();++n)if(node(n)["type"]=="mainboard.save_data"&&allowed(n))normal=uint32_t(std::min<uint64_t>(normal,recordingInterval(n)));
+    return std::max<uint32_t>(1,normal);
+}
 void Runtime::tick(uint32_t now, JsonVariantConst status) {
     if(paused_)return;
     now_=now;status_=status;cache_.clear();budget_=0;depth_=0;
     started_=true;
     for(size_t n=0;n<states_.size();++n) {
         std::string type=node(n)["type"].as<std::string>();auto& state=states_[n];
+        if(type=="mainboard.save_data") {
+            if(state.recordingStarted && allowed(n))state.recordingElapsed+=uint32_t(now-state.recordingAt);
+            state.recordingAt=now;state.recordingStarted=true;
+        }
         if(!allowed(n))continue;
+        if(type=="mainboard.save_data" && !linked(n,"in") && state.recordingElapsed>=recordingInterval(n))execute(n,"in");
         if((type=="event.start" || (node(n)["binding"]["kind"]=="lifecycle" && node(n)["binding"]["event"]=="started")) && !state.startSent){state.startSent=true;emit(n);}
         if(type.compare(0,6,"event.")==0 && type!="event.start") {
             if(changed(n,input(n,"value"),type=="event.rising" ? "rising" : type=="event.falling" ? "falling" : "change"))emit(n);
@@ -293,7 +327,7 @@ bool Runtime::allowed(size_t n) const {
 void Runtime::freezeStates(uint32_t now) {
     for(size_t n=0;n<states_.size();++n){auto& state=states_[n];bool blocked=!allowed(n);
         if(blocked&&!state.frozen){state.frozen=true;state.frozenAt=now;}
-        else if(!blocked&&state.frozen){if(state.pending)state.due+=now-state.frozenAt;state.frozen=false;}
+        else if(!blocked&&state.frozen){if(state.pending)state.due+=now-state.frozenAt;state.recordingAt=now;state.frozen=false;}
     }
 }
 bool Runtime::controlGroup(const char* id,const char* mode,uint32_t now) {

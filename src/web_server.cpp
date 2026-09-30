@@ -1,9 +1,16 @@
+#include "plot_telemetry.h"
+#include "plot_storage.h"
+#include "storage_download.h"
+#include "storage_memory.h"
+#include <sys/time.h>
 #include "web_server.h"
 #include "device_log.h"
 
 #ifdef APP_DISABLE_WEB_UI
 
 WebServerManager::WebServerManager() = default;
+
+void WebServerManager::securityTick() {}
 
 void WebServerManager::setWebUiLocked(bool) {
 }
@@ -419,6 +426,18 @@ bool requestFlagParam(AsyncWebServerRequest* request, const char* name) {
     return rawValue.isEmpty() || rawValue == "1" || rawValue.equalsIgnoreCase("true") || rawValue.equalsIgnoreCase("yes");
 }
 
+String readStorageIndexLine(File& file) {
+    // A corrupt index must never allocate a String the size of the card.
+    char line[769];size_t size=0;bool tooLong=false;uint32_t started=millis();
+    while(file.available()) {
+        int c=file.read();if(c<0)break;
+        if(c=='\n'){if(tooLong)return String();break;}
+        if(size<sizeof(line)-1)line[size++]=char(c);else tooLong=true;
+        if(uint32_t(millis()-started)>=25)return String();
+    }
+    if(tooLong)return String();line[size]=0;return String(line);
+}
+
 bool appendStorageEntriesFromIndex(StorageTarget target, const String& directoryPath, JsonArray files, size_t offset, size_t limit, size_t& nextOffset, bool& hasMore, size_t& totalEntries) {
     if (!storageMounted(target)) {
         nextOffset = offset;
@@ -446,7 +465,7 @@ bool appendStorageEntriesFromIndex(StorageTarget target, const String& directory
     size_t returnedEntries = 0;
     while (indexFile.available()) {
         bool isDirectoryHint = false;
-        const String entryPath = parseIndexedStorageEntryPath(directoryPath, indexFile.readStringUntil('\n'), isDirectoryHint);
+        const String entryPath = parseIndexedStorageEntryPath(directoryPath, readStorageIndexLine(indexFile), isDirectoryHint);
         if (entryPath.isEmpty()) {
             continue;
         }
@@ -456,7 +475,7 @@ bool appendStorageEntriesFromIndex(StorageTarget target, const String& directory
         }
         if (limit > 0 && returnedEntries >= limit) {
             hasMore = true;
-            continue;
+            break;
         }
 
         File entry = storageOpen(target, entryPath, "r");
@@ -484,10 +503,11 @@ bool appendStorageEntriesFromIndex(StorageTarget target, const String& directory
     indexFile.close();
     endStorageRead(target);
     nextOffset = offset + returnedEntries;
+    totalEntries=max(totalEntries,nextOffset+(hasMore?1U:0U));
     return true;
 }
 
-void appendStorageEntriesJson(StorageTarget target, const String& directoryPath, JsonArray files, size_t offset, size_t limit, size_t& nextOffset, bool& hasMore, size_t& totalEntries, bool exhaustiveScan = true) {
+void appendStorageEntriesJson(StorageTarget target, const String& directoryPath, JsonArray files, size_t offset, size_t limit, size_t& nextOffset, bool& hasMore, size_t& totalEntries, bool exhaustiveScan = false) {
     if (!storageMounted(target)) {
         nextOffset = offset;
         hasMore = false;
@@ -849,7 +869,10 @@ bool beginStorageReindexJob(StorageTarget target, const String& directoryPath, S
     return true;
 }
 
-bool removeStoragePathRecursive(StorageTarget target, const String& path) {
+bool removeStoragePathRecursive(StorageTarget target, const String& path,unsigned depth=0) {
+    if(depth>8)return false;
+    beginStorageWrite(target);
+    struct Lease{StorageTarget target;~Lease(){endStorageWrite(target);}} lease{target};
     fs::FS* fs = getStorageFs(target);
     if (fs == nullptr) {
         return false;
@@ -867,7 +890,7 @@ bool removeStoragePathRecursive(StorageTarget target, const String& path) {
     while (File child = entry.openNextFile()) {
         const String childPath = String(child.path());
         child.close();
-        if (!removeStoragePathRecursive(target, childPath)) {
+        if (!removeStoragePathRecursive(target, childPath,depth+1)) {
             entry.close();
             return false;
         }
@@ -877,6 +900,8 @@ bool removeStoragePathRecursive(StorageTarget target, const String& path) {
 }
 
 bool createStorageDirectory(StorageTarget target, const String& path) {
+    beginStorageWrite(target);
+    struct Lease{StorageTarget target;~Lease(){endStorageWrite(target);}} lease{target};
     fs::FS* fs = getStorageFs(target);
     return fs != nullptr && path != "/" && fs->mkdir(path);
 }
@@ -888,13 +913,14 @@ void appendStorageDirectoryJson(StorageTarget target, const String& directoryPat
     response["currentPath"] = currentPath;
     response["parentPath"] = storageParentPath(currentPath);
     const size_t offset = requestSizeParam(request, "offset", 0);
-    const size_t limit = requestSizeParam(request, "limit", kStorageDirectoryListBatchDefault);
+    const size_t limit = min<size_t>(128,max<size_t>(1,requestSizeParam(request, "limit", kStorageDirectoryListBatchDefault)));
     const bool preferLiveScan = requestFlagParam(request, "live");
     const bool rebuildIndex = requestFlagParam(request, "reindex");
     JsonObject storage = response["storage"].to<JsonObject>();
     appendStorageSummaryJson(target, storage);
     if (rebuildIndex) {
-        rebuildStorageDirectoryIndex(target, currentPath);
+        String error;response["reindexPending"]=beginStorageReindexJob(target,currentPath,error);
+        if(!error.isEmpty())response["reindexError"]=error;
     }
     size_t nextOffset = 0;
     bool hasMore = false;
@@ -914,6 +940,7 @@ void appendStorageDirectoryJson(StorageTarget target, const String& directoryPat
 }  // namespace
 
 WebServerManager::WebServerManager() : server_(80) {}
+void WebServerManager::releaseStorageUploadLease(){if(storageUploadLeased_){endStorageWrite(storageUploadTarget_);storageUploadLeased_=false;}}
 
 bool WebServerManager::ensureStorageTransferBuffer(size_t minimumSize) {
     if (minimumSize == 0) {
@@ -929,13 +956,7 @@ bool WebServerManager::ensureStorageTransferBuffer(size_t minimumSize) {
         storageTransferBufferCapacity_ = 0;
     }
 
-    void* memory = nullptr;
-    if (psramFound()) {
-        memory = heap_caps_malloc(minimumSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    }
-    if (memory == nullptr) {
-        memory = heap_caps_malloc(minimumSize, MALLOC_CAP_8BIT);
-    }
+    void* memory = allocateStorageBuffer(minimumSize);
     if (memory == nullptr) {
         return false;
     }
@@ -987,6 +1008,14 @@ void WebServerManager::begin(
     rebootHandler_ = rebootHandler;
     factoryResetHandler_ = factoryResetHandler;
 
+    security_.begin();
+    // The route-level checks also cover streaming upload callbacks, which run
+    // before middleware. Middleware protects future API handlers by default.
+    server_.addMiddleware([this](AsyncWebServerRequest* request,ArMiddlewareNext next){
+        if(rejectIfWebUiLocked(request))return;
+        next();
+    });
+    registerSecurityRoutes();
     registerApiRoutes();
     registerWebRoutes();
     server_.begin();
@@ -1008,27 +1037,16 @@ bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
 }
 
 bool WebServerManager::rejectIfWebUiLocked(AsyncWebServerRequest* request) {
-    if (!webUiLocked_) {
-        return false;
-    }
-
-    if (request->url().startsWith("/api/")) {
-        JsonDocument doc;
-        doc["error"] = "Web interface is locked. Unlock it via MQTT command <baseTopic>/cmd/web_ui with payload unlock.";
-        sendJson(request, doc, 423);
-    } else {
-        request->send(423, "text/plain", "Web interface is locked. Unlock it via MQTT command <baseTopic>/cmd/web_ui with payload unlock.");
-    }
-    return true;
+    const String path=request->url();
+    // Static assets must load the lock screen; only sanitized status and the
+    // security protocol remain accessible through the API while locked.
+    if(!path.startsWith("/api/") || path=="/api/security" || (path=="/api/status"&&request->method()==HTTP_GET))return false;
+    if(!security_.locked())return false;
+    JsonDocument doc;doc["error"]="Interface locked";doc["locked"]=true;sendJson(request,doc,423);return true;
 }
-
-void WebServerManager::setWebUiLocked(bool locked) {
-    webUiLocked_ = locked;
-}
-
-bool WebServerManager::webUiLocked() const {
-    return webUiLocked_;
-}
+void WebServerManager::securityTick(){security_.tick();}
+void WebServerManager::setWebUiLocked(bool locked){security_.externalLock(locked);}
+bool WebServerManager::webUiLocked() const {return security_.locked();}
 
 bool WebServerManager::redirectCaptivePortalIfNeeded(AsyncWebServerRequest* request) {
     if (wifiManager_ != nullptr && wifiManager_->shouldRedirectCaptivePortal(request->host())) {
@@ -1062,6 +1080,7 @@ void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocume
         request->send(503, "application/json", "{\"error\":\"Memory busy; retry shortly.\"}");
         return;
     }
+    response->addHeader("Cache-Control", "no-store");
     request->send(response);
 }
 
@@ -1084,11 +1103,18 @@ void WebServerManager::registerApiRoutes() {
         }
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
+        if(security_.locked()) {
+            const auto state=appState_->snapshot();
+            root["device"]["deviceName"]=state.device.deviceName;root["device"]["friendlyName"]=state.device.friendlyName;
+            root["network"]["ip"]=state.network.ip;root["network"]["wifiConnected"]=state.network.wifiConnected;root["network"]["mqttConnected"]=state.network.mqttConnected;
+            root["battery"]["voltage"]=state.battery.voltage;root["system"]["webUiLocked"]=true;
+            root["firmware"]["version"]=APP_VERSION;sendJson(request,doc);return;
+        }
 #ifndef APP_LEGACY_OTA_FIT
         appState_->toJson(root);
         wifiManager_->appendTxPowerStatus(root["network"].as<JsonObject>());
         appendSystemMetricsJson(root);
-        root["system"]["webUiLocked"] = webUiLocked_;
+        root["system"]["webUiLocked"] = security_.locked();
 #else
         root["system"]["deviceName"] = settingsGetter_().device.friendlyName;
 #endif
@@ -1324,6 +1350,44 @@ void WebServerManager::registerApiRoutes() {
             memcpy(static_cast<uint8_t*>(request->_tempObject) + index, data, len);
         });
 
+    auto* plotClockHandler=new AsyncCallbackJsonWebHandler("/api/plots/time",[this](AsyncWebServerRequest* request,JsonVariant& json){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        if(request->hasHeader("Origin")){String origin=request->getHeader("Origin")->value();if(origin!=String("http://")+request->host()&&origin!=String("https://")+request->host()){request->send(403);return;}}
+        double epoch=json["epoch"]|0.0;if(!std::isfinite(epoch)||epoch<1577836800000.0||epoch>4102444800000.0){request->send(400,"application/json","{\"error\":\"Invalid browser time\"}");return;}
+        timeval value;value.tv_sec=static_cast<time_t>(epoch/1000);value.tv_usec=static_cast<suseconds_t>(std::fmod(epoch,1000)*1000);
+        if(settimeofday(&value,nullptr)!=0){request->send(500,"application/json","{\"error\":\"Clock update failed\"}");return;}
+        request->send(200,"application/json","{\"ok\":true}");
+    });plotClockHandler->setMaxContentLength(128);plotClockHandler->setMethod(HTTP_POST);server_.addHandler(plotClockHandler);
+    server_.on("/api/plots/config",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        JsonDocument graph,result;if(logicsGetter_)logicsGetter_(graph,true);
+        if(graph["error"].is<const char*>()){request->send(503,"application/json","{\"error\":\"Logics busy\"}");return;}
+        JsonArray plots=result["plots"].to<JsonArray>(),recordings=result["recordings"].to<JsonArray>();
+        for(JsonObjectConst node:graph["graph"]["nodes"].as<JsonArrayConst>()){
+            const char* type=node["type"]|"";if(strcmp(type,"mainboard.plot")&&strcmp(type,"mainboard.save_data"))continue;
+            JsonObject item=(strcmp(type,"mainboard.plot")==0?plots:recordings).add<JsonObject>();item["id"]=node["id"];item["plot"]=node["parameters"]["plot"];item["series"]=node["parameters"]["series"];item["path"]=node["parameters"]["path"]|"/";
+        }
+        plotRecordingStatus(result["storage"].to<JsonObject>());sendJson(request,result);
+    });
+    server_.on("/api/plots/history",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        if(!request->hasParam("id")){request->send(400,"application/json","{\"error\":\"Recording ID required\"}");return;}
+        String id=request->getParam("id")->value();JsonDocument graph(storageJsonAllocator()),result(storageJsonAllocator());if(logicsGetter_)logicsGetter_(graph,true);
+        String path;for(JsonObjectConst node:graph["graph"]["nodes"].as<JsonArrayConst>())if(node["type"]=="mainboard.save_data"&&node["id"]==id){plotRecordingPath(node["parameters"]["path"]|"/",node["parameters"]["plot"]|"",path);break;}
+        if(path.isEmpty()){request->send(404,"application/json","{\"error\":\"Recording not configured\"}");return;}
+        uint32_t offset=request->hasParam("offset")?strtoul(request->getParam("offset")->value().c_str(),nullptr,10):0;
+        double from=request->hasParam("from")?strtod(request->getParam("from")->value().c_str(),nullptr):0;
+        double to=request->hasParam("to")?strtod(request->getParam("to")->value().c_str(),nullptr):9007199254740991.0;
+        if(!std::isfinite(from)||!std::isfinite(to)||from<0||to<from){request->send(400,"application/json","{\"error\":\"Invalid date range\"}");return;}
+        String error;if(!readPlotHistory(path,offset,from,to,result,error)){result["error"]=error;String body;serializeJson(result,body);request->send(503,"application/json",body);return;}
+        sendJson(request,result);
+    });
+    server_.on("/api/plots",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        uint32_t after=request->hasParam("after")?strtoul(request->getParam("after")->value().c_str(),nullptr,10):0;
+        uint32_t boot=request->hasParam("boot")?strtoul(request->getParam("boot")->value().c_str(),nullptr,10):0;
+        JsonDocument result(storageJsonAllocator());plotSamplesSince(after,boot,result);plotRecordingStatus(result["storage"].to<JsonObject>());sendJson(request,result);
+    });
     server_.on("/api/logics",HTTP_GET,[this](AsyncWebServerRequest* request){
         if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
         if(!logicsGetter_){request->send(503,"application/json","{\"error\":\"Logics unavailable\"}");return;}
@@ -1829,6 +1893,8 @@ void WebServerManager::registerApiRoutes() {
             return;
         }
 
+        beginStorageRead(target);
+        struct ReadLease {StorageTarget target;~ReadLease(){endStorageRead(target);}} requestLease{target};
         const String path = storagePathFromRequest(request->getParam("path")->value());
         if (path.isEmpty() || !storageExists(target, path)) {
             request->send(404, "application/json", "{\"error\":\"File not found.\"}");
@@ -1841,41 +1907,16 @@ void WebServerManager::registerApiRoutes() {
             request->send(404, "application/json", "{\"error\":\"File not found.\"}");
             return;
         }
-        if (!ensureStorageTransferBuffer(4096)) {
-            file.close();
-            request->send(500, "application/json", "{\"error\":\"Unable to allocate transfer buffer.\"}");
-            return;
+        const size_t downloadSize=file.size();
+        auto stream = StorageDownload::create(target,std::move(file));
+        if (!stream) {
+            request->send(503,"application/json","{\"error\":\"Storage stream limit or memory reserve reached.\"}");return;
         }
-
-        beginStorageRead(target);
-        AsyncWebServerResponse* response = request->beginChunkedResponse(
-            contentTypeForPath(path),
-            [this, target, file = std::move(file), released = false](uint8_t* buffer, size_t maxLen, size_t) mutable -> size_t {
-                if (!file || maxLen == 0) {
-                    if (file) {
-                        file.close();
-                    }
-                    if (!released) {
-                        endStorageRead(target);
-                        released = true;
-                    }
-                    return 0;
-                }
-
-                const size_t chunkSize = min(maxLen, storageTransferBufferCapacity_);
-                const size_t bytesRead = file.read(storageTransferBuffer_, chunkSize);
-                if (bytesRead > 0) {
-                    memcpy(buffer, storageTransferBuffer_, bytesRead);
-                    return bytesRead;
-                }
-
-                file.close();
-                if (!released) {
-                    endStorageRead(target);
-                    released = true;
-                }
-                return 0;
-            });
+        AsyncWebServerResponse* response=request->beginResponse(contentTypeForPath(path),downloadSize,
+            [stream](uint8_t* buffer,size_t maximum,size_t)->size_t{return stream->read(buffer,maximum);});
+        if (!response || !stream->start()) {
+            delete response;request->send(503,"application/json","{\"error\":\"Storage reader unavailable.\"}");return;
+        }
         if (download) {
             response->addHeader("Content-Disposition", String("attachment; filename=\"") + storageDownloadName(path) + "\"");
         }
@@ -1992,6 +2033,7 @@ void WebServerManager::registerApiRoutes() {
                 return;
             }
 
+            if(storageBusy(target)){request->send(423,"application/json","{\"error\":\"Storage is busy; stop playback/transfers before deleting.\"}");return;}
             JsonDocument doc;
             if (deserializeJson(doc, data, len) != DeserializationError::Ok) {
                 request->send(400, "application/json", "{\"error\":\"invalid json\"}");
@@ -2007,7 +2049,7 @@ void WebServerManager::registerApiRoutes() {
                 request->send(500, "application/json", "{\"error\":\"Unable to delete path.\"}");
                 return;
             }
-            rebuildStorageDirectoryIndex(target, storageParentPath(path));
+            String indexError;beginStorageReindexJob(target,storageParentPath(path),indexError);
 
             JsonDocument response;
             response["ok"] = true;
@@ -2056,7 +2098,7 @@ void WebServerManager::registerApiRoutes() {
                 request->send(500, "application/json", "{\"error\":\"Unable to create folder.\"}");
                 return;
             }
-            rebuildStorageDirectoryIndex(target, directoryPath);
+            String indexError;beginStorageReindexJob(target,directoryPath,indexError);
 
             JsonDocument response;
             response["ok"] = true;
@@ -2072,15 +2114,17 @@ void WebServerManager::registerApiRoutes() {
                 return;
             }
 
+            if(storageUploadOwner_!=request)return;
             JsonDocument response;
             if (!storageUploadError_.isEmpty()) {
                 response["error"] = storageUploadError_;
                 if (storageUploadFile_) {
                     storageUploadFile_.close();
                 }
-                if (!storageUploadPath_.isEmpty()) {
+                if (storageUploadCreated_ && !storageUploadPath_.isEmpty()) {
                     storageRemove(storageUploadTarget_, storageUploadPath_);
                 }
+                releaseStorageUploadLease();storageUploadOwner_=nullptr;
                 storageUploadPath_ = "";
                 storageUploadBytesWritten_ = 0;
                 storageUploadLimitBytes_ = 0;
@@ -2097,6 +2141,7 @@ void WebServerManager::registerApiRoutes() {
             storageUploadBytesWritten_ = 0;
             storageUploadLimitBytes_ = 0;
             storageUploadError_ = "";
+            releaseStorageUploadLease();storageUploadOwner_=nullptr;
             sendJson(request, response);
         },
         [this](AsyncWebServerRequest* request, const String& filename, size_t index, uint8_t* data, size_t len, bool final) {
@@ -2105,6 +2150,15 @@ void WebServerManager::registerApiRoutes() {
             }
 
             if (index == 0) {
+                if(storageUploadOwner_ && storageUploadOwner_!=request){request->send(409,"application/json","{\"error\":\"Another upload is active.\"}");return;}
+                if(storageUploadOwner_==request){storageUploadError_="Only one file per upload request";return;}
+                storageUploadOwner_=request;storageUploadCreated_=false;storageUploadFinished_=false;
+                request->onDisconnect([this,request](){
+                    if(storageUploadOwner_!=request)return;
+                    storageUploadFile_.close();
+                    if(storageUploadCreated_&&!storageUploadFinished_)storageRemove(storageUploadTarget_,storageUploadPath_);
+                    releaseStorageUploadLease();storageUploadOwner_=nullptr;storageUploadPath_="";
+                });
                 storageUploadTarget_ = storageTargetFromRequest(request);
                 const String directoryPath = storageDirectoryFromRequest(request);
                 storageUploadError_ = "";
@@ -2121,6 +2175,8 @@ void WebServerManager::registerApiRoutes() {
                     return;
                 }
 
+                if(storageBusy(storageUploadTarget_)){storageUploadError_="Storage is busy; stop playback/transfers and retry upload";return;}
+                beginStorageWrite(storageUploadTarget_);storageUploadLeased_=true;
                 const size_t existingSize = storageExists(storageUploadTarget_, storageUploadPath_)
                     ? static_cast<size_t>(storageOpen(storageUploadTarget_, storageUploadPath_, "r").size())
                     : 0;
@@ -2139,9 +2195,10 @@ void WebServerManager::registerApiRoutes() {
                     return;
                 }
 
-                beginStorageWrite(storageUploadTarget_);
+                storageUploadCreated_=true;
             }
 
+            if(storageUploadOwner_!=request)return;
             if (!storageUploadError_.isEmpty()) {
                 return;
             }
@@ -2149,33 +2206,33 @@ void WebServerManager::registerApiRoutes() {
                 if ((storageUploadBytesWritten_ + len) > storageUploadLimitBytes_) {
                     storageUploadError_ = "File is larger than remaining filesystem space.";
                     storageUploadFile_.close();
-                    endStorageWrite(storageUploadTarget_);
                     storageRemove(storageUploadTarget_, storageUploadPath_);
+                    releaseStorageUploadLease();
                     return;
                 }
-                if (!ensureStorageTransferBuffer(len)) {
+                if (!ensureStorageTransferBuffer(min<size_t>(4096,len))) {
                     storageUploadError_ = psramFound() ? "Unable to allocate PSRAM-backed transfer buffer." : "Unable to allocate transfer buffer.";
                     storageUploadFile_.close();
-                    endStorageWrite(storageUploadTarget_);
                     storageRemove(storageUploadTarget_, storageUploadPath_);
+                    releaseStorageUploadLease();
                     return;
                 }
-                memcpy(storageTransferBuffer_, data, len);
-                const size_t written = storageUploadFile_.write(storageTransferBuffer_, len);
+                size_t written=0;
+                while(written<len){size_t chunk=min<size_t>(storageTransferBufferCapacity_,len-written);memcpy(storageTransferBuffer_,data+written,chunk);size_t count=storageUploadFile_.write(storageTransferBuffer_,chunk);written+=count;if(count!=chunk)break;}
                 if (written != len) {
                     storageUploadError_ = "Failed while writing uploaded file.";
                     storageUploadFile_.close();
-                    endStorageWrite(storageUploadTarget_);
                     storageRemove(storageUploadTarget_, storageUploadPath_);
+                    releaseStorageUploadLease();
                     return;
                 }
                 storageUploadBytesWritten_ += written;
             }
             if (final && storageUploadFile_) {
-                storageUploadFile_.flush();
+                storageUploadFile_.flush();storageUploadFinished_=true;
                 storageUploadFile_.close();
-                endStorageWrite(storageUploadTarget_);
-                rebuildStorageDirectoryIndex(storageUploadTarget_, storageParentPath(storageUploadPath_));
+                releaseStorageUploadLease();
+                String indexError;beginStorageReindexJob(storageUploadTarget_,storageParentPath(storageUploadPath_),indexError);
             }
         });
 

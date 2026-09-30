@@ -1,5 +1,6 @@
 #pragma once
 #include "logic_runtime.h"
+#include "logic_gpio.h"
 #include "app_state.h"
 #include <freertos/semphr.h>
 
@@ -16,6 +17,7 @@ public:
     const char* mode() const { return mode_.c_str(); }
 private:
     ElmaLogic::Runtime runtime_;
+    LogicGpio gpio_;
     AppState* state_ = nullptr;
     StatusWriter status_;
     ElmaLogic::Runtime::Action actions_;

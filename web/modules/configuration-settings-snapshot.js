@@ -50,6 +50,8 @@ export function createConfigurationSettingsSnapshotModule({
     } else if (displayProfile === "waveshare-screen") {
       snapshot.oled.enabled = true;
       snapshot.oled.displayType = "wape";
+    } else if (displayProfile === "viewe-onboard-lcd" || snapshot.oled.displayType === "panel") {
+      snapshot.oled.enabled=true;snapshot.oled.displayType="panel";snapshot.oled.width=240;snapshot.oled.height=320;
     } else if (displayProfile === "i2c-oled") {
       snapshot.oled.enabled = true;
       snapshot.oled.displayType = "oled";
