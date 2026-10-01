@@ -24,3 +24,17 @@ void plotSamplesSince(uint32_t after,uint32_t boot,JsonDocument& response){
  JsonArray array=response["samples"].to<JsonArray>();
  for(size_t i=0;i<size;++i){const auto& s=copy[i];if(s.sequence<=after)continue;JsonObject item=array.add<JsonObject>();item["plot"]=s.plot;item["series"]=s.series;item["unit"]=s.unit;item["t"]=s.time;item["value"]=s.value;item["epoch"]=s.epoch;}
 }
+void plotSerialNext(uint32_t after,uint32_t boot,JsonDocument& response){
+ Sample selected{};bool found=false;uint32_t latest;size_t size;const uint32_t currentBoot=bootId();
+ portENTER_CRITICAL(&mux);
+ latest=sequence;size=count;
+ if(boot!=currentBoot||after>latest)after=0;
+ const uint32_t first=latest-size+1;
+ const uint32_t wanted=after+1<first?first:after+1;
+ if(size && wanted<=latest){selected=samples[(wanted-1)%Capacity];found=true;}
+ portEXIT_CRITICAL(&mux);
+ response["boot"]=currentBoot;response["latest"]=latest;
+ response["cursor"]=found?selected.sequence:latest;
+ response["dropped"]=after && size && after+1<first ? first-after-1 : 0;
+ if(found){auto item=response["sample"].to<JsonObject>();item["plot"]=selected.plot;item["series"]=selected.series;item["unit"]=selected.unit;item["t"]=selected.time;item["value"]=selected.value;item["epoch"]=selected.epoch;}
+}

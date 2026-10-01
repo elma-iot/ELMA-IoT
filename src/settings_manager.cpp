@@ -3,6 +3,8 @@
 
 #include <ctype.h>
 #include <math.h>
+#include <memory>
+#include <new>
 
 #include "default_config.h"
 #include "motor_runtime_config.h"
@@ -557,7 +559,15 @@ String normalizePeripheralProfileSelections(String value) {
 }  // namespace
 
 bool SettingsManager::begin() {
-    return preferences_.begin(PREF_NAMESPACE, false);
+    if (!preferences_.begin(PREF_NAMESPACE, false)) return false;
+    // A failed first provision can leave many keys behind without the final
+    // marker. load() ignores those keys, so reclaim only this incomplete
+    // namespace; valid saved settings and other NVS users stay intact.
+    if (!preferences_.getBool(PREF_MARKER, false) &&
+        (preferences_.isKey("wifi_ssid") || preferences_.isKey("ui_motor") || preferences_.isKey("dev_name"))) {
+        return preferences_.clear();
+    }
+    return true;
 }
 
 SettingsBundle SettingsManager::defaults() const {
@@ -1055,141 +1065,187 @@ SettingsBundle SettingsManager::load() {
 }
 
 bool SettingsManager::save(const SettingsBundle& settings) {
+    writeFailed_ = false;
+    // Also recover when provisioning is retried without a device reboot.
+    if (!preferences_.getBool(PREF_MARKER, false) &&
+        (preferences_.isKey("wifi_ssid") || preferences_.isKey("ui_motor") || preferences_.isKey("dev_name")) &&
+        !preferences_.clear()) {
+        return false;
+    }
     const SettingsBundle sanitized = sanitize(settings);
     const String rawMotorRuntimeConfig = settings.ui.motorRuntimeConfig.isEmpty()
         ? defaultMotorRuntimeConfig()
         : settings.ui.motorRuntimeConfig;
+    // SettingsBundle is large on the ESP32-C3 loop task stack. Keep the
+    // comparison copy on the heap while provisioning.
+    const std::unique_ptr<SettingsBundle> baselineStorage(new (std::nothrow) SettingsBundle(defaults()));
+    if (!baselineStorage) return false;
+    const SettingsBundle& baseline = *baselineStorage;
     bool changed = false;
-    changed |= writeStringIfChanged("wifi_ssid", sanitized.wifi.ssid);
-    changed |= writeStringIfChanged("wifi_pass", sanitized.wifi.password);
-    changed |= writeStringIfChanged("wifi_apssid", sanitized.wifi.apSsid);
-    changed |= writeStringIfChanged("wifi_appass", sanitized.wifi.apPassword);
-    changed |= writeBoolIfChanged("wifi_apfb", sanitized.wifi.apFallbackEnabled);
-    changed |= writeBoolIfChanged("wifi_static", sanitized.wifi.useStaticIp);
-    changed |= writeFloatIfChanged("wifi_sta_tx", sanitized.wifi.staTxPowerDbm);
-    changed |= writeFloatIfChanged("wifi_ap_tx", sanitized.wifi.apTxPowerDbm);
-    changed |= writeStringIfChanged("wifi_ip", sanitized.wifi.staticIp);
-    changed |= writeStringIfChanged("wifi_gw", sanitized.wifi.gateway);
-    changed |= writeStringIfChanged("wifi_sub", sanitized.wifi.subnet);
-    changed |= writeStringIfChanged("wifi_dns1", sanitized.wifi.dns1);
-    changed |= writeStringIfChanged("wifi_dns2", sanitized.wifi.dns2);
+    bool removingDefaults = true;
+    auto removeDefault = [&](const char* key) {
+        if (writeFailed_ || !preferences_.isKey(key)) return false;
+        if (!preferences_.remove(key)) { writeFailed_ = true; return false; }
+        return true;
+    };
+    auto storeString = [&](const char* key, const String& value, const String& initial) {
+        return value == initial ? removeDefault(key) :
+            removingDefaults ? false : writeStringIfChanged(key, value);
+    };
+    auto storeBool = [&](const char* key, bool value, bool initial) {
+        return value == initial ? removeDefault(key) :
+            removingDefaults ? false : writeBoolIfChanged(key, value);
+    };
+    auto storeUInt = [&](const char* key, uint32_t value, uint32_t initial) {
+        return value == initial ? removeDefault(key) :
+            removingDefaults ? false : writeUIntIfChanged(key, value);
+    };
+    auto storeInt = [&](const char* key, int32_t value, int32_t initial) {
+        return value == initial ? removeDefault(key) :
+            removingDefaults ? false : writeIntIfChanged(key, value);
+    };
+    auto storeFloat = [&](const char* key, float value, float initial) {
+        return value == initial ? removeDefault(key) :
+            removingDefaults ? false : writeFloatIfChanged(key, value);
+    };
+    auto writeFields = [&]() {
+        changed |= storeString("wifi_ssid", sanitized.wifi.ssid, baseline.wifi.ssid);
+        changed |= storeString("wifi_pass", sanitized.wifi.password, baseline.wifi.password);
+        changed |= storeString("wifi_apssid", sanitized.wifi.apSsid, baseline.wifi.apSsid);
+        changed |= storeString("wifi_appass", sanitized.wifi.apPassword, baseline.wifi.apPassword);
+        changed |= storeBool("wifi_apfb", sanitized.wifi.apFallbackEnabled, baseline.wifi.apFallbackEnabled);
+        changed |= storeBool("wifi_static", sanitized.wifi.useStaticIp, baseline.wifi.useStaticIp);
+        changed |= storeFloat("wifi_sta_tx", sanitized.wifi.staTxPowerDbm, baseline.wifi.staTxPowerDbm);
+        changed |= storeFloat("wifi_ap_tx", sanitized.wifi.apTxPowerDbm, baseline.wifi.apTxPowerDbm);
+        changed |= storeString("wifi_ip", sanitized.wifi.staticIp, baseline.wifi.staticIp);
+        changed |= storeString("wifi_gw", sanitized.wifi.gateway, baseline.wifi.gateway);
+        changed |= storeString("wifi_sub", sanitized.wifi.subnet, baseline.wifi.subnet);
+        changed |= storeString("wifi_dns1", sanitized.wifi.dns1, baseline.wifi.dns1);
+        changed |= storeString("wifi_dns2", sanitized.wifi.dns2, baseline.wifi.dns2);
 
-    changed |= writeStringIfChanged("mqtt_host", sanitized.mqtt.host);
-    changed |= writeUIntIfChanged("mqtt_port", sanitized.mqtt.port);
-    changed |= writeStringIfChanged("mqtt_user", sanitized.mqtt.username);
-    changed |= writeStringIfChanged("mqtt_pass", sanitized.mqtt.password);
-    changed |= writeStringIfChanged("mqtt_cid", fallbackIfEmpty(sanitized.mqtt.clientId, sanitized.device.deviceName));
-    changed |= writeStringIfChanged("mqtt_base", sanitized.mqtt.baseTopic);
-    changed |= writeBoolIfChanged("mqtt_disc", sanitized.mqtt.discoveryEnabled);
+        changed |= storeString("mqtt_host", sanitized.mqtt.host, baseline.mqtt.host);
+        changed |= storeUInt("mqtt_port", sanitized.mqtt.port, baseline.mqtt.port);
+        changed |= storeString("mqtt_user", sanitized.mqtt.username, baseline.mqtt.username);
+        changed |= storeString("mqtt_pass", sanitized.mqtt.password, baseline.mqtt.password);
+        changed |= storeString("mqtt_cid", fallbackIfEmpty(sanitized.mqtt.clientId, sanitized.device.deviceName), fallbackIfEmpty(baseline.mqtt.clientId, baseline.device.deviceName));
+        changed |= storeString("mqtt_base", sanitized.mqtt.baseTopic, baseline.mqtt.baseTopic);
+        changed |= storeBool("mqtt_disc", sanitized.mqtt.discoveryEnabled, baseline.mqtt.discoveryEnabled);
 
-    changed |= writeStringIfChanged("ota_owner", sanitized.ota.owner);
-    changed |= writeStringIfChanged("ota_repo", sanitized.ota.repository);
-    changed |= writeStringIfChanged("ota_chan", sanitized.ota.channel);
-    changed |= writeStringIfChanged("ota_asset", sanitized.ota.assetTemplate);
-    changed |= writeStringIfChanged("ota_manifest", sanitized.ota.manifestUrl);
-    changed |= writeBoolIfChanged("ota_tls", sanitized.ota.allowInsecureTls);
-    changed |= writeBoolIfChanged("ota_auto", sanitized.ota.autoCheck);
-    changed |= writeBoolIfChanged("ota_upd", sanitized.ota.autoUpdate);
+        changed |= storeString("ota_owner", sanitized.ota.owner, baseline.ota.owner);
+        changed |= storeString("ota_repo", sanitized.ota.repository, baseline.ota.repository);
+        changed |= storeString("ota_chan", sanitized.ota.channel, baseline.ota.channel);
+        changed |= storeString("ota_asset", sanitized.ota.assetTemplate, baseline.ota.assetTemplate);
+        changed |= storeString("ota_manifest", sanitized.ota.manifestUrl, baseline.ota.manifestUrl);
+        changed |= storeBool("ota_tls", sanitized.ota.allowInsecureTls, baseline.ota.allowInsecureTls);
+        changed |= storeBool("ota_auto", sanitized.ota.autoCheck, baseline.ota.autoCheck);
+        changed |= storeBool("ota_upd", sanitized.ota.autoUpdate, baseline.ota.autoUpdate);
 
-    changed |= writeUIntIfChanged("bat_r1", sanitized.battery.dividerR1Ohms);
-    changed |= writeUIntIfChanged("bat_r2", sanitized.battery.dividerR2Ohms);
-    changed |= writeFloatIfChanged("bat_vmax", sanitized.battery.dividerMaxVin);
-    changed |= writeFloatIfChanged("bat_cal", sanitized.battery.calibrationMultiplier);
-    changed |= writeUIntIfChanged("bat_pin", sanitized.battery.adcPin);
-    changed |= writeFloatIfChanged("bat_meas", sanitized.battery.measuredVoltage);
-    changed |= writeUIntIfChanged("bat_chg", sanitized.battery.chargingSensePin);
-    changed |= writeUIntIfChanged("bat_int", sanitized.battery.updateIntervalMs);
-    changed |= writeUIntIfChanged("bat_win", sanitized.battery.movingAverageWindowSize);
+        changed |= storeUInt("bat_r1", sanitized.battery.dividerR1Ohms, baseline.battery.dividerR1Ohms);
+        changed |= storeUInt("bat_r2", sanitized.battery.dividerR2Ohms, baseline.battery.dividerR2Ohms);
+        changed |= storeFloat("bat_vmax", sanitized.battery.dividerMaxVin, baseline.battery.dividerMaxVin);
+        changed |= storeFloat("bat_cal", sanitized.battery.calibrationMultiplier, baseline.battery.calibrationMultiplier);
+        changed |= storeUInt("bat_pin", sanitized.battery.adcPin, baseline.battery.adcPin);
+        changed |= storeFloat("bat_meas", sanitized.battery.measuredVoltage, baseline.battery.measuredVoltage);
+        changed |= storeUInt("bat_chg", sanitized.battery.chargingSensePin, baseline.battery.chargingSensePin);
+        changed |= storeUInt("bat_int", sanitized.battery.updateIntervalMs, baseline.battery.updateIntervalMs);
+        changed |= storeUInt("bat_win", sanitized.battery.movingAverageWindowSize, baseline.battery.movingAverageWindowSize);
 
-    changed |= writeBoolIfChanged("web_auth", sanitized.webAuth.enabled);
-    changed |= writeStringIfChanged("web_user", sanitized.webAuth.username);
-    changed |= writeStringIfChanged("web_pass", sanitized.webAuth.password);
+        changed |= storeBool("web_auth", sanitized.webAuth.enabled, baseline.webAuth.enabled);
+        changed |= storeString("web_user", sanitized.webAuth.username, baseline.webAuth.username);
+        changed |= storeString("web_pass", sanitized.webAuth.password, baseline.webAuth.password);
 
-    changed |= writeBoolIfChanged("aud_en", sanitized.audio.enabled);
-    changed |= writeBoolIfChanged("aud_rem", sanitized.audio.rememberLastPlayed);
-    changed |= writeStringIfChanged("aud_eq", sanitized.audio.equalizerPreset);
-    changed |= writeIntIfChanged("aud_eq_lo", sanitized.audio.equalizerLowDb);
-    changed |= writeIntIfChanged("aud_eq_mid", sanitized.audio.equalizerPresenceDb);
-    changed |= writeIntIfChanged("aud_eq_hi", sanitized.audio.equalizerHighDb);
-    changed |= writeUIntIfChanged("aud_dout", sanitized.audio.doutPin);
-    changed |= writeUIntIfChanged("aud_ws", sanitized.audio.wsPin);
-    changed |= writeUIntIfChanged("aud_bclk", sanitized.audio.bclkPin);
-    changed |= writeStringIfChanged("aud_lp_url", sanitized.audio.lastPlayback.url);
-    changed |= writeStringIfChanged("aud_lp_lbl", sanitized.audio.lastPlayback.label);
-    changed |= writeStringIfChanged("aud_lp_type", sanitized.audio.lastPlayback.type);
-    changed |= writeStringIfChanged("aud_lp_src", sanitized.audio.lastPlayback.source);
-    changed |= writeBoolIfChanged("aud_lp_res", sanitized.audio.lastPlayback.resumeAfterBoot);
+        changed |= storeBool("aud_en", sanitized.audio.enabled, baseline.audio.enabled);
+        changed |= storeBool("aud_rem", sanitized.audio.rememberLastPlayed, baseline.audio.rememberLastPlayed);
+        changed |= storeString("aud_eq", sanitized.audio.equalizerPreset, baseline.audio.equalizerPreset);
+        changed |= storeInt("aud_eq_lo", sanitized.audio.equalizerLowDb, baseline.audio.equalizerLowDb);
+        changed |= storeInt("aud_eq_mid", sanitized.audio.equalizerPresenceDb, baseline.audio.equalizerPresenceDb);
+        changed |= storeInt("aud_eq_hi", sanitized.audio.equalizerHighDb, baseline.audio.equalizerHighDb);
+        changed |= storeUInt("aud_dout", sanitized.audio.doutPin, baseline.audio.doutPin);
+        changed |= storeUInt("aud_ws", sanitized.audio.wsPin, baseline.audio.wsPin);
+        changed |= storeUInt("aud_bclk", sanitized.audio.bclkPin, baseline.audio.bclkPin);
+        changed |= storeString("aud_lp_url", sanitized.audio.lastPlayback.url, baseline.audio.lastPlayback.url);
+        changed |= storeString("aud_lp_lbl", sanitized.audio.lastPlayback.label, baseline.audio.lastPlayback.label);
+        changed |= storeString("aud_lp_type", sanitized.audio.lastPlayback.type, baseline.audio.lastPlayback.type);
+        changed |= storeString("aud_lp_src", sanitized.audio.lastPlayback.source, baseline.audio.lastPlayback.source);
+        changed |= storeBool("aud_lp_res", sanitized.audio.lastPlayback.resumeAfterBoot, baseline.audio.lastPlayback.resumeAfterBoot);
 
-    changed |= writeStringIfChanged("eff_start", sanitized.effects.startupFile);
-    changed |= writeUIntIfChanged("eff_st_vol", sanitized.effects.startupVolumePercent);
-    changed |= writeStringIfChanged("eff_alarm", sanitized.effects.alarmFile);
-    changed |= writeUIntIfChanged("eff_al_vol", sanitized.effects.alarmVolumePercent);
-    changed |= writeStringIfChanged("eff_note", sanitized.effects.notificationFile);
-    changed |= writeUIntIfChanged("eff_no_vol", sanitized.effects.notificationVolumePercent);
-    changed |= writeStringIfChanged("eff_amb", sanitized.effects.ambientSoundFile);
-    changed |= writeUIntIfChanged("eff_amb_vol", sanitized.effects.ambientVolumePercent);
-    changed |= writeStringIfChanged("eff_low", sanitized.effects.lowBatteryFile);
-    changed |= writeUIntIfChanged("eff_lo_vol", sanitized.effects.lowBatteryVolumePercent);
-    changed |= writeStringIfChanged("eff_down", sanitized.effects.shutDownFile);
-    changed |= writeUIntIfChanged("eff_sh_vol", sanitized.effects.shutDownVolumePercent);
-    changed |= writeStringIfChanged("eff_up_av", sanitized.effects.updateAvailableFile);
-    changed |= writeUIntIfChanged("eff_ua_vol", sanitized.effects.updateAvailableVolumePercent);
-    changed |= writeStringIfChanged("eff_up_ok", sanitized.effects.updateSuccessFile);
-    changed |= writeUIntIfChanged("eff_us_vol", sanitized.effects.updateSuccessVolumePercent);
+        changed |= storeString("eff_start", sanitized.effects.startupFile, baseline.effects.startupFile);
+        changed |= storeUInt("eff_st_vol", sanitized.effects.startupVolumePercent, baseline.effects.startupVolumePercent);
+        changed |= storeString("eff_alarm", sanitized.effects.alarmFile, baseline.effects.alarmFile);
+        changed |= storeUInt("eff_al_vol", sanitized.effects.alarmVolumePercent, baseline.effects.alarmVolumePercent);
+        changed |= storeString("eff_note", sanitized.effects.notificationFile, baseline.effects.notificationFile);
+        changed |= storeUInt("eff_no_vol", sanitized.effects.notificationVolumePercent, baseline.effects.notificationVolumePercent);
+        changed |= storeString("eff_amb", sanitized.effects.ambientSoundFile, baseline.effects.ambientSoundFile);
+        changed |= storeUInt("eff_amb_vol", sanitized.effects.ambientVolumePercent, baseline.effects.ambientVolumePercent);
+        changed |= storeString("eff_low", sanitized.effects.lowBatteryFile, baseline.effects.lowBatteryFile);
+        changed |= storeUInt("eff_lo_vol", sanitized.effects.lowBatteryVolumePercent, baseline.effects.lowBatteryVolumePercent);
+        changed |= storeString("eff_down", sanitized.effects.shutDownFile, baseline.effects.shutDownFile);
+        changed |= storeUInt("eff_sh_vol", sanitized.effects.shutDownVolumePercent, baseline.effects.shutDownVolumePercent);
+        changed |= storeString("eff_up_av", sanitized.effects.updateAvailableFile, baseline.effects.updateAvailableFile);
+        changed |= storeUInt("eff_ua_vol", sanitized.effects.updateAvailableVolumePercent, baseline.effects.updateAvailableVolumePercent);
+        changed |= storeString("eff_up_ok", sanitized.effects.updateSuccessFile, baseline.effects.updateSuccessFile);
+        changed |= storeUInt("eff_us_vol", sanitized.effects.updateSuccessVolumePercent, baseline.effects.updateSuccessVolumePercent);
 
-    changed |= writeUIntIfChanged("lcd_light", sanitized.oled.brightness);
-    changed |= writeStringIfChanged("lcd_ui", sanitized.oled.interfaceMode);
-    changed |= writeBoolIfChanged("lcd_touch", sanitized.oled.touchEnabled);
-    changed |= writeBoolIfChanged("oled_en", sanitized.oled.enabled);
-    changed |= writeStringIfChanged("oled_mode", sanitized.oled.displayType);
-    changed |= writeStringIfChanged("oled_drv", sanitized.oled.driver);
-    changed |= writeUIntIfChanged("oled_addr", sanitized.oled.i2cAddress);
-    changed |= writeUIntIfChanged("oled_w", sanitized.oled.width);
-    changed |= writeUIntIfChanged("oled_h", sanitized.oled.height);
-    changed |= writeUIntIfChanged("oled_rot", sanitized.oled.rotation);
-    changed |= writeUIntIfChanged("oled_sda", sanitized.oled.sdaPin);
-    changed |= writeUIntIfChanged("oled_scl", sanitized.oled.sclPin);
-    changed |= writeIntIfChanged("oled_rst", sanitized.oled.resetPin);
-    changed |= writeUIntIfChanged("oled_wape_pin", sanitized.oled.wapeTriggerPin);
-    changed |= writeStringIfChanged("oled_wape_evt", sanitized.oled.wapeTriggerEvent);
+        changed |= storeUInt("lcd_light", sanitized.oled.brightness, baseline.oled.brightness);
+        changed |= storeString("lcd_ui", sanitized.oled.interfaceMode, baseline.oled.interfaceMode);
+        changed |= storeBool("lcd_touch", sanitized.oled.touchEnabled, baseline.oled.touchEnabled);
+        changed |= storeBool("oled_en", sanitized.oled.enabled, baseline.oled.enabled);
+        changed |= storeString("oled_mode", sanitized.oled.displayType, baseline.oled.displayType);
+        changed |= storeString("oled_drv", sanitized.oled.driver, baseline.oled.driver);
+        changed |= storeUInt("oled_addr", sanitized.oled.i2cAddress, baseline.oled.i2cAddress);
+        changed |= storeUInt("oled_w", sanitized.oled.width, baseline.oled.width);
+        changed |= storeUInt("oled_h", sanitized.oled.height, baseline.oled.height);
+        changed |= storeUInt("oled_rot", sanitized.oled.rotation, baseline.oled.rotation);
+        changed |= storeUInt("oled_sda", sanitized.oled.sdaPin, baseline.oled.sdaPin);
+        changed |= storeUInt("oled_scl", sanitized.oled.sclPin, baseline.oled.sclPin);
+        changed |= storeInt("oled_rst", sanitized.oled.resetPin, baseline.oled.resetPin);
+        changed |= storeUInt("oled_wape_pin", sanitized.oled.wapeTriggerPin, baseline.oled.wapeTriggerPin);
+        changed |= storeString("oled_wape_evt", sanitized.oled.wapeTriggerEvent, baseline.oled.wapeTriggerEvent);
 
-    changed |= writeBoolIfChanged("sd_mmc", sanitized.sd.sdmmc);
-    changed |= writeBoolIfChanged("sd_en", sanitized.sd.enabled);
-    changed |= writeUIntIfChanged("sd_cs", sanitized.sd.csPin);
-    changed |= writeUIntIfChanged("sd_sck", sanitized.sd.sckPin);
-    changed |= writeUIntIfChanged("sd_mosi", sanitized.sd.mosiPin);
-    changed |= writeUIntIfChanged("sd_miso", sanitized.sd.misoPin);
+        changed |= storeBool("sd_mmc", sanitized.sd.sdmmc, baseline.sd.sdmmc);
+        changed |= storeBool("sd_en", sanitized.sd.enabled, baseline.sd.enabled);
+        changed |= storeUInt("sd_cs", sanitized.sd.csPin, baseline.sd.csPin);
+        changed |= storeUInt("sd_sck", sanitized.sd.sckPin, baseline.sd.sckPin);
+        changed |= storeUInt("sd_mosi", sanitized.sd.mosiPin, baseline.sd.mosiPin);
+        changed |= storeUInt("sd_miso", sanitized.sd.misoPin, baseline.sd.misoPin);
 
-    changed |= writeStringIfChanged("dev_name", sanitized.device.deviceName);
-    changed |= writeStringIfChanged("dev_friendly", sanitized.device.friendlyName);
-    changed |= writeUIntIfChanged("dev_led", sanitized.device.statusLedPin);
-    changed |= writeUIntIfChanged("dev_led_g", sanitized.device.statusLedGreenPin);
-    changed |= writeUIntIfChanged("dev_led_b", sanitized.device.statusLedBluePin);
-    changed |= writeStringIfChanged("dev_led_type", sanitized.device.statusLedType);
-    changed |= writeUIntIfChanged("dev_vol", sanitized.device.savedVolumePercent);
-    changed |= writeBoolIfChanged("dev_muted", sanitized.device.audioMuted);
-    changed |= writeStringIfChanged("dev_btn1", sanitized.device.button1Action);
-    changed |= writeStringIfChanged("dev_btn2", sanitized.device.button2Action);
-    changed |= writeBoolIfChanged("dev_lbs_en", sanitized.device.lowBatterySleepEnabled);
-    changed |= writeBoolIfChanged("dev_pcf_reset", sanitized.device.powerCycleFactoryResetEnabled);
-    changed |= writeBoolIfChanged("dev_thf_reset", sanitized.device.touchHoldFactoryResetEnabled);
-    changed |= writeUIntIfChanged("dev_lbs_pct", sanitized.device.lowBatterySleepThresholdPercent);
-    changed |= writeUIntIfChanged("dev_lbs_wk", sanitized.device.lowBatteryWakeIntervalMinutes);
-    changed |= writeBoolIfChanged("ui_gpio_ovr", sanitized.ui.gpioSafetyOverride);
-    changed |= writeBoolIfChanged("ui_gpio_auto", sanitized.ui.gpioBoardAutodetect);
-    changed |= writeStringIfChanged("ui_lang", sanitized.ui.language);
-    changed |= writeStringIfChanged("ui_build_lang", APP_COMPILED_LANGUAGE_CODE);
-    changed |= writeStringIfChanged("ui_theme", sanitized.ui.theme);
-    changed |= writeStringIfChanged("ui_gpio_sel", sanitized.ui.gpioBoardSelection);
-    changed |= writeStringIfChanged("ui_diag", sanitized.ui.peripheralDiagramLayout);
-    changed |= writeStringIfChanged("ui_helpers", sanitized.ui.peripheralHelperBindings);
-    changed |= writeStringIfChanged("ui_profiles", sanitized.ui.peripheralProfileSelections);
-    changed |= writeStringIfChanged("ui_motor", rawMotorRuntimeConfig);
-    changed |= writeBoolIfChanged(PREF_MARKER, true);
-    return changed;
+        changed |= storeString("dev_name", sanitized.device.deviceName, baseline.device.deviceName);
+        changed |= storeString("dev_friendly", sanitized.device.friendlyName, baseline.device.friendlyName);
+        changed |= storeUInt("dev_led", sanitized.device.statusLedPin, baseline.device.statusLedPin);
+        changed |= storeUInt("dev_led_g", sanitized.device.statusLedGreenPin, baseline.device.statusLedGreenPin);
+        changed |= storeUInt("dev_led_b", sanitized.device.statusLedBluePin, baseline.device.statusLedBluePin);
+        changed |= storeString("dev_led_type", sanitized.device.statusLedType, baseline.device.statusLedType);
+        changed |= storeUInt("dev_vol", sanitized.device.savedVolumePercent, baseline.device.savedVolumePercent);
+        changed |= storeBool("dev_muted", sanitized.device.audioMuted, baseline.device.audioMuted);
+        changed |= storeString("dev_btn1", sanitized.device.button1Action, baseline.device.button1Action);
+        changed |= storeString("dev_btn2", sanitized.device.button2Action, baseline.device.button2Action);
+        changed |= storeBool("dev_lbs_en", sanitized.device.lowBatterySleepEnabled, baseline.device.lowBatterySleepEnabled);
+        changed |= storeBool("dev_pcf_reset", sanitized.device.powerCycleFactoryResetEnabled, baseline.device.powerCycleFactoryResetEnabled);
+        changed |= storeBool("dev_thf_reset", sanitized.device.touchHoldFactoryResetEnabled, baseline.device.touchHoldFactoryResetEnabled);
+        changed |= storeUInt("dev_lbs_pct", sanitized.device.lowBatterySleepThresholdPercent, baseline.device.lowBatterySleepThresholdPercent);
+        changed |= storeUInt("dev_lbs_wk", sanitized.device.lowBatteryWakeIntervalMinutes, baseline.device.lowBatteryWakeIntervalMinutes);
+        changed |= storeBool("ui_gpio_ovr", sanitized.ui.gpioSafetyOverride, baseline.ui.gpioSafetyOverride);
+        changed |= storeBool("ui_gpio_auto", sanitized.ui.gpioBoardAutodetect, baseline.ui.gpioBoardAutodetect);
+        changed |= storeString("ui_lang", sanitized.ui.language, baseline.ui.language);
+        if (!removingDefaults) changed |= writeStringIfChanged("ui_build_lang", APP_COMPILED_LANGUAGE_CODE);
+        changed |= storeString("ui_theme", sanitized.ui.theme, baseline.ui.theme);
+        changed |= storeString("ui_gpio_sel", sanitized.ui.gpioBoardSelection, baseline.ui.gpioBoardSelection);
+        changed |= storeString("ui_diag", sanitized.ui.peripheralDiagramLayout, baseline.ui.peripheralDiagramLayout);
+        changed |= storeString("ui_helpers", sanitized.ui.peripheralHelperBindings, baseline.ui.peripheralHelperBindings);
+        changed |= storeString("ui_profiles", sanitized.ui.peripheralProfileSelections, baseline.ui.peripheralProfileSelections);
+        changed |= storeString("ui_motor", rawMotorRuntimeConfig, defaultMotorRuntimeConfig());
+    };
+    writeFields(); // Free keys whose values are already supplied by defaults().
+    removingDefaults = false;
+    if (!writeFailed_) writeFields();
+    if (!writeFailed_) changed |= writeBoolIfChanged(PREF_MARKER, true);
+    const bool saved = !writeFailed_;
+    writeFailed_ = false;
+    return saved;
 }
 
 bool SettingsManager::saveAudioEqualizer(const AudioSettings& audio) {
+    writeFailed_ = false;
     AudioSettings sanitized = audio;
     normalizeEqualizer(sanitized);
     bool changed = false;
@@ -1197,8 +1253,10 @@ bool SettingsManager::saveAudioEqualizer(const AudioSettings& audio) {
     changed |= writeIntIfChanged("aud_eq_lo", sanitized.equalizerLowDb);
     changed |= writeIntIfChanged("aud_eq_mid", sanitized.equalizerPresenceDb);
     changed |= writeIntIfChanged("aud_eq_hi", sanitized.equalizerHighDb);
-    changed |= writeBoolIfChanged(PREF_MARKER, true);
-    return changed;
+    if (!writeFailed_) changed |= writeBoolIfChanged(PREF_MARKER, true);
+    const bool saved = !writeFailed_;
+    writeFailed_ = false;
+    return saved;
 }
 
 bool SettingsManager::reset() {
@@ -1594,42 +1652,51 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 }
 
 bool SettingsManager::writeStringIfChanged(const char* key, const String& value) {
+    if (writeFailed_) return false;
     if (preferences_.isKey(key) && preferences_.getString(key, "") == value) {
         return false;
     }
-    preferences_.putString(key, value);
+    const size_t written = preferences_.putString(key, value);
+    if (written != value.length() || (value.isEmpty() && (!preferences_.isKey(key) || preferences_.getString(key, "#failed") != value))) {
+        writeFailed_ = true;
+        return false;
+    }
     return true;
 }
 
 bool SettingsManager::writeBoolIfChanged(const char* key, bool value) {
+    if (writeFailed_) return false;
     if (preferences_.isKey(key) && preferences_.getBool(key, !value) == value) {
         return false;
     }
-    preferences_.putBool(key, value);
+    if (preferences_.putBool(key, value) != 1) { writeFailed_ = true; return false; }
     return true;
 }
 
 bool SettingsManager::writeUIntIfChanged(const char* key, uint32_t value) {
+    if (writeFailed_) return false;
     if (preferences_.isKey(key) && preferences_.getUInt(key, value + 1) == value) {
         return false;
     }
-    preferences_.putUInt(key, value);
+    if (preferences_.putUInt(key, value) != sizeof(value)) { writeFailed_ = true; return false; }
     return true;
 }
 
 bool SettingsManager::writeIntIfChanged(const char* key, int32_t value) {
+    if (writeFailed_) return false;
     if (preferences_.isKey(key) && preferences_.getInt(key, value + 1) == value) {
         return false;
     }
-    preferences_.putInt(key, value);
+    if (preferences_.putInt(key, value) != sizeof(value)) { writeFailed_ = true; return false; }
     return true;
 }
 
 bool SettingsManager::writeFloatIfChanged(const char* key, float value) {
+    if (writeFailed_) return false;
     if (preferences_.isKey(key) && fabsf(preferences_.getFloat(key, value + 1.0f) - value) < 0.0001f) {
         return false;
     }
-    preferences_.putFloat(key, value);
+    if (preferences_.putFloat(key, value) != sizeof(value)) { writeFailed_ = true; return false; }
     return true;
 }
 

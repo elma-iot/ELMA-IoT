@@ -6,7 +6,6 @@
 #include "generated_project_defaults.h"
 #include "device_log.h"
 #include <Arduino.h>
-#include <map>
 #include <Adafruit_NeoPixel.h>
 #include <soc/soc_caps.h>
 #include <Preferences.h>
@@ -3049,13 +3048,19 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
         preserveLearnedMotorStates(updated, *settings);
     }
     updated.usingSavedSettings = true;
-    settingsManager->save(updated);
+    if (!settingsManager->save(updated)) {
+        error = "Configuration could not be saved; internal NVS storage is full or unavailable";
+        return false;
+    }
 
     SettingsBundle persisted = settingsManager->load();
     if (hasPostedMotorRuntimeConfig && persisted.ui.motorRuntimeConfig != updated.ui.motorRuntimeConfig) {
         persisted.ui.motorRuntimeConfig = updated.ui.motorRuntimeConfig;
         persisted.usingSavedSettings = true;
-        settingsManager->save(persisted);
+        if (!settingsManager->save(persisted)) {
+            error = "Motor configuration could not be saved; internal NVS storage is full or unavailable";
+            return false;
+        }
         persisted = settingsManager->load();
     }
 
@@ -3126,8 +3131,17 @@ void applyClonedConfiguration() {
     // Preserve its complete snapshot, including the chosen device and MQTT
     // identities, so the device web UI reflects the wizard after reboot.
     cloned.usingSavedSettings = true;
-    settingsManager->save(cloned);
+    if (!settingsManager->save(cloned)) {
+        DebugLog.println("[clone] error=configuration could not be saved; internal NVS storage is full or unavailable");
+        resetCloneProvisioningReceiver();
+        return;
+    }
     *settings = settingsManager->load();
+    if (!settings->usingSavedSettings) {
+        DebugLog.println("[clone] error=configuration save could not be verified from internal storage");
+        resetCloneProvisioningReceiver();
+        return;
+    }
 
     DebugLog.printf("[clone] configuration applied identity=%s mqttClientId=%s mqttBaseTopic=%s\n",
                   settings->device.deviceName.c_str(),
@@ -3208,6 +3222,12 @@ void serviceCloneProvisioningSerial() {
             Serial.print("[elma-config-logics] ");Serial.println(logicJson);
             DebugLog.println("[elma-config] end");
             Serial.flush();
+        } else if (command.startsWith("ELMA_PLOTS_GET ")) {
+            unsigned long after=0,boot=0;
+            if(sscanf(command.c_str(),"ELMA_PLOTS_GET %lu %lu",&after,&boot)==2){
+                JsonDocument response;plotSerialNext(uint32_t(after),uint32_t(boot),response);
+                String packet="@ELMA_PLOTS ";serializeJson(response,packet);Serial.println(packet);
+            }
         } else if (command == "ELMA_NETWORK_STATUS") {
             // Requested after USB re-enumeration, when boot-time log messages
             // may already have passed before Android opened the runtime port.
@@ -4021,17 +4041,7 @@ void setup() {
             if(!args["value"].is<double>() || !std::isfinite(args["value"].as<double>())){message="Plot requires a finite numeric value";return false;}
             const char* plot=args["plot"]|"Plot 1";const char* series=args["series"]|"Value";const char* unit=args["unit"]|"";
             if(!*plot || !*series || strlen(plot)>32 || strlen(series)>32 || strlen(unit)>16){message="Plot/series names must be 1-32 bytes; unit at most 16 bytes";return false;}
-            static std::map<std::string,uint32_t> lastSamples;
-            std::string id=node["id"]|"";uint32_t now=millis();auto found=lastSamples.find(id);
-            if(found!=lastSamples.end() && uint32_t(now-found->second)<50)return true;
-            if(found==lastSamples.end() && lastSamples.size()>=64)lastSamples.clear();
-            lastSamples[id]=now;
-            publishPlotSample(plot,series,unit,now,args["value"].as<double>());
-            if(!Serial)return true;
-            JsonDocument sample;sample["plot"]=plot;sample["series"]=series;sample["unit"]=unit;sample["t"]=now;sample["value"].set(args["value"]);
-            String packet="@ELMA_PLOT ";serializeJson(sample,packet);packet+='\n';
-            // Never stall the control loop when the host is absent or reading slowly.
-            if(Serial.availableForWrite()>=static_cast<int>(packet.length()))Serial.write(reinterpret_cast<const uint8_t*>(packet.c_str()),packet.length());
+            publishPlotSample(plot,series,unit,millis(),args["value"].as<double>());
             return true;
         }
         if(type=="hardware.led") {

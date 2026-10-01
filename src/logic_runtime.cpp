@@ -184,7 +184,7 @@ void Runtime::execute(size_t n, const char* trigger) {
         } else if (type=="timing.timer") { state.enabled=true;state.pending=true;state.interval=ms;state.due=now_+ms; }
         else { state.pending=true;state.due=now_+ms; }
     } else if (type.compare(0,11,"peripheral.")==0 || type.compare(0,7,"action.")==0 || type.compare(0,10,"mainboard.")==0 || type.compare(0,9,"hardware.")==0) {
-        if(type=="mainboard.save_data") {
+        if(type=="mainboard.save_data"||type=="mainboard.plot") {
             if(state.recordingWritten && state.recordingElapsed<recordingInterval(n))return;
             state.recordingWritten=true;state.recordingElapsed=0;
         }
@@ -248,7 +248,7 @@ uint64_t Runtime::recordingInterval(size_t n) const {
 }
 uint32_t Runtime::recordingPollInterval(uint32_t normal) const {
     if(paused_)return normal;
-    for(size_t n=0;n<states_.size();++n)if(node(n)["type"]=="mainboard.save_data"&&allowed(n))normal=uint32_t(std::min<uint64_t>(normal,recordingInterval(n)));
+    for(size_t n=0;n<states_.size();++n)if((node(n)["type"]=="mainboard.save_data"||node(n)["type"]=="mainboard.plot")&&allowed(n))normal=uint32_t(std::min<uint64_t>(normal,recordingInterval(n)));
     return std::max<uint32_t>(1,normal);
 }
 void Runtime::tick(uint32_t now, JsonVariantConst status) {
@@ -257,12 +257,12 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
     started_=true;
     for(size_t n=0;n<states_.size();++n) {
         std::string type=node(n)["type"].as<std::string>();auto& state=states_[n];
-        if(type=="mainboard.save_data") {
+        if(type=="mainboard.save_data"||type=="mainboard.plot") {
             if(state.recordingStarted && allowed(n))state.recordingElapsed+=uint32_t(now-state.recordingAt);
             state.recordingAt=now;state.recordingStarted=true;
         }
         if(!allowed(n))continue;
-        if(type=="mainboard.save_data" && !linked(n,"in") && state.recordingElapsed>=recordingInterval(n))execute(n,"in");
+        if((type=="mainboard.save_data"||type=="mainboard.plot") && !linked(n,"in") && state.recordingElapsed>=recordingInterval(n))execute(n,"in");
         if((type=="event.start" || (node(n)["binding"]["kind"]=="lifecycle" && node(n)["binding"]["event"]=="started")) && !state.startSent){state.startSent=true;emit(n);}
         if(type.compare(0,6,"event.")==0 && type!="event.start") {
             if(changed(n,input(n,"value"),type=="event.rising" ? "rising" : type=="event.falling" ? "falling" : "change"))emit(n);

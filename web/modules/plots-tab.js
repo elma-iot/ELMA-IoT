@@ -72,7 +72,7 @@ export function createPlotsTab({request,document=globalThis.document,timers=glob
   try{config=await request('/api/plots/config');const visible=!!config.plots?.length;tab.hidden=!visible;tab.disabled=!visible;panel.hidden=!visible;if(!visible&&panel.classList.contains('active'))document.querySelector('.tab-button:not([hidden]):not([disabled])')?.click();
    const names=new Set((config.plots||[]).map(p=>p.plot));for(const [name,c] of cards)if(!names.has(name)){c.token++;c.box.remove();cards.delete(name);}
    for(const name of names){const c=card(name);if(!c)continue;const recorded=config.recordings.some(r=>r.plot===name);c.load.disabled=!recorded;c.from.disabled=c.to.disabled=!recorded;if(active&&recorded&&!c.loaded)await loadHistory(c,true);}
-   if(!visible)status.textContent='Add a Plot node to device Logics to enable this tab.';
+   if(!visible)status.textContent='Add a Transfer to Plotter node to device Logics to enable this tab.';
   }catch(error){if(active)status.textContent=error.message;}finally{configBusy=false;}
  }
  async function poll(){
@@ -84,6 +84,6 @@ export function createPlotsTab({request,document=globalThis.document,timers=glob
    status.textContent=data.storage?.error|| (data.storage?.clockSynced===false?'Clock not synchronized — recording waits for NTP or browser time':'')|| (data.storage?.available?'Live plotting · external recording storage available':'Live plotting · no external recording storage mounted');
   }catch(error){status.textContent=error.message;}finally{busy=false;}
  }
- const discoveryTimer=timers.setInterval(discover,15000),liveTimer=timers.setInterval(poll,300);discover();
+ const discoveryTimer=timers.setInterval(discover,15000),liveTimer=timers.setInterval(poll,1000);discover();
  return {setActive(value){active=value;if(value){discover();poll();}else for(const c of cards.values())c.token++;},destroy(){timers.clearInterval(discoveryTimer);timers.clearInterval(liveTimer);for(const c of cards.values())c.token++;},cards};
 }

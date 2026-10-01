@@ -108,7 +108,7 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     }
     JsonDocument data;
     bool restoredSavedGraph=false;
-    if(!unexplainedAbnormalReset&&loadLogicRecord(data)) {
+    if(loadLogicRecord(data)) {
         if(data["source"]==source_) {
 #ifdef APP_LEGACY_OTA_FIT
             // Compatibility builds retain the compiled graph; only saved control modes are restored.
@@ -130,16 +130,18 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     }
     if(unexplainedAbnormalReset){
         mode_="stopped";
-        compiled["mode"]="stopped";
-        restored.clear();serializeJson(compiled,restored);
-        recoveryWarning_="Saved Logics were quarantined after an abnormal restart during startup. The compiled graph is loaded stopped; review it before starting automations.";
+        JsonDocument stoppedGraph;deserializeJson(stoppedGraph,restored);stoppedGraph["mode"]="stopped";
+        restored.clear();serializeJson(stoppedGraph,restored);
+        recoveryWarning_=restoredSavedGraph
+            ? "Device restarted unexpectedly without an active Logics action. Saved Logics were loaded stopped for review; check device logs before resuming."
+            : "Device restarted unexpectedly without an active Logics action. Compiled Logics were loaded stopped for review; check device logs before resuming.";
         recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
         Preferences writer;
         if(writer.begin(kLogicRecoveryNamespace,false)){
             writer.putBool("active",true);writer.putString("group","");writer.putString("node","");
             writer.putString("warning",recoveryWarning_.c_str());writer.end();
         }
-        DebugLog.println("[logic-guard] skipped saved Logics after unexplained abnormal startup reset");
+        DebugLog.printf("[logic-guard] loaded %s Logics stopped after unexplained abnormal reset\n",restoredSavedGraph?"saved":"compiled");
     } else if(storageSafetyMigration&&restoredSavedGraph){
         JsonDocument migrationGraph;deserializeJson(migrationGraph,restored);migrationGraph["mode"]="stopped";
         restored.clear();serializeJson(migrationGraph,restored);mode_="stopped";

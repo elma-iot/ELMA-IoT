@@ -95,7 +95,7 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         if(a<0||b<0||a==b)return fail("Invalid connection endpoints");
         auto ap=port(nodes[a],e["source"]["port"]|"","output"),bp=port(nodes[b],e["target"]["port"]|"","input");
         if(ap.isNull()||bp.isNull()||ap["enabled"]==false||bp["enabled"]==false||!compatible(ap["type"]|"",bp["type"]|""))return fail("Incompatible connector types");
-        if(nodes[a]["type"]=="recording.interval" && !(nodes[b]["type"]=="mainboard.save_data" && e["target"]["port"]=="value"))return fail("Recording Interval output connects only to Save Data.Value");
+        if(nodes[a]["type"]=="recording.interval" && !((nodes[b]["type"]=="mainboard.save_data"||nodes[b]["type"]=="mainboard.plot") && e["target"]["port"]=="value"))return fail("Sampling Interval output connects only to Save Data.Value or Transfer to Plotter.Value");
         for(JsonObjectConst old:links)if(old["target"]["node"]==e["target"]["node"]&&old["target"]["port"]==e["target"]["port"])return fail("Input has multiple connections");
         links.add(e);adjacency[a].push_back(size_t(b));
     }
@@ -112,7 +112,7 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             double ms=n["parameters"]["duration"].as<double>()*factor;
             if(!std::isfinite(ms)||ms<1||ms>31536000000.0)return fail("Recording interval must be 1 ms to 365 days");
             bool output=false;for(JsonObjectConst e:links)if(e["source"]["node"]==id)output=true;
-            if(!output)return fail("Connect Recording Interval to Save Data.Value");
+            if(!output)return fail("Connect Sampling Interval to Save Data.Value or Transfer to Plotter.Value");
         }
         if(type=="timing.repeat"&&!linked(id,"count")){double count=n["parameters"]["count"]|0.0;if(count<1||count>128||count!=std::floor(count))return fail("Repeat count must be a whole number 1-128");}
         if(type=="condition.between"&&!linked(id,"minimum")&&!linked(id,"maximum")&&n["parameters"]["minimum"].as<double>()>n["parameters"]["maximum"].as<double>())return fail("Minimum exceeds maximum");
@@ -160,7 +160,7 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             for(JsonObjectConst d:devices)if(d["type"]==capability&&d["peripheral"]["id"]==device["peripheral"]["id"])supported=true;
             if(device["type"]!="peripheral.reference"||!supported)return fail("Action is unsupported for this peripheral reference");
         }
-        root[i]=type=="mainboard.save_data"&&!linked(id,"in") || type.find("event.")==0 || n["binding"]["kind"]=="transition" || n["binding"]["kind"]=="lifecycle" || type=="peripheral.rising" || type=="peripheral.falling" || type=="condition.if"&&!linked(id,"in") || type=="timing.timer"&&linked(id,"enabled");
+        root[i]=(type=="mainboard.save_data"||type=="mainboard.plot")&&!linked(id,"in") || type.find("event.")==0 || n["binding"]["kind"]=="transition" || n["binding"]["kind"]=="lifecycle" || type=="peripheral.rising" || type=="peripheral.falling" || type=="condition.if"&&!linked(id,"in") || type=="timing.timer"&&linked(id,"enabled");
     }
     std::function<void(size_t)> reach=[&](size_t i){if(reached[i])return;reached[i]=true;for(auto next:adjacency[i])reach(next);};
     for(size_t i=0;i<nodes.size();++i)if(root[i])reach(i);

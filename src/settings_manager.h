@@ -19,6 +19,7 @@ class SettingsManager {
 
   private:
     Preferences preferences_;
+    bool writeFailed_ = false;
 
     SettingsBundle sanitize(const SettingsBundle& input) const;
     bool writeStringIfChanged(const char* key, const String& value);

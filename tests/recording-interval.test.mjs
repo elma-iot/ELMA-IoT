@@ -9,8 +9,12 @@ test('recording data links, restrictions, interval validation and migration',()=
  const source=add('value.boolean'),interval=add('recording.interval'),save=add('mainboard.save_data');
  connect(graph,source.id,'value',interval.id,'value');connect(graph,interval.id,'out',save.id,'value');
  assert.equal(problems(graph,Object.values(c)).errors.size,0);
- const plot=add('mainboard.plot');assert.throws(()=>connect(graph,interval.id,'out',plot.id,'value'),/only to Save Data/);
+ const plot=add('mainboard.plot');connect(graph,interval.id,'out',plot.id,'value');
+ assert.equal(problems(graph,Object.values(c)).errors.size,0);
+ const otherInterval=add('recording.interval');
+ assert.throws(()=>connect(graph,interval.id,'out',otherInterval.id,'value'),/only to Save Data.Value or Transfer to Plotter.Value/);
+ graph.nodes.pop();
  interval.parameters.duration=0;assert.ok(problems(graph,Object.values(c)).errors.has(interval.id));interval.parameters.duration=365;interval.parameters.timeUnit='days';assert.ok(!problems(graph,Object.values(c)).errors.has(interval.id));
  save.ports.find(p=>p.id==='value').type='number';save.ports.find(p=>p.id==='in').required=true;upgradeNodes(graph,Object.values(c));assert.deepEqual(save.ports,c['mainboard.save_data'].ports);
- graph.connections.push({source:{node:interval.id,port:'out'},target:{node:plot.id,port:'value'}});assert.ok(problems(graph,Object.values(c)).errors.has(plot.id));
+ graph.connections.push({source:{node:interval.id,port:'out'},target:{node:plot.id,port:'in'}});assert.ok(problems(graph,Object.values(c)).errors.has(plot.id));
 });

@@ -45,18 +45,28 @@ bool writeChunkBank(Preferences& prefs,char bank,const std::string& data){
 }
 }
 bool loadLogicRecord(JsonDocument& record) {
-    bool found=false;uint32_t revision=0;
+    bool found=false;uint32_t revision=0,flashRevision=0,nvsRevision=0;bool flashFound=false;
     auto accept=[&](JsonDocument& candidate){
+        if(!candidate["graph"]["nodes"].is<JsonArray>() ||
+           !candidate["graph"]["connections"].is<JsonArray>() ||
+           !candidate["mode"].is<const char*>())return false;
         uint32_t next=candidate["revision"]|0u;
         if(next>latestRevision)latestRevision=next;
         if(!found || next>revision){record.set(candidate);revision=next;found=true;}
+        return true;
     };
     for(auto target:{StorageTarget::Flash,StorageTarget::Sd}) {
         if(!storageMounted(target))continue;
         beginStorageRead(target);
         for(const char* path:{"/.elma-logics.json","/.elma-logics.0.json","/.elma-logics.1.json"}) {
             File file=storageOpen(target,path);JsonDocument candidate;
-            if(file && !deserializeJson(candidate,file))accept(candidate);
+            if(file && !deserializeJson(candidate,file) && accept(candidate)){
+                if(target==StorageTarget::Flash){
+                    const uint32_t candidateRevision=candidate["revision"]|0u;
+                    if(!flashFound || candidateRevision>flashRevision)flashRevision=candidateRevision;
+                    flashFound=true;
+                }
+            }
             if(file)file.close();
         }
         endStorageRead(target);
@@ -67,15 +77,49 @@ bool loadLogicRecord(JsonDocument& record) {
         uint8_t active=prefs.getUChar("bank",0)&1;
         for(char bank:{active?'b':'a',active?'a':'b'}){
             std::string data;JsonDocument candidate;
-            if(readChunkBank(prefs,bank,data)&&!deserializeMsgPack(candidate,data))accept(candidate);
+            if(readChunkBank(prefs,bank,data)&&!deserializeMsgPack(candidate,data)&&accept(candidate)){
+                nvsRevision=std::max<uint32_t>(nvsRevision,candidate["revision"]|0u);
+            }
         }
         for(const char* key:{"compact","record"}) {
             size_t size=prefs.getBytesLength(key);std::string data;
             if(size && size<=40000){data.resize(size);if(prefs.getBytes(key,&data[0],size)!=size)data.clear();}
             JsonDocument candidate;
-            if(!data.empty() && !(std::string(key)=="compact"?deserializeMsgPack(candidate,data):deserializeJson(candidate,data)))accept(candidate);
+            if(!data.empty() && !(std::string(key)=="compact"?deserializeMsgPack(candidate,data):deserializeJson(candidate,data))&&accept(candidate)){
+                nvsRevision=std::max<uint32_t>(nvsRevision,candidate["revision"]|0u);
+            }
         }
         prefs.end();
+    }
+    // If the NVS copy is newer (or LittleFS was reformatted), migrate the
+    // selected valid record before releasing any NVS space. A failed write
+    // keeps the NVS copy intact for the next boot.
+    if(found && (!flashFound || revision>flashRevision) && storageMounted(StorageTarget::Flash)){
+        beginStorageWrite(StorageTarget::Flash);
+        const char* path=revision%2?"/.elma-logics.1.json":"/.elma-logics.0.json";
+        File file=storageOpen(StorageTarget::Flash,path,"w");bool verified=false;
+        if(file){
+            const size_t expected=measureJson(record),written=serializeJson(record,file);
+            file.flush();file.close();
+            if(written==expected){
+                JsonDocument check;File verify=storageOpen(StorageTarget::Flash,path);
+                verified=verify&&!deserializeJson(check,verify)&&check["revision"]==revision;
+                if(verify)verify.close();
+            }
+        }
+        if(!verified){auto fs=getStorageFs(StorageTarget::Flash);if(fs)fs->remove(path);}
+        endStorageWrite(StorageTarget::Flash);
+        if(verified){flashFound=true;flashRevision=revision;}
+    }
+    // The filesystem record has been parsed and revision-checked. Once it is
+    // at least as recent as the NVS copy, reclaiming that obsolete copy
+    // leaves room for configuration and recovery markers on 4 MB boards.
+    if(flashFound && flashRevision>=nvsRevision){
+        Preferences cleanup;
+        if(cleanup.begin("elma-logics",false)){
+            if(cleanup.isKey("bank")||cleanup.isKey("compact")||cleanup.isKey("record")||cleanup.isKey("ac")||cleanup.isKey("bc"))cleanup.clear();
+            cleanup.end();
+        }
     }
     return found;
 }

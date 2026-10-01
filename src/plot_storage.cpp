@@ -6,12 +6,31 @@
 #include <freertos/semphr.h>
 #include <sys/time.h>
 #include <cmath>
+#include <utility>
 namespace {
 struct Pending {char plot[33],series[33],unit[17],folder[129];double value,epoch;uint32_t uptime;};
 QueueHandle_t queue=nullptr;SemaphoreHandle_t io=nullptr;
 StaticQueue_t queueControl;uint8_t* queueBytes=nullptr;
 portMUX_TYPE statusMux=portMUX_INITIALIZER_UNLOCKED;char lastError[128]={};uint32_t written=0;
 void status(const char* error){portENTER_CRITICAL(&statusMux);snprintf(lastError,sizeof(lastError),"%s",error);if(!*error)++written;portEXIT_CRITICAL(&statusMux);}
+bool asciiJsonLine(String& line){
+ String ascii;if(!ascii.reserve(line.length()*6+1))return false;
+ const char* hex="0123456789ABCDEF";
+ for(size_t i=0;i<line.length();){
+  const uint8_t lead=uint8_t(line[i]);
+  if(lead<128){if(!ascii.concat(char(lead)))return false;++i;continue;}
+  unsigned bytes=lead>=0xF0&&lead<=0xF4?4:lead>=0xE0&&lead<=0xEF?3:lead>=0xC2&&lead<=0xDF?2:0;
+  if(!bytes||i+bytes>line.length())return false;
+  uint32_t code=lead&((1u<<(7-bytes))-1u);
+  for(unsigned j=1;j<bytes;++j){uint8_t next=uint8_t(line[i+j]);if((next&0xC0)!=0x80)return false;code=(code<<6)|(next&0x3F);}
+  if(code<(bytes==2?0x80u:bytes==3?0x800u:0x10000u)||code>0x10FFFFu||(code>=0xD800u&&code<=0xDFFFu))return false;
+  auto appendEscape=[&](uint16_t value){char escaped[7]={'\\','u',hex[(value>>12)&15],hex[(value>>8)&15],hex[(value>>4)&15],hex[value&15],0};return ascii.concat(escaped);};
+  if(code<=0xFFFF){if(!appendEscape(uint16_t(code)))return false;}
+  else {code-=0x10000;if(!appendEscape(uint16_t(0xD800+(code>>10)))||!appendEscape(uint16_t(0xDC00+(code&0x3FF))))return false;}
+  i+=bytes;
+ }
+ line=std::move(ascii);return true;
+}
 bool writeSample(const Pending& p){
  if(xSemaphoreTake(io,pdMS_TO_TICKS(100))!=pdTRUE){status("Recording storage busy");return false;}
  struct Release{~Release(){endStorageWrite(StorageTarget::Sd);xSemaphoreGive(io);}} release;
@@ -23,7 +42,7 @@ bool writeSample(const Pending& p){
  for(unsigned batch=0;batch<8;++batch){
  const Pending& p=current;
  JsonDocument sample(storageJsonAllocator());sample["plot"]=p.plot;sample["series"]=p.series;sample["unit"]=p.unit;sample["t"]=p.uptime;sample["epoch"]=p.epoch;sample["value"]=p.value;
- String line;if(sample.overflowed()||!serializeJson(sample,line)){file.close();status("Recording JSON memory exhausted");return false;}line+='\n';size_t bytes=file.print(line);
+ String line;if(sample.overflowed()||!serializeJson(sample,line)||!asciiJsonLine(line)){file.close();status("Recording ASCII JSON memory exhausted or label is invalid UTF-8");return false;}line+='\n';size_t bytes=file.print(line);
  if(bytes!=line.length()){file.close();status("Recording write failed; check free space/card");return false;}status("");
  Pending next;if(batch==7||xQueuePeek(queue,&next,0)!=pdTRUE||strcmp(next.folder,p.folder)||strcmp(next.plot,p.plot))break;
  if(xQueueReceive(queue,&current,0)!=pdTRUE)break;
