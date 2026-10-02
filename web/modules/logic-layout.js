@@ -5,7 +5,7 @@ export function installLogicLayout(tab){
  tab.editor.menu=function(...args){
   originalMenu.apply(this,args);
   const menu=document.querySelector('.logic-context-menu'),search=menu?.querySelector('#logic-add-node-search'),results=menu?.querySelector('.logic-menu-results');
-  if(search){menu.prepend(search);if(results)search.after(results);if(args[1]||args[2]||args[5]||tab.editor.selected.size)search.blur();}
+  if(search){menu.prepend(search);if(results)search.after(results);requestAnimationFrame(()=>search.focus({preventScroll:true}));}
   keepVisible();
  };
  function keepVisible(){
