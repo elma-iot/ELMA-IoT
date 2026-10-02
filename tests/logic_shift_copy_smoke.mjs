@@ -8,7 +8,7 @@ const graph={nodes:[
 ],connections:[
  {id:'internal',source:{node:'a',port:'out'},target:{node:'b',port:'in'}},
  {id:'external',source:{node:'b',port:'out'},target:{node:'c',port:'in'}}
-],groups:[{id:'group',name:'Automation',nodes:['a','b'],rect:{x:-20,y:-20,width:650,height:240}}]};
+],groups:[{id:'group',name:'Automation',nodes:['a','b'],rect:{x:-20,y:-20,width:650,height:240}}],view:{labels:[{id:'note',text:'Measurement',x:15,y:32,groupId:'group'}]}};
 
 const copies=duplicate(graph,new Set(['a','b']),{x:145,y:75});
 assert.equal(copies.size,2);
@@ -20,4 +20,7 @@ assert.ok(copies.has(graph.connections[2].source.node)&&copies.has(graph.connect
 assert.equal(graph.groups.length,2);
 assert.deepEqual(graph.groups[1].rect,{x:125,y:55,width:650,height:240});
 assert.deepEqual(new Set(graph.groups[1].nodes),copies);
+assert.equal(graph.view.labels.length,2);
+assert.equal(graph.view.labels[1].groupId,graph.groups[1].id);
+assert.equal(graph.view.labels[1].text,'Measurement');
 console.log('Shift copy duplicates selected nodes, internal wires and group at the drag offset');

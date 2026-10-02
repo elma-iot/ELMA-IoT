@@ -190,6 +190,11 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             target["rect"].set(g["rect"]);
         }
     }
+    for(JsonObjectConst label:input["view"]["labels"].as<JsonArrayConst>())if(!label["groupId"].isNull()){
+        const char* groupId=label["groupId"]|"";bool found=false;
+        for(JsonObjectConst group:groups)if(group["id"]==groupId){found=true;break;}
+        if(!found)return fail("Canvas label refers to a missing group");
+    }
     if(measureJson(output)>32768 || output.overflowed())return fail("Validated graph exceeds runtime storage limit");
     return true;
 }
