@@ -15,5 +15,6 @@ test('device Help routes use the active locale and stable topic IDs',()=>{
 test('device section Help uses contextual right-click and long-press targets',()=>{
  const source=readFileSync(new URL('../web/modules/online-help.js',import.meta.url),'utf8');
  assert.match(source,/bindContextHelp/);assert.match(source,/contextmenu/);assert.match(source,/long-press/);
+ assert.match(source,/plots:'plotter'/);
  assert.doesNotMatch(source,/button\.textContent='i'/);
 });
