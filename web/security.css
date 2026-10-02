@@ -6,6 +6,8 @@
 .security-dialog h2,.security-dialog p { margin:0; }
 .security-dialog [data-pin] { width:100%;box-sizing:border-box;text-align:center;font-size:28px;letter-spacing:.6em;height:52px; }
 .security-keypad { display:grid;grid-template-columns:repeat(3,1fr);gap:8px; }
+.security-keypad[hidden] { display:none; }
+.security-dialog [data-pin][hidden],.security-dialog [data-submit][hidden],.security-dialog [data-retry][hidden] { display:none; }
 .security-keypad button { min-height:44px;font-size:18px; }
 .security-dialog [data-error] { min-height:20px;color:#ffbcae;font-size:14px; }
 #tab-security .security-actions { display:flex;flex-wrap:wrap;gap:12px;margin:16px 0; }

@@ -19,7 +19,7 @@ pin='';calls=[]
 fixture='''<!doctype html><html><head><link rel="stylesheet" href="/security.css"></head><body>
 <section class="hero"><h1 id="deviceTitle">Test device</h1><button id="headerActionsButton">Settings</button><div id="headerActionsMenu"></div></section>
 <div class="grid"><section><div id="tab-security"><p data-security-state></p><input data-security-timeout value="300"><button data-security-save-timeout>Save</button><button data-security-action="set">Set PIN</button><button data-security-action="change">Change PIN</button><button data-security-action="disable">Disable</button><button data-security-action="lock">Lock</button></div></section></div>
-<script type="module">import {createSecurityInterface} from '/modules/security-tab.js';window.elmaSecurity.destroy();window.elmaSecurity=createSecurityInterface({reload:()=>window.reloaded=(window.reloaded||0)+1});</script></body></html>'''
+<script type="module">import {createSecurityInterface} from '/modules/security-tab.js';window.createSecurityInterface=createSecurityInterface;window.elmaSecurity.destroy();window.elmaSecurity=createSecurityInterface({reload:()=>window.reloaded=(window.reloaded||0)+1});</script></body></html>'''
 tab=re.search(r'<button[^>]*data-tab="security"[^>]*>.*?</button>',(WEB/'index.html').read_text(encoding='utf-8'),re.S).group(0)
 fixture=fixture.replace('<div class="grid">','<div class="grid">'+tab)
 class Handler(BaseHTTPRequestHandler):
@@ -63,6 +63,15 @@ SCRIPT=r'''(async()=>{
  const unlocked=w=>w.elmaSecurity?.state?.locked===false;
  try{
   await wait(()=>unlocked(a())&&unlocked(b()));
+  a().elmaSecurity.destroy();a().offlineSecurity=true;
+  a().elmaSecurity=a().createSecurityInterface({fetcher:(path,options)=>a().offlineSecurity&&path==='/api/security'?Promise.reject(new TypeError('Failed to fetch')):a().fetch(path,options),reload:()=>a().reloaded=(a().reloaded||0)+1});
+  await wait(()=>a().document.querySelector('[data-title]').textContent==='Device offline');
+  if(!a().document.querySelector('[data-pin]').hidden||!a().document.querySelector('.security-keypad').hidden||a().document.querySelector('[data-retry]').hidden)throw Error('Offline page incorrectly shows a PIN prompt');
+  if(!a().document.querySelector('.grid > section').inert)throw Error('Unknown lock state must block controls');
+  a().offlineSecurity=false;a().document.querySelector('[data-retry]').click();await wait(()=>unlocked(a())&&a().document.querySelector('.security-mask').hidden);
+  a().offlineSecurity=true;await a().elmaSecurity.refresh();
+  if(!a().document.querySelector('.security-mask').hidden||!a().document.querySelector('[data-security-state]').textContent.includes('offline'))throw Error('Temporary disconnect invented a lock');
+  a().offlineSecurity=false;await a().elmaSecurity.refresh();await wait(()=>a().document.querySelector('[data-security-state]').textContent.includes('PIN lock disabled'));
   if(a().document.querySelector('[data-tab="security"]').textContent.trim())throw Error('Security tab must be icon only');
   const openPath=a().document.querySelector('[data-security-shackle]').getAttribute('d');
   click(a(),'set');submit(a(),'0123');await wait(()=>a().document.querySelector('[data-tip]').textContent.includes('again'));submit(a(),'0123');await wait(()=>a().elmaSecurity.state.enabled&&a().document.querySelector('.security-mask').hidden);
