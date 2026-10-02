@@ -12,6 +12,7 @@
 namespace {
 constexpr uint32_t kLogicActivityMagic = 0x454c4d41u;
 constexpr uint32_t kLogicActionStableMs = 30000u;
+constexpr uint8_t kLogicMaxAutoRetries = 3;
 constexpr char kLogicRecoveryNamespace[] = "logic_guard";
 constexpr char kLogicStorageSafetyKey[] = "storageV2";
 struct LogicActivityMarker {uint32_t magic;char node[64];char group[64];};
@@ -48,15 +49,17 @@ std::string LogicDevice::groupForNode(const char* nodeId) const {
 void LogicDevice::clearRecoveryState() {
     Preferences preferences;
     if(preferences.begin(kLogicRecoveryNamespace,false)){
-        preferences.remove("active");preferences.remove("group");preferences.remove("node");preferences.remove("warning");preferences.end();
+        preferences.remove("active");preferences.remove("group");preferences.remove("node");preferences.remove("warning");preferences.remove("retries");preferences.end();
     }
     quarantinedGroup_.clear();quarantinedNode_.clear();recoveryWarning_.clear();
     recoveryConfirmationRequired_=false;recoveryAppliedThisBoot_=false;
+    recoveryRetries_=0;recoveryStableAt_=0;
 }
 
 void LogicDevice::loadRecoveryState(JsonDocument& graph) {
     Preferences preferences;
     if(preferences.begin(kLogicRecoveryNamespace,true)){
+        recoveryRetries_=preferences.getUChar("retries",0);
         if(preferences.getBool("active",false)){
             quarantinedGroup_=preferences.getString("group","").c_str();
             quarantinedNode_=preferences.getString("node","").c_str();
@@ -65,26 +68,49 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
         }
         preferences.end();
     }
-    if(abnormalRuntimeReset()&&logicActivityMarker.magic==kLogicActivityMagic){
-        quarantinedNode_=logicActivityMarker.node;
-        quarantinedGroup_=logicActivityMarker.group;
-        recoveryWarning_="Logics was stopped after an abnormal restart while running "+
-            (quarantinedNode_.empty()?std::string("the automation runtime"):quarantinedNode_)+
-            ". Review it before starting it again.";
-        recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
-        Preferences writer;
-        if(writer.begin(kLogicRecoveryNamespace,false)){
-            writer.putBool("active",true);writer.putString("group",quarantinedGroup_.c_str());
-            writer.putString("node",quarantinedNode_.c_str());writer.putString("warning",recoveryWarning_.c_str());writer.end();
+    if(!recoveryConfirmationRequired_ && abnormalRuntimeReset() && mode_=="playing"){
+        const std::string lastNode=logicActivityMarker.magic==kLogicActivityMagic?logicActivityMarker.node:"";
+        bool retrySaved=false;
+        if(recoveryRetries_<kLogicMaxAutoRetries){
+            Preferences writer;
+            if(writer.begin(kLogicRecoveryNamespace,false)){
+                retrySaved=writer.putUChar("retries",recoveryRetries_+1)==1;
+                writer.end();
+            }
         }
-        DebugLog.printf("[logic-guard] quarantined group=%s node=%s after abnormal reset\n",quarantinedGroup_.c_str(),quarantinedNode_.c_str());
+        if(retrySaved){
+            ++recoveryRetries_;
+            recoveryStableAt_=millis()+kLogicActionStableMs;
+            recoveryWarning_="Logics restarted after an unexpected device reset (automatic retry "+
+                std::to_string(recoveryRetries_)+" of "+std::to_string(kLogicMaxAutoRetries)+").";
+            DebugLog.printf("[logic-guard] automatic retry %u/%u after abnormal reset; last node=%s\n",
+                static_cast<unsigned>(recoveryRetries_),static_cast<unsigned>(kLogicMaxAutoRetries),lastNode.c_str());
+        } else {
+            quarantinedNode_=lastNode;
+            quarantinedGroup_.clear();
+            recoveryWarning_=recoveryRetries_>=kLogicMaxAutoRetries
+                ? "Logics stopped after three automatic restart attempts failed. Review the graph and device logs, then explicitly start it."
+                : "Logics stopped because its restart counter could not be saved. Check internal storage, then explicitly start it.";
+            recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
+            Preferences writer;
+            if(writer.begin(kLogicRecoveryNamespace,false)){
+                writer.putBool("active",true);writer.putString("group","");
+                writer.putString("node",quarantinedNode_.c_str());writer.putString("warning",recoveryWarning_.c_str());writer.end();
+            }
+            DebugLog.printf("[logic-guard] %s\n",recoveryWarning_.c_str());
+        }
+    } else if(!abnormalRuntimeReset() && !recoveryConfirmationRequired_ && recoveryRetries_){
+        // A clean boot breaks the crash streak; a stable running interval also clears it below.
+        Preferences writer;
+        if(writer.begin(kLogicRecoveryNamespace,false)){writer.remove("retries");writer.end();}
+        recoveryRetries_=0;
     }
     clearLogicActivity();
     if(!recoveryConfirmationRequired_)return;
 
     bool nodeExists=quarantinedNode_.empty();
     for(JsonObjectConst node:graph["nodes"].as<JsonArrayConst>())if(node["id"]==quarantinedNode_){nodeExists=true;break;}
-    if(!nodeExists){clearRecoveryState();return;}
+    if(!nodeExists && !quarantinedGroup_.empty()){clearRecoveryState();return;}
     bool groupStopped=false;
     if(!quarantinedGroup_.empty())for(JsonObject group:graph["groups"].as<JsonArray>())if(group["id"]==quarantinedGroup_){group["mode"]="stopped";groupStopped=true;break;}
     if(!groupStopped){quarantinedGroup_.clear();mode_="stopped";graph["mode"]="stopped";}
@@ -98,7 +124,6 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     mode_=compiled["mode"]|"playing";
     if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
     std::string restored=program;
-    const bool unexplainedAbnormalReset=abnormalRuntimeReset()&&logicActivityMarker.magic!=kLogicActivityMagic;
     bool storageSafetyMigration=false;
     Preferences migration;
     if(migration.begin(kLogicRecoveryNamespace,false)){
@@ -128,21 +153,7 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
 #endif
         }
     }
-    if(unexplainedAbnormalReset){
-        mode_="stopped";
-        JsonDocument stoppedGraph;deserializeJson(stoppedGraph,restored);stoppedGraph["mode"]="stopped";
-        restored.clear();serializeJson(stoppedGraph,restored);
-        recoveryWarning_=restoredSavedGraph
-            ? "Device restarted unexpectedly without an active Logics action. Saved Logics were loaded stopped for review; check device logs before resuming."
-            : "Device restarted unexpectedly without an active Logics action. Compiled Logics were loaded stopped for review; check device logs before resuming.";
-        recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
-        Preferences writer;
-        if(writer.begin(kLogicRecoveryNamespace,false)){
-            writer.putBool("active",true);writer.putString("group","");writer.putString("node","");
-            writer.putString("warning",recoveryWarning_.c_str());writer.end();
-        }
-        DebugLog.printf("[logic-guard] loaded %s Logics stopped after unexplained abnormal reset\n",restoredSavedGraph?"saved":"compiled");
-    } else if(storageSafetyMigration&&restoredSavedGraph){
+    if(storageSafetyMigration&&restoredSavedGraph){
         JsonDocument migrationGraph;deserializeJson(migrationGraph,restored);migrationGraph["mode"]="stopped";
         restored.clear();serializeJson(migrationGraph,restored);mode_="stopped";
         recoveryWarning_="Saved Logics were restored stopped after the storage safety upgrade. Review the graph, then explicitly start it.";
@@ -160,6 +171,7 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     if (!ok) {state_->setLastError(error.c_str());DebugLog.printf("[logics] %s\n",error.c_str());}
     if(ok && mode_=="paused")runtime_.pause(millis());
     if(ok && recoveryAppliedThisBoot_){String ignored;persist(runtime_.graph(),mode_,ignored);state_->setLastError(recoveryWarning_.c_str());}
+    else if(ok && recoveryRetries_)state_->setLastError(recoveryWarning_.c_str());
     return ok;
 }
 
@@ -219,6 +231,17 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     if(!waitingForActionStability)markLogicActivity("",{});
     if(mode_=="playing")runtime_.tick(now,snapshot.as<JsonVariantConst>());
     else runtime_.observe(snapshot.as<JsonVariantConst>());
+    if(recoveryRetries_ && mode_=="playing" && runtime_.error().empty() &&
+        static_cast<int32_t>(now-recoveryStableAt_)>=0){
+        Preferences writer;
+        if(writer.begin(kLogicRecoveryNamespace,false)){
+            if(writer.remove("retries")){
+                recoveryRetries_=0;recoveryStableAt_=0;recoveryWarning_.clear();
+                DebugLog.println("[logic-guard] Logics stable for 30 seconds; retry counter cleared");
+            }
+            writer.end();
+        }
+    }
     if(!actionMarkedThisTick_&&!waitingForActionStability)clearLogicActivity();
     if(runtime_.error()!=reportedError_) {reportedError_=runtime_.error();if(!reportedError_.empty()){state_->setLastError(reportedError_.c_str());DebugLog.printf("[logics] %s\n",reportedError_.c_str());}}
 }
@@ -272,7 +295,7 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     response["audioEnabled"]=true;
 #endif
     if(graph)response["graph"].set(runtime_.graph());
-    if(recoveryConfirmationRequired_){response["recovery"]["confirmationRequired"]=true;response["recovery"]["groupId"]=quarantinedGroup_;response["recovery"]["nodeId"]=quarantinedNode_;response["recovery"]["warning"]=recoveryWarning_;}
+    if(recoveryConfirmationRequired_ || recoveryRetries_){response["recovery"]["confirmationRequired"]=recoveryConfirmationRequired_;response["recovery"]["retryAttempt"]=recoveryRetries_;response["recovery"]["retryLimit"]=kLogicMaxAutoRetries;response["recovery"]["groupId"]=quarantinedGroup_;response["recovery"]["nodeId"]=quarantinedNode_;response["recovery"]["warning"]=recoveryWarning_;}
     xSemaphoreGive(mutex_);
 }
 bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String& error) {

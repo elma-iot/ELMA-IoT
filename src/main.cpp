@@ -4094,11 +4094,8 @@ void setup() {
         if(!ok)message=error.isEmpty()?"Unsupported or failed Logics action":error.c_str();
         return ok;
     });
-    if(runtimeSafeModeActive){
-        const char* warning="Recovery safe mode: automatic playback and Logics were stopped after repeated abnormal restarts. Review them before restarting.";
-        logicDevice.enterRecoverySafeMode(warning);
-        appState->setLastError(warning);
-    }
+    // Audio recovery uses the boot counter; Logics owns its own three-attempt
+    // counter so the audio guard cannot stop an automation before retry #3.
 
 #if APP_AUDIO_DIAGNOSTIC_TEST
     if (activeAudioOutputEnabled) {

@@ -33,6 +33,8 @@ private:
     std::string quarantinedGroup_, quarantinedNode_, recoveryWarning_;
     bool recoveryConfirmationRequired_ = false;
     bool recoveryAppliedThisBoot_ = false;
+    uint8_t recoveryRetries_ = 0;
+    uint32_t recoveryStableAt_ = 0;
     uint32_t activityStableAt_ = 0;
     bool actionMarkedThisTick_ = false;
     bool persist(JsonVariantConst graph, const std::string& mode, String& error);
