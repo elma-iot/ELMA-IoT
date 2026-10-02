@@ -48,3 +48,11 @@ export function updateAutoPlotLabels(graph){
  }
  return changed;
 }
+
+export function resetDetachedCopiedPlotLabels(graph,copiedIds){
+ for(const node of graph.nodes){
+  if(!copiedIds.has(node.id)||node.type!=='mainboard.plot'||suggestedPlotLabels(graph,node.id))continue;
+  for(const key of KEYS)node.parameters[key]=DEFAULTS[key];
+  node.autoLabels=Object.fromEntries(KEYS.map(key=>[key,true]));
+ }
+}

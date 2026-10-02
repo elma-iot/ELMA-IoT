@@ -1,6 +1,7 @@
 #include "logic_validation.h"
 #include "logic_catalog.h"
 #include <set>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include <functional>
@@ -48,6 +49,14 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
     auto fail=[&](const char* message){error=message;return false;};
     if(input["schemaVersion"]!=1 || !input["nodes"].is<JsonArrayConst>() || !input["connections"].is<JsonArrayConst>() || input["nodes"].size()>64 || input["connections"].size()>128 || measureJson(input)>32768)return fail("Invalid graph or graph exceeds 64 nodes / 128 links / 32 KiB");
     output.clear();output["schemaVersion"]=1;output["devices"].set(devices);output["view"].set(input["view"]);
+    if(input["view"]["labels"].size()>64)return fail("At most 64 canvas labels are supported");
+    std::vector<std::string> labelIds;
+    for(JsonObjectConst label:input["view"]["labels"].as<JsonArrayConst>()){
+        const char* id=label["id"]|"";const char* text=label["text"]|"";
+        if(!*id||strlen(id)>64||strlen(text)>256||std::find(labelIds.begin(),labelIds.end(),id)!=labelIds.end())return fail("Invalid canvas label");
+        for(const char* axis:{"x","y"}){auto value=label[axis];if(!(value.is<double>()||value.is<int>())||!std::isfinite(value.as<double>())||std::abs(value.as<double>())>50000)return fail("Invalid canvas label position");}
+        labelIds.emplace_back(id);
+    }
     auto nodes=output["nodes"].to<JsonArray>();auto links=output["connections"].to<JsonArray>();
     for(JsonObjectConst n:input["nodes"].as<JsonArrayConst>()) {
         const char* id=n["id"]|"";const char* type=n["type"]|"";
@@ -174,6 +183,7 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         for(JsonObjectConst old:groups)if(old["id"]==id)return fail("Duplicate group ID");
         for(JsonVariantConst member:g["nodes"].as<JsonArrayConst>()){int n=index(member|"");if(n<0||owners[n]>=0)return fail("Group members must exist and belong to one group");owners[n]=int(groups.size());}
         auto target=groups.add<JsonObject>();target["id"]=id;target["name"]=g["name"]|"Automation";target["color"]=color;target["nodes"].set(g["nodes"]);target["mode"]=mode;
+        if(!g["label"].isNull()){const char* label=g["label"]|"";if(strlen(label)>256)return fail("Invalid group label");target["label"]=label;}
         if(!g["rect"].isNull()) {
             for(const char* key:{"x","y","width","height"}){auto value=g["rect"][key];if(!value.is<double>()||!std::isfinite(value.as<double>())||std::abs(value.as<double>())>50000)return fail("Invalid group bounds");}
             if(g["rect"]["width"].as<double>()<240||g["rect"]["height"].as<double>()<100)return fail("Group bounds too small");

@@ -48,6 +48,10 @@ body:has(#tab-logics.active) .wrap{width:min(1920px,calc(100% - 24px));max-width
 @media(prefers-reduced-motion:reduce){.logic-piano-record[aria-pressed="true"] svg{animation:none;}}
 
 .logic-group.selected{border-color:#ffb020;border-width:4px;box-shadow:0 0 0 3px #ffb02033,0 0 22px #ffb02044}
+.logic-text-label{position:absolute;z-index:8;display:inline-block;min-width:28px;max-width:420px;padding:4px 7px;color:#fff;background:#243247cc;border:1px solid #718aa5;border-radius:5px;font:600 14px "Segoe UI",sans-serif;white-space:pre-wrap;cursor:grab;user-select:none;touch-action:none}
+.logic-text-label:hover{border-color:#ef8b00}.logic-text-label[contenteditable="true"]{cursor:text;user-select:text;outline:2px solid #ef8b00}
+.logic-group-label{position:absolute;top:32px;left:14px;z-index:3;display:inline-block;min-width:28px;max-width:calc(100% - 28px);padding:2px 6px;color:#fff;border-left:3px solid var(--group-color);background:#19222dd9;font:600 13px "Segoe UI",sans-serif;white-space:pre-wrap;cursor:text}
+.logic-group-label[contenteditable="true"]{outline:2px solid var(--group-color);user-select:text}
 
 #tab-logics .logic-palette{min-width:0}
 #tab-logics .logic-save-controls{display:flex;align-items:center;gap:8px;flex:0 0 auto;order:1}

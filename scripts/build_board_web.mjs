@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { build } from "esbuild";
 
-const root = path.resolve(process.argv[2]);
+const root = fs.realpathSync(path.resolve(process.argv[2]));
 const output = path.resolve(process.argv[3]);
 const boards = ["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32-spk-n16r8",
   "esp32-s3-devkit-c1", "esp32-s3-cam-module", "esp32-wrover", "esp32-wroom", "esp32-mini",
