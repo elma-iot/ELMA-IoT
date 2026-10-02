@@ -18,6 +18,17 @@ Project story and current device write-up:
 
 v0.1.56 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
 
+### Device source changes after v0.1.56
+
+These changes are in source control and are included when a current configured firmware image is built; they do not change the published firmware version or imply that a device has been flashed.
+
+- The device Logics editor groups add-node choices and focuses search, supports Shift-drag copies, and lets users edit automation names and movable text labels. Copies of Transfer to Plotter without their source reset inherited labels; connecting a measurement can suggest editable Plot, Series, and Unit values, including through Sampling Interval.
+- Transfer to Plotter buffers named telemetry in RAM for requests from the Windows Plotter over USB serial or Wi-Fi. Sampling Interval controls collection cadence; Save Data writes selected values as ASCII JSONL to configured external SD/SDMMC storage. See the Windows [Plotter guide](https://github.com/elma-iot/ELMA-IoT-Windows/blob/main/PLOTTER.md) for protocol and limits (private repository access required).
+- The device web interface distinguishes an unreachable device from a configured PIN lock. After an abnormal startup restart, saved Logics are retried up to three times before they stop with a notice.
+- ESP32-C3 provisioning and compact settings handling have been hardened. VIEWE onboard display, touch, SDMMC, buzzer and UART support includes a compact LVGL dashboard. Storage and stream buffers are bounded; see [STORAGE-AUDIT.md](STORAGE-AUDIT.md) for remaining hardware validation limits.
+
+The companion Windows application source is **0.1.74**; its README describes detachable tabs, plot controls, recording, and flashing changes. A matching device image must be built and flashed separately to use new device-side features.
+
 ### v0.1.56 highlights
 
 - Uses board-specific SVG header contacts for device-web wiring and pin labels.
