@@ -1072,7 +1072,9 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         !preferences_.clear()) {
         return false;
     }
-    const SettingsBundle sanitized = sanitize(settings);
+    const std::unique_ptr<SettingsBundle> sanitizedStorage(new (std::nothrow) SettingsBundle(sanitize(settings)));
+    if (!sanitizedStorage) return false;
+    const SettingsBundle& sanitized = *sanitizedStorage;
     const String rawMotorRuntimeConfig = settings.ui.motorRuntimeConfig.isEmpty()
         ? defaultMotorRuntimeConfig()
         : settings.ui.motorRuntimeConfig;

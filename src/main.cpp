@@ -12,6 +12,7 @@
 #include <esp_ota_ops.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <memory>
 
 #include "default_config.h"
 #include "motor_runtime_config.h"
@@ -3119,7 +3120,15 @@ void applyClonedConfiguration() {
         return;
     }
 
-    SettingsBundle cloned = settingsManager->defaults();
+    // Serial provisioning runs on loopTask, whose stack is small on C3. Keep
+    // the full settings bundle off that stack while parsing and saving it.
+    const std::unique_ptr<SettingsBundle> clonedStorage(new (std::nothrow) SettingsBundle(settingsManager->defaults()));
+    if (!clonedStorage) {
+        DebugLog.println("[clone] error=insufficient memory for configuration");
+        resetCloneProvisioningReceiver();
+        return;
+    }
+    SettingsBundle& cloned = *clonedStorage;
     String error;
     if (!settingsManager->updateFromJson(cloned, document.as<JsonVariantConst>(), error)) {
         DebugLog.printf("[clone] error=configuration rejected detail=%s\n", error.c_str());
@@ -3136,12 +3145,9 @@ void applyClonedConfiguration() {
         resetCloneProvisioningReceiver();
         return;
     }
-    *settings = settingsManager->load();
-    if (!settings->usingSavedSettings) {
-        DebugLog.println("[clone] error=configuration save could not be verified from internal storage");
-        resetCloneProvisioningReceiver();
-        return;
-    }
+    // The target reboots immediately and load() runs in setup(). Calling it
+    // here nests another full SettingsBundle on loopTask's limited stack.
+    *settings = cloned;
 
     DebugLog.printf("[clone] configuration applied identity=%s mqttClientId=%s mqttBaseTopic=%s\n",
                   settings->device.deviceName.c_str(),
