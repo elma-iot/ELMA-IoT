@@ -7,12 +7,14 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include "logic_alarm.h"
 
 namespace ElmaLogic {
 class Runtime {
 public:
     using Action = std::function<bool(JsonObjectConst, JsonVariantConst, std::string&)>;
     bool begin(const char* payload, Action action, std::string& error);
+    bool begin(JsonDocument&& payload, Action action, std::string& error);
     void tick(uint32_t now, JsonVariantConst status);
     void lifecycle(const char* event);
     void suspend();
@@ -21,6 +23,8 @@ public:
     void restart();
     bool controlGroup(const char* id, const char* mode, uint32_t now);
     void observe(JsonVariantConst status);
+    void setLedBinding(JsonObjectConst binding);
+    void setPeripheralBinding(const char* id,JsonObjectConst binding);
     void telemetry(JsonObject target) const;
     bool testAction(const char* nodeId, const char* command, std::string& error);
     uint32_t recordingPollInterval(uint32_t normal) const;
@@ -32,6 +36,9 @@ public:
 
 private:
     struct State {
+        AlarmState alarm;
+        uint32_t wakeSequence=0;
+        bool sleeping=false;
         bool initialized = false, enabled = false, pending = false, startSent = false, frozen = false;
         uint32_t frozenAt = 0;
         uint32_t due = 0, interval = 0;

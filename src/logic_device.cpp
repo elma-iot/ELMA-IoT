@@ -1,9 +1,13 @@
+#include <driver/gpio.h>
 #include "logic_device.h"
+#include "led_array.h"
+#include "portable_peripherals.h"
 #include "system_metrics.h"
 #include "device_log.h"
 #include "storage_backend.h"
 #include "logic_validation.h"
 #include "logic_storage.h"
+#include "logic_recovery_policy.h"
 #include <Preferences.h>
 #include <esp_attr.h>
 #include <esp_system.h>
@@ -12,9 +16,8 @@
 namespace {
 constexpr uint32_t kLogicActivityMagic = 0x454c4d41u;
 constexpr uint32_t kLogicActionStableMs = 30000u;
-constexpr uint8_t kLogicMaxAutoRetries = 3;
+constexpr uint8_t kLogicMaxAutoRetries = ElmaLogic::MaxAutoRetries;
 constexpr char kLogicRecoveryNamespace[] = "logic_guard";
-constexpr char kLogicStorageSafetyKey[] = "storageV2";
 struct LogicActivityMarker {uint32_t magic;char node[64];char group[64];};
 RTC_NOINIT_ATTR LogicActivityMarker logicActivityMarker;
 
@@ -68,10 +71,20 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
         }
         preferences.end();
     }
-    if(!recoveryConfirmationRequired_ && abnormalRuntimeReset() && mode_=="playing"){
+    // Old releases stopped on the first crash or merely on a storage migration.
+    // Release only those identifiable legacy guards, never a current exhausted
+    // retry budget or an ordinary user-selected Stop/Pause state.
+    if(recoveryConfirmationRequired_ && ElmaLogic::legacyPrematureStop(recoveryWarning_,recoveryRetries_)){
+        for(JsonObject group:graph["groups"].as<JsonArray>())
+            if(!quarantinedGroup_.empty() && group["id"]==quarantinedGroup_)group["mode"]="playing";
+        clearRecoveryState();mode_="playing";graph["mode"]="playing";
+        recoveryAppliedThisBoot_=true;
+    }
+    const auto recoveryAction=ElmaLogic::recoveryAction(abnormalRuntimeReset(),mode_=="playing",recoveryConfirmationRequired_,recoveryRetries_);
+    if(recoveryAction!=ElmaLogic::RecoveryAction::None){
         const std::string lastNode=logicActivityMarker.magic==kLogicActivityMagic?logicActivityMarker.node:"";
         bool retrySaved=false;
-        if(recoveryRetries_<kLogicMaxAutoRetries){
+        if(recoveryAction==ElmaLogic::RecoveryAction::Retry){
             Preferences writer;
             if(writer.begin(kLogicRecoveryNamespace,false)){
                 retrySaved=writer.putUChar("retries",recoveryRetries_+1)==1;
@@ -116,23 +129,63 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
     if(!groupStopped){quarantinedGroup_.clear();mode_="stopped";graph["mode"]="stopped";}
 }
 
-bool LogicDevice::begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions) {
+// Called from the main loop so array allocation/refresh never runs in TCP callbacks.
+void LogicDevice::configureLedArrays(const String& helpers){
+ if(arrayHelpers_==helpers||!mutex_||xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+ JsonDocument options,updated;std::string error;
+ if(deserializeJson(options,helpers)){xSemaphoreGive(mutex_);return;}
+ updated.set(devices_);
+ for(JsonObject n:updated.as<JsonArray>())if(LedArrays::matches(n)){
+  String key="control:"+String(n["binding"]["index"]|0);
+  if(!LedArrays::updateBinding(n["binding"],options[key],error))break;
+  int pin=n["binding"]["pins"]["DIN"]|-1;
+  if(!GPIO_IS_VALID_OUTPUT_GPIO(pin)||pin==(ledBinding_["pin"]|-1)||pin==(ledBinding_["greenPin"]|-1)||pin==(ledBinding_["bluePin"]|-1)){error="LED data GPIO conflicts with board configuration";break;}
+ }
+ if(error.empty())for(JsonObjectConst n:updated.as<JsonArrayConst>())if(LedArrays::matches(n)){
+  int pin=n["binding"]["pins"]["DIN"]|-1;
+  const char* id=n["peripheral"]["id"]|"";
+  for(JsonObjectConst other:updated.as<JsonArrayConst>())if(strcmp(other["peripheral"]["id"]|"",id)!=0)
+   for(JsonPairConst pair:other["binding"]["pins"].as<JsonObjectConst>())if(pair.value().as<int>()==pin){error="LED data GPIO conflicts with another peripheral";break;}
+  if(!error.empty())break;
+ }
+ if(error.empty()){
+  LedArrays::reset();devices_=std::move(updated);
+  for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(LedArrays::matches(n)){
+   runtime_.setPeripheralBinding(n["peripheral"]["id"]|"",n["binding"]);
+   if(mode_=="playing"){JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";LedArrays::action(n,args.as<JsonVariantConst>(),error);}
+  }
+  arrayHelpers_=helpers;
+ }
+ if(!error.empty()){reportedError_=error;arrayHelpers_=helpers;}
+ xSemaphoreGive(mutex_);
+}
+
+void LogicDevice::configureStatusLed(const DeviceSettings& device) {
+    const int pin=device.statusLedPin==255?-1:device.statusLedPin;
+    if(ledBinding_["pin"]==pin && ledBinding_["ledType"]==device.statusLedType &&
+       ledBinding_["greenPin"]==device.statusLedGreenPin && ledBinding_["bluePin"]==device.statusLedBluePin)return;
+    // Called again from the main loop if a simultaneous web request owns the
+    // graph. Rebinding must not block device service or reset the scheduler.
+    if(!mutex_ || xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+    ledBinding_["kind"]="led";ledBinding_["pin"]=pin;
+    ledBinding_["ledType"]=device.statusLedType;
+    ledBinding_["greenPin"]=device.statusLedGreenPin;
+    ledBinding_["bluePin"]=device.statusLedBluePin;
+    for(JsonObject definition:devices_.as<JsonArray>())if(definition["type"]=="hardware.led")definition["binding"].set(ledBinding_);
+    runtime_.setLedBinding(ledBinding_.as<JsonObjectConst>());
+    xSemaphoreGive(mutex_);
+}
+
+bool LogicDevice::begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const DeviceSettings& device) {
     mutex_=xSemaphoreCreateMutex();
     if(!mutex_)return false;
     source_=2166136261u;for(const char* p=program;*p;++p)source_=(source_^uint8_t(*p))*16777619u;
     JsonDocument compiled;deserializeJson(compiled,program);devices_.set(compiled["devices"]);
+    configureStatusLed(device);
     mode_=compiled["mode"]|"playing";
     if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
     std::string restored=program;
-    bool storageSafetyMigration=false;
-    Preferences migration;
-    if(migration.begin(kLogicRecoveryNamespace,false)){
-        storageSafetyMigration=!migration.getBool(kLogicStorageSafetyKey,false);
-        if(storageSafetyMigration)migration.putBool(kLogicStorageSafetyKey,true);
-        migration.end();
-    }
     JsonDocument data;
-    bool restoredSavedGraph=false;
     if(loadLogicRecord(data)) {
         if(data["source"]==source_) {
 #ifdef APP_LEGACY_OTA_FIT
@@ -148,26 +201,15 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
             if(ElmaLogic::validateEditable(data["graph"],devices_.as<JsonArrayConst>(),accepted,message)) {
                 restored.clear();serializeJson(accepted,restored);mode_=data["mode"]|"playing";
                 if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
-                restoredSavedGraph=true;
             }
 #endif
         }
     }
-    if(storageSafetyMigration&&restoredSavedGraph){
-        JsonDocument migrationGraph;deserializeJson(migrationGraph,restored);migrationGraph["mode"]="stopped";
-        restored.clear();serializeJson(migrationGraph,restored);mode_="stopped";
-        recoveryWarning_="Saved Logics were restored stopped after the storage safety upgrade. Review the graph, then explicitly start it.";
-        recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
-        Preferences writer;
-        if(writer.begin(kLogicRecoveryNamespace,false)){
-            writer.putBool("active",true);writer.putString("group","");writer.putString("node","");
-            writer.putString("warning",recoveryWarning_.c_str());writer.end();
-        }
-        DebugLog.println("[logic-guard] restored legacy saved Logics in stopped mode for storage safety migration");
-    }
     JsonDocument guarded;deserializeJson(guarded,restored);loadRecoveryState(guarded);restored.clear();serializeJson(guarded,restored);
     state_=&state;status_=std::move(status);actions_=std::move(actions);std::string error;
+    LedArrays::reset();
     bool ok=runtime_.begin(restored.c_str(),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},error);
+    if(ok)runtime_.setLedBinding(ledBinding_.as<JsonObjectConst>());
     if (!ok) {state_->setLastError(error.c_str());DebugLog.printf("[logics] %s\n",error.c_str());}
     if(ok && mode_=="paused")runtime_.pause(millis());
     if(ok && recoveryAppliedThisBoot_){String ignored;persist(runtime_.graph(),mode_,ignored);state_->setLastError(recoveryWarning_.c_str());}
@@ -179,6 +221,8 @@ bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::strin
     markLogicActivity(node["id"]|"",groupForNode(node["id"]|""));
     actionMarkedThisTick_=true;
     activityStableAt_=millis()+kLogicActionStableMs;
+    if(LedArrays::matches(node))return LedArrays::action(node,args,error);
+ if(PortablePeripherals::output(node))return PortablePeripherals::action(node,args,error);
     if (node["binding"]["group"]=="control" && std::string(node["peripheral"]["profile"]|"").find("relay")!=std::string::npos) {
         int gpio=pin(node);std::string command=args["action"]|"";
         if(gpio<0 || (command!="on" && command!="off" && command!="toggle" && command!="set")) {error="Unsupported Logics relay action";return false;}
@@ -198,6 +242,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     if(!mutex_ || xSemaphoreTake(mutex_,0)!=pdTRUE)return;
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
     updating_=updating;
+    LedArrays::tick(now,mode_=="playing"&&!updating);
     if (!runtime_.active() || !state_)return;
     if (updating) {runtime_.suspend();polled_=false;return;}
     if (polled_ && uint32_t(now-lastPoll_)<(mode_=="playing"?runtime_.recordingPollInterval(minimumPollIntervalMs):minimumPollIntervalMs))return;
@@ -217,7 +262,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
             if(y>=0)target["y"]=analogRead(y);
             if(sw>=0){pinMode(sw,INPUT_PULLUP);target["pressed"]=digitalRead(sw)==LOW;}
         } else if(n["binding"]["group"]=="control" || n["binding"]["group"]=="input") {
-            int gpio=pin(n);if(gpio<0)continue;bool active=digitalRead(gpio)==HIGH;
+            int gpio=pin(n);if(gpio<0)continue;bool active=PortablePeripherals::output(n)?PortablePeripherals::state(gpio):digitalRead(gpio)==HIGH;
             if(n["binding"]["group"]=="input") {
                 int i=n["binding"]["index"]|0;auto button=root["input"][i==0?"button1":"button2"];
                 if(i<2 && button["configuredIndex"]==i)active=button["active"].as<bool>();
@@ -289,6 +334,7 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){response["error"]="Logics busy";return;}
     response["mode"]=mode_;response["updating"]=updating_;runtime_.telemetry(response["live"].to<JsonObject>());
     response["groups"].set(runtime_.graph()["groups"]);
+    response["ledBinding"].set(ledBinding_);
 #ifdef APP_DISABLE_AUDIO
     response["audioEnabled"]=false;
 #else
@@ -343,6 +389,7 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         audioOwned_=false;
         std::string payload;serializeJson(accepted,payload);
         gpio_.reset();
+        LedArrays::reset();
         if(!runtime_.begin(payload.c_str(),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
         mode_="stopped";applyMode(mode);polled_=false;
 #endif

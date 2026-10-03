@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../web/logic-editor.css"><style>body{background:#101720;color:#edf2fb;font:14px Arial;margin:16px}#viewport{height:660px;width:1240px}.logic-node{box-sizing:border-box}button{font:inherit}h1{font-size:20px}</style></head><body><h1 id="title"></h1><div id="viewport" class="logic-viewport" tabindex="0"></div><script type="module">
+import {createLogicCanvas} from '../web/modules/logic-canvas.js';
+import {LOGIC_CATALOG} from '../web/modules/logic-catalog.js';
+const locale=new URLSearchParams(location.search).get('lang')||'en',translations=(await import(`../web/i18n/locales/${locale}.js`)).default;
+window.ElmaI18n={t:s=>translations.messages?.[s]||s};document.documentElement.lang=locale;document.getElementById('title').textContent=window.ElmaI18n.t('Logics');
+const spec=t=>LOGIC_CATALOG[t],node=(type,id,x,y)=>{const s=spec(type);return {...structuredClone(s),id,name:s.title,position:{x,y},parameters:structuredClone(s.parameters)};};
+const graph={schemaVersion:1,nodes:[node('event.start','start',20,150),node('timing.delay','delay',470,150),node('flow.sequence','action',870,150)],connections:[{id:'wire',source:{node:'start',port:'out'},target:{node:'delay',port:'in'},routingPoints:[{x:360,y:65,controlIn:{x:-65,y:0},controlOut:{x:65,y:0}}]},{id:'next',source:{node:'delay',port:'out'},target:{node:'action',port:'in'}}],view:{grid:true,snap:false},groups:[]};
+let before;window.saved=[];window.editor={graph,specs:Object.values(LOGIC_CATALOG),selected:new Set(),help:()=>'',begin(){before=structuredClone(this.graph)},changed(render=true){if(before)window.saved.push(before);before=null;if(render)canvas.render()},select(){canvas.select()},menu(){},message(){},copyDrag(){},controlGroup(){}};window.canvas=createLogicCanvas(editor,document.getElementById('viewport'));canvas.render();canvas.fit();window.ready=true;
+</script></body></html>

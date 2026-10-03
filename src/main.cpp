@@ -2,6 +2,8 @@
 #include "plot_telemetry.h"
 #include "plot_storage.h"
 #include "logic_device.h"
+#include "alarm_clock_service.h"
+#include "logic_sleep_service.h"
 #include "logic_audio_dispatch.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
@@ -108,10 +110,11 @@ void applyStatusLedConfig(uint8_t pin, uint8_t greenPin, uint8_t bluePin, const 
         return;
     }
 
+    const uint8_t previousRed=lastStatusLedRed,previousGreen=lastStatusLedGreen,previousBlue=lastStatusLedBlue;
     writeStatusLed(false);
     if (statusLedInitialized) {
         pinMode(activeStatusLedPin, INPUT);
-        if(activeStatusLedIsRgb){pinMode(activeStatusLedGreenPin,INPUT);pinMode(activeStatusLedBluePin,INPUT);}
+        if(activeStatusLedIsRgb){ledcDetachPin(activeStatusLedPin);ledcDetachPin(activeStatusLedGreenPin);ledcDetachPin(activeStatusLedBluePin);pinMode(activeStatusLedGreenPin,INPUT);pinMode(activeStatusLedBluePin,INPUT);}
     }
     activeStatusLedPin = pin;
     activeStatusLedGreenPin = greenPin;
@@ -120,6 +123,7 @@ void applyStatusLedConfig(uint8_t pin, uint8_t greenPin, uint8_t bluePin, const 
     activeStatusLedIsRgb = useRgb;
     statusLedColorKnown = false;
     initializeStatusLed();
+    writeStatusLedColor(previousRed,previousGreen,previousBlue);
 }
 
 bool apStatusLedBluePhase(unsigned long now) {
@@ -2868,6 +2872,8 @@ void applyRuntimeSettings() {
     motorController.applySettings(*settings);
     appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings);
     applyStatusLedConfig(settings->device.statusLedPin, settings->device.statusLedGreenPin, settings->device.statusLedBluePin, settings->device.statusLedType);
+    logicDevice.configureStatusLed(settings->device);
+    configureAlarmClock(*settings);
     applyWapeTriggerPin(settings->oled.displayType == "wape" ? settings->oled.wapeTriggerPin : 0);
     wifiManager->applySettings(*settings);
     batteryMonitor->applySettings(settings->battery, settings->battery.adcPin);
@@ -3925,6 +3931,7 @@ void setup() {
     Serial.begin(115200);
     DebugLog.begin();
     beginSystemMetrics();
+    beginLogicSleep();
     activeCpuFrequencyMhz = ESP.getCpuFreqMHz();
 
     const esp_reset_reason_t resetReason = esp_reset_reason();
@@ -4033,13 +4040,18 @@ void setup() {
     activeI2sDoutPin = settings->audio.doutPin;
     activeAudioOutputEnabled = settings->audio.enabled;
     audioPlayer->begin(activeI2sBclkPin, activeI2sWsPin, activeI2sDoutPin, settings->device.savedVolumePercent, activeAudioOutputEnabled, *appState);
+    configureAlarmClock(*settings);
     logicDevice.begin(ELMA_COMPILED_LOGICS,*appState,[](JsonObject root){
+        alarmClockSnapshot(root["clock"].to<JsonObject>());
+        logicSleepSnapshot(root["power"].to<JsonObject>());
         root["firmware"]["version"]=APP_VERSION;
         root["builtinLed"]["digital"]=lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue;
         root["battery"]["available"]=batteryMonitor->enabled() && batteryMonitor->latest().filteredVoltage>0;
         root["battery"]["percentage"]=estimateBatteryPercent(root["battery"]["voltage"] | 0.0f);
     },[](JsonObjectConst node,JsonVariantConst args,std::string& message){
         String error;bool ok=false;std::string type=node["type"] | "";
+        if(type=="hardware.sleep")return requestLogicSleep(node,args,message);
+        if(type=="clock.alarm")return setAlarmClock(args["source"]|"",args["epoch"]|int64_t(0),message);
         if(type=="mainboard.save_data") {
             return queuePlotRecording(args, message);
         }
@@ -4051,17 +4063,18 @@ void setup() {
             return true;
         }
         if(type=="hardware.led") {
-            int pin=node["binding"]["pin"]|-1;
-            if(pin<0){message="Built-in LED unavailable";return false;}
             std::string action=args["action"]|"";
             if(action=="release"){writeStatusLed(false);logicLedOwned=false;applyStatusLedConfig(settings->device.statusLedPin,settings->device.statusLedGreenPin,settings->device.statusLedBluePin,settings->device.statusLedType);return true;}
-            applyStatusLedConfig(pin,node["binding"]["greenPin"]|255,node["binding"]["bluePin"]|255,node["binding"]["ledType"]|"regular");
-            logicLedOwned=true;bool on=action!="off";
-            if(action=="toggle")on=!(lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue);
+            if(settings->device.statusLedPin==255){message="Built-in LED unavailable: select a status LED GPIO";return false;}
             if(action!="on"&&action!="off"&&action!="toggle"&&action!="write"){message="Unsupported LED action";return false;}
             double brightness=args["brightness"]|20.0;
             double red=args["red"]|0.0,green=args["green"]|255.0,blue=args["blue"]|0.0;
             if(!std::isfinite(brightness)||brightness<0||brightness>100||!std::isfinite(red)||red<0||red>255||!std::isfinite(green)||green<0||green>255||!std::isfinite(blue)||blue<0||blue>255){message="Invalid LED color";return false;}
+            // The live device configuration is authoritative, including after
+            // OTA or a web edit. Compiled graph bindings may reference an old pin.
+            applyStatusLedConfig(settings->device.statusLedPin,settings->device.statusLedGreenPin,settings->device.statusLedBluePin,settings->device.statusLedType);
+            logicLedOwned=true;bool on=action!="off";
+            if(action=="toggle")on=!(lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue);
             writeStatusLedColor(on?uint8_t(red*brightness/100):0,on?uint8_t(green*brightness/100):0,on?uint8_t(blue*brightness/100):0);return true;
         } else if(std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos) {
             std::string command=args["action"]|"";
@@ -4099,7 +4112,7 @@ void setup() {
         else if(type=="mainboard.device.reboot"){requestRestartSequence("logics",false);ok=true;}
         if(!ok)message=error.isEmpty()?"Unsupported or failed Logics action":error.c_str();
         return ok;
-    });
+    },settings->device);
     // Audio recovery uses the boot counter; Logics owns its own three-attempt
     // counter so the audio guard cannot stop an automation before retry #3.
 
@@ -4648,11 +4661,15 @@ void loop() {
     if (activeAudioOutputEnabled) {
         audioPlayer->loop();
     }
+    pollAlarmClock(now);
     const String playbackStateBeforeLogic = audioPlayer->currentState();
     const bool audioLatencySensitive = playbackStateBeforeLogic == "playing" || playbackStateBeforeLogic == "buffering";
-    logicDevice.loop(now, otaManager->isFirmwareTransferActive(),
+    logicDevice.configureStatusLed(settings->device);
+    logicDevice.configureLedArrays(settings->ui.peripheralHelperBindings);
+    if(!logicSleepPending())logicDevice.loop(now, otaManager->isFirmwareTransferActive(),
                      audioLatencySensitive ? kLogicPollIntervalDuringAudioMs : 100U);
     processDeferredActions();
+    processLogicSleep(otaManager->isFirmwareTransferActive() || audioLatencySensitive, [](){motorController.prepareForRestart();});
     if (activeAudioOutputEnabled) {
         audioPlayer->loop();
     }

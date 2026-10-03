@@ -7,7 +7,10 @@
 #include <sys/time.h>
 #include <cmath>
 #include <utility>
+#include <atomic>
 namespace {
+std::atomic<bool> sleepGate{false};
+std::atomic<unsigned> outstanding{0};
 struct Pending {char plot[33],series[33],unit[17],folder[129];double value,epoch;uint32_t uptime;};
 QueueHandle_t queue=nullptr;SemaphoreHandle_t io=nullptr;
 StaticQueue_t queueControl;uint8_t* queueBytes=nullptr;
@@ -46,10 +49,11 @@ bool writeSample(const Pending& p){
  if(bytes!=line.length()){file.close();status("Recording write failed; check free space/card");return false;}status("");
  Pending next;if(batch==7||xQueuePeek(queue,&next,0)!=pdTRUE||strcmp(next.folder,p.folder)||strcmp(next.plot,p.plot))break;
  if(xQueueReceive(queue,&current,0)!=pdTRUE)break;
+ --outstanding; // The original sample keeps this batch busy until flush/close completes.
  }
  file.flush();file.close();return true;
 }
-void worker(void*){Pending sample;for(;;)if(xQueueReceive(queue,&sample,portMAX_DELAY)==pdTRUE){writeSample(sample);vTaskDelay(1);}}
+void worker(void*){Pending sample;for(;;)if(xQueueReceive(queue,&sample,portMAX_DELAY)==pdTRUE){writeSample(sample);--outstanding;vTaskDelay(1);}}
 }
 void beginPlotStorage(){
  static SemaphoreHandle_t initialization=xSemaphoreCreateMutex();
@@ -76,7 +80,9 @@ bool queuePlotRecording(JsonVariantConst args,std::string& error){
  p.value=args["value"].as<double>();p.epoch=double(now.tv_sec)*1000+now.tv_usec/1000;p.uptime=millis();
  if(!queue)beginPlotStorage();
  if(!queue){error="Plot recording writer unavailable";return false;}
- if(xQueueSend(queue,&p,0)!=pdTRUE){error="Recording queue full; reduce sampling rate";return false;}return true;
+ ++outstanding;
+ if(sleepGate){--outstanding;error="Sleep preparation is draining recordings";return false;}
+ if(xQueueSend(queue,&p,0)!=pdTRUE){--outstanding;error="Recording queue full; reduce sampling rate";return false;}return true;
 }
 void plotRecordingStatus(JsonObject result){char error[128];uint32_t count;portENTER_CRITICAL(&statusMux);memcpy(error,lastError,sizeof(error));count=written;portEXIT_CRITICAL(&statusMux);result["error"]=error;result["written"]=count;result["available"]=storageMounted(StorageTarget::Sd);result["queued"]=queue?uxQueueMessagesWaiting(queue):0;result["clockSynced"]=time(nullptr)>1577836800;}
 static bool readPlotHistoryPage(const String& path,uint32_t offset,double from,double to,JsonDocument& response,String& error){
@@ -153,3 +159,6 @@ bool readPlotHistory(const String& path,uint32_t offset,double from,double to,Js
  }
  response["pending"]=true;return true;
 }
+
+void setPlotSleepGate(bool blocked){sleepGate=blocked;}
+bool plotSleepReady(){return outstanding.load()==0;}

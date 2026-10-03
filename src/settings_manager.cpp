@@ -109,7 +109,7 @@ bool isValidStatusLedPin(uint8_t pin) {
 }
 
 bool statusLedUsesPin(const DeviceSettings& device, int pin) {
-    return device.statusLedPin == pin || (device.statusLedType == "rgb" && (device.statusLedGreenPin == pin || device.statusLedBluePin == pin));
+    return device.statusLedPin != 255 && (device.statusLedPin == pin || (device.statusLedType == "rgb" && (device.statusLedGreenPin == pin || device.statusLedBluePin == pin)));
 }
 
 bool isValidWapeTriggerPin(uint8_t pin) {
@@ -194,7 +194,7 @@ bool configuredInputControlUsesPin(const UiSettings& ui, int pin) {
         if (profile == "none") continue;
         for (JsonPair binding : entry.value().as<JsonObject>()) {
             const String signal = binding.key().c_str();
-            if (signal == "MAIN_CONTROL" || signal == "SENSITIVITY" ||
+            if (signal.startsWith("LED_") || signal == "MAIN_CONTROL" || signal == "SENSITIVITY" ||
                 signal == "CONTACT" || signal == "SOURCE") continue;
             const String value = binding.value().as<String>();
             bool numeric = value.length() > 0;
@@ -254,7 +254,7 @@ bool sdPinConflictsWithRequiredFunctions(const SdSettings& sd, const AudioSettin
 
     return (sd.sdmmc && (audioUsesPin(audio, 15) || audioUsesPin(audio, 18))) || audioUsesPin(audio, sd.csPin) || audioUsesPin(audio, sd.sckPin) || audioUsesPin(audio, sd.mosiPin) || audioUsesPin(audio, sd.misoPin) ||
         sdUsesPin(sd, battery.adcPin) || sdUsesPin(sd, battery.chargingSensePin) || sdUsesPin(sd, device.statusLedPin) ||
-        (device.statusLedType == "rgb" && (sdUsesPin(sd, device.statusLedGreenPin) || sdUsesPin(sd, device.statusLedBluePin)));
+        (device.statusLedPin != 255 && device.statusLedType == "rgb" && (sdUsesPin(sd, device.statusLedGreenPin) || sdUsesPin(sd, device.statusLedBluePin)));
 }
 
 String normalizeDisplayType(String value) {
@@ -558,6 +558,8 @@ String normalizePeripheralProfileSelections(String value) {
 
 }  // namespace
 
+bool isSafeOutputPinForBoard(uint8_t pin) {return safeOutputPin(pin);}
+
 bool SettingsManager::begin() {
     if (!preferences_.begin(PREF_NAMESPACE, false)) return false;
     // A failed first provision can leave many keys behind without the final
@@ -781,7 +783,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     }
     if (!isValidStatusLedPin(settings.device.statusLedGreenPin)) settings.device.statusLedGreenPin = DefaultConfig::STATUS_LED_PIN;
     if (!isValidStatusLedPin(settings.device.statusLedBluePin)) settings.device.statusLedBluePin = DefaultConfig::STATUS_LED_PIN;
-    if (settings.device.statusLedType == "rgb" && (settings.device.statusLedPin == settings.device.statusLedGreenPin || settings.device.statusLedPin == settings.device.statusLedBluePin || settings.device.statusLedGreenPin == settings.device.statusLedBluePin)) settings.device.statusLedType = "regular";
+    if (settings.device.statusLedPin != 255 && settings.device.statusLedType == "rgb" && (settings.device.statusLedGreenPin == 255 || settings.device.statusLedBluePin == 255 || settings.device.statusLedPin == settings.device.statusLedGreenPin || settings.device.statusLedPin == settings.device.statusLedBluePin || settings.device.statusLedGreenPin == settings.device.statusLedBluePin)) settings.device.statusLedType = "regular";
     settings.device.button1Action = normalizeButtonAction(settings.device.button1Action, DefaultConfig::BUTTON1_DEFAULT_ACTION);
     settings.device.button2Action = normalizeButtonAction(settings.device.button2Action, DefaultConfig::BUTTON2_DEFAULT_ACTION);
     settings.effects.startupFile = normalizeEffectFileRef(settings.effects.startupFile);
@@ -855,7 +857,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     if (sdPinConflictsWithRequiredFunctions(settings.sd, settings.audio, settings.battery, settings.device)) {
         settings.sd.enabled = false;
     }
-    if (sdUsesPin(settings.sd, settings.device.statusLedPin) || (settings.device.statusLedType == "rgb" && (sdUsesPin(settings.sd, settings.device.statusLedGreenPin) || sdUsesPin(settings.sd, settings.device.statusLedBluePin)))) {
+    if (settings.device.statusLedPin != 255 && (sdUsesPin(settings.sd, settings.device.statusLedPin) || (settings.device.statusLedType == "rgb" && (sdUsesPin(settings.sd, settings.device.statusLedGreenPin) || sdUsesPin(settings.sd, settings.device.statusLedBluePin))))) {
         settings.device.statusLedPin = DefaultConfig::STATUS_LED_PIN;
         settings.device.statusLedType = DefaultConfig::STATUS_LED_TYPE;
     }
@@ -1619,8 +1621,10 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         copyString(device, "statusLedType", settings.device.statusLedType);
         if (device["statusLedPin"].is<int>() && device["statusLedPin"].as<int>() == -1) settings.device.statusLedPin = 255;
         else if (device["statusLedPin"].is<uint8_t>()) settings.device.statusLedPin = device["statusLedPin"].as<uint8_t>();
-        if (device["statusLedGreenPin"].is<uint8_t>()) settings.device.statusLedGreenPin = device["statusLedGreenPin"].as<uint8_t>();
-        if (device["statusLedBluePin"].is<uint8_t>()) settings.device.statusLedBluePin = device["statusLedBluePin"].as<uint8_t>();
+        if (device["statusLedGreenPin"].is<int>() && device["statusLedGreenPin"].as<int>() == -1) settings.device.statusLedGreenPin = 255;
+        else if (device["statusLedGreenPin"].is<uint8_t>()) settings.device.statusLedGreenPin = device["statusLedGreenPin"].as<uint8_t>();
+        if (device["statusLedBluePin"].is<int>() && device["statusLedBluePin"].as<int>() == -1) settings.device.statusLedBluePin = 255;
+        else if (device["statusLedBluePin"].is<uint8_t>()) settings.device.statusLedBluePin = device["statusLedBluePin"].as<uint8_t>();
         if (device["savedVolumePercent"].is<uint8_t>()) settings.device.savedVolumePercent = device["savedVolumePercent"].as<uint8_t>();
         if (device["audioMuted"].is<bool>()) settings.device.audioMuted = device["audioMuted"].as<bool>();
         if (device["lowBatterySleepEnabled"].is<bool>()) settings.device.lowBatterySleepEnabled = device["lowBatterySleepEnabled"].as<bool>();

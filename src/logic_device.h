@@ -3,12 +3,15 @@
 #include "logic_gpio.h"
 #include "app_state.h"
 #include <freertos/semphr.h>
+#include "settings_schema.h"
 
 // Adapter owns polling/physical GPIO. Main supplies existing subsystem actions.
 class LogicDevice {
 public:
     using StatusWriter = std::function<void(JsonObject)>;
-    bool begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions);
+    bool begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const DeviceSettings& device);
+    void configureStatusLed(const DeviceSettings& device);
+    void configureLedArrays(const String& helpers);
     void loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs = 100);
     void shuttingDown();
     bool request(JsonVariantConst command, JsonDocument& response, String& error);
@@ -26,6 +29,8 @@ private:
     std::string reportedError_;
     SemaphoreHandle_t mutex_ = nullptr;
     JsonDocument devices_;
+    String arrayHelpers_;
+    JsonDocument ledBinding_;
     std::string mode_ = "playing";
     uint32_t source_ = 0;
     bool updating_ = false, audioOwned_ = false;

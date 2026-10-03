@@ -1,4 +1,5 @@
 import {gpioRoleWireColor} from './peripheral-pin-model.js';
+import {BOARD_DEFAULTS} from './board-defaults.js';
 export function createConfigurationGpioTab({
   state,
   elements,
@@ -488,19 +489,27 @@ export function createConfigurationGpioTab({
     queueSettingsSave(150);
   }
 
+  function applyBoardLedDefaults(board) {
+    const defaults=BOARD_DEFAULTS[board];
+    if (!defaults || defaults.preserveExternalLed) return;
+    for (const [key,value] of Object.entries(defaults)) {
+      if (key==='preserveExternalLed') continue;
+      state.settings.device[key]=value;
+      const field=elements[key] || document.querySelector(`[name="device.${key}"]`);
+      if (!field) continue;
+      if (field.type==='checkbox') field.checked=!!value;
+      else {
+        if (field.tagName==='SELECT' && ![...field.options].some(o=>o.value===String(value))) field.add(new Option(value===-1?'Disabled':`GPIO${value}`,String(value)));
+        field.value=String(value);
+      }
+    }
+  }
+
   function bindEvents() {
     elements.gpioSafetyOverride?.addEventListener("change",()=>{saveGpioBoardPreferences();syncGpioMappingControls();renderPeripheralDiagram();});
     elements.gpioBoardSelector?.addEventListener("change", () => {
       const board=activeGpioBoardProfile();
-      const onboardLed=Object.entries(gpioBoardReservedPins[board]||{}).find(([,meta])=>meta.kind==='onboard' && /LED|WS2812|RGB red/i.test(meta.label||''));
-      const led=onboardLed?{[board]:Number(onboardLed[0])}:({"esp32-c3":8,"esp32-s3-super-mini":48,"esp32-s3-zero":48});
-      // Explicit board changes choose its built-in LED; loading saved projects keeps overrides.
-      if(elements.statusLedPin && led[board]!==undefined){
-        const value=String(led[board]);
-        if(![...elements.statusLedPin.options].some(option=>option.value===value))elements.statusLedPin.add(new Option(`GPIO${value}`,value));
-        elements.statusLedPin.value=value;
-        state.settings.device.statusLedPin=led[board];
-      }
+      applyBoardLedDefaults(board);
       saveGpioBoardPreferences();
       syncGpioMappingControls();
       updateGpioBoardImage();
@@ -521,14 +530,7 @@ export function createConfigurationGpioTab({
         updateGpioBoardSelectorMode(state.status, { force: true });
       }
       const board=activeGpioBoardProfile();
-      const led={"esp32-c3":8,"esp32-s3-super-mini":48,"esp32-s3-zero":48,"esp32-s3-devkit-c1":48,"wemos-lolin32-mini":22,"wemos-d1-mini-esp32":2,"esp32-wroom":2,"esp32-mini":2,"esp32-wrover":2};
-      // Explicit board changes choose its built-in LED; loading saved projects keeps overrides.
-      if(elements.statusLedPin && led[board]!==undefined){
-        const value=String(led[board]);
-        if(![...elements.statusLedPin.options].some(option=>option.value===value))elements.statusLedPin.add(new Option(`GPIO${value}`,value));
-        elements.statusLedPin.value=value;
-        state.settings.device.statusLedPin=led[board];
-      }
+      applyBoardLedDefaults(board);
       saveGpioBoardPreferences();
       syncGpioMappingControls();
       updateGpioBoardImage();

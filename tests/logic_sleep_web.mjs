@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {sleepProblem,updateSleep,wakePins} from '../web/modules/logic-sleep.js';
+const sleep={id:'s',type:'hardware.sleep',parameters:{mode:'light',timerEnabled:true,seconds:5},ports:[{id:'out'},{id:'seconds'},{id:'wake'}]};
+const wake={id:'w',type:'hardware.wake_gpio',parameters:{pin:48,level:'low'},ports:[{id:'source'}]};
+const graph={nodes:[sleep,wake],devices:[{type:sleep.type,binding:{modes:['light','deep']}},{type:wake.type,binding:{allowedPins:{1:{light:true,deep:true},48:{light:true,deep:false}}}}],connections:[{source:{node:'w',port:'source'},target:{node:'s',port:'wake'}}]};
+assert.equal(sleepProblem(sleep,graph),'');sleep.parameters.mode='deep';assert.match(sleepProblem(sleep,graph),/cannot wake/);updateSleep(sleep,graph);assert.equal(sleep.ports[0].enabled,false);
+wake.parameters.pin=1;assert.equal(sleepProblem(sleep,graph),'');sleep.parameters.timerEnabled=false;graph.connections=[];assert.match(sleepProblem(sleep,graph),/wake timer/);
+graph.nodes.push({id:'gpio',type:'hardware.gpio',parameters:{pin:1}});assert.ok(!wakePins(wake,graph).some(([p])=>Number(p)===1));
+sleep.parameters.timerEnabled=true;sleep.parameters.seconds=0;assert.match(sleepProblem(sleep,graph),/Wake delay/);
+console.log('PASS: web sleep mode, GPIO, pin ownership, required wake source and timer validation');

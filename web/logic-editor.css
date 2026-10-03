@@ -62,3 +62,19 @@ body:has(#tab-logics.active) .wrap{width:min(1920px,calc(100% - 24px));max-width
 @media(max-width:900px){#tab-logics .logic-save-controls{order:0}#tab-logics .logic-palette{flex-basis:100%}}
 
 .logic-node header{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logic-port-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logic-node-test-controls{position:absolute;left:12px;right:12px;display:flex;gap:6px}.logic-node-test-controls button{flex:1;min-width:0;padding:5px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logic-group-controls{max-width:calc(100% - 24px)}.logic-group-controls button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logic-wires path.runtime-active{stroke-dasharray:5 7;animation:logic-runtime-flow 1.2s linear infinite}.logic-wires path.flowing{animation:logic-flow .8s linear 2}.logic-group-controls button.active{box-shadow:0 0 0 2px #ef990066}@keyframes logic-runtime-flow{to{stroke-dashoffset:-24}}@media(prefers-reduced-motion:reduce){.logic-wires path.runtime-active{animation:none}}
+
+#tab-logics .logic-alarm-parameter > .logic-alarm-field{position:absolute;left:143px;width:calc(100% - 143px)}
+#tab-logics .logic-alarm-field label{display:flex;align-items:center;gap:3px;white-space:nowrap;margin:0}
+#tab-logics .logic-alarm-field input[type=checkbox]{position:static;left:auto;width:auto;margin:0}
+
+#tab-logics .logic-sleep-node .logic-parameter input,#tab-logics .logic-sleep-node .logic-parameter select{left:113px;width:calc(100% - 113px)}
+
+.logic-route-controls{visibility:hidden;pointer-events:none}.logic-route:hover .logic-route-controls,.logic-route.editing .logic-route-controls,.logic-route.touch-edit .logic-route-controls{visibility:visible;pointer-events:auto}.logic-route:hover>path:first-child,.logic-route.editing>path:first-child{stroke:#ffb020;stroke-width:5}.logic-route-hit{pointer-events:stroke;cursor:crosshair;touch-action:none}.logic-route-dot{fill:#edf2fb;stroke:#ef9900;stroke-width:2;cursor:move;pointer-events:all}.logic-route-handle{stroke:white;stroke-width:1;cursor:move;pointer-events:all}.logic-route-arm{stroke:#8699b2;stroke-width:1;stroke-dasharray:4 3;pointer-events:none}.logic-route-corridor{stroke:transparent;stroke-width:12;pointer-events:stroke}.logic-route{touch-action:none}
+
+/* Only the hovered dot or the persistent selected dot owns visible handles. */
+.logic-route-controls{visibility:visible!important;pointer-events:none!important}
+.logic-route-dot,.logic-route-handle,.logic-route-arm,.logic-route-corridor{visibility:hidden;pointer-events:none}
+.logic-route:hover .logic-route-dot,.logic-route.touch-edit .logic-route-dot,.logic-route-dot.route-focused{visibility:visible;pointer-events:all}
+.logic-route-handle.route-focused{visibility:visible;pointer-events:all}
+.logic-route-arm.route-focused{visibility:visible;pointer-events:none}
+.logic-route-corridor.route-focused{visibility:visible;pointer-events:stroke}

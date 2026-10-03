@@ -9,7 +9,9 @@ const root = fs.realpathSync(path.resolve(process.argv[2]));
 const output = path.resolve(process.argv[3]);
 const boards = ["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32-spk-n16r8",
   "esp32-s3-devkit-c1", "esp32-s3-cam-module", "esp32-wrover", "esp32-wroom", "esp32-mini",
-  "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6"];
+  "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6", "wemos-d1-mini-esp32", "esp32-s2-wemos-mini"];
+const metadata=JSON.parse(fs.readFileSync(path.join(root,"scripts/runtime-board-catalog.json"),"utf8"));
+const boardIds=JSON.parse(fs.readFileSync(path.join(root,"scripts/mainboard-svg-manifest.json"),"utf8"));
 const app = fs.readFileSync(path.join(root, "web/app.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
 const boardContacts = JSON.parse(fs.readFileSync(path.join(root, "web/board-pin-contacts.json"), "utf8"));
@@ -24,7 +26,7 @@ function replaceFunction(source, name, replacement, indent = "") {
 
 for (const [index, board] of boards.entries()) {
   const chip = policy.boardChipFamily(board);
-  const folder = path.join(output, "__boards", String(index + 1));
+  const folder = path.join(output, "__boards", String(boardIds[metadata[board].asset.src.slice(1)]));
   fs.mkdirSync(folder, {recursive: true});
   let narrowedApp = app.replace(/^const PC_DESIGNER_RUNTIME = .*;$/m, "const PC_DESIGNER_RUNTIME = false;");
   let maps = 0;
@@ -34,9 +36,9 @@ for (const [index, board] of boards.entries()) {
   });
   if (maps !== 5) throw new Error(`Board map coverage changed: found ${maps}`);
   narrowedApp = narrowedApp.replace(/const WS_STATUS_LED_BOARD_PROFILES = new Set\(\[.*?\]\);/,
-    `const WS_STATUS_LED_BOARD_PROFILES = new Set(${JSON.stringify(index < 2 ? [board] : [])});`);
+    `const WS_STATUS_LED_BOARD_PROFILES = new Set(${JSON.stringify(metadata[board].defaults.statusLedType === "neopixel" ? [board] : [])});`);
   narrowedApp = replaceFunction(narrowedApp, "boardProfileChipFamily", `function boardProfileChipFamily() { return ${JSON.stringify(chip)}; }`);
-  narrowedApp = replaceFunction(narrowedApp, "boardDefaultStatusLedPin", `function boardDefaultStatusLedPin() { return ${chip === "esp32c3" ? 8 : ["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-devkit-c1"].includes(board) ? 48 : 22}; }`);
+  narrowedApp = replaceFunction(narrowedApp, "boardDefaultStatusLedPin", `function boardDefaultStatusLedPin() { return ${metadata[board].defaults.statusLedPin}; }`);
   narrowedApp = replaceFunction(narrowedApp, "detectGpioBoardProfile", `function detectGpioBoardProfile() { return ${JSON.stringify(board)}; }`);
 
   await build({
@@ -47,6 +49,9 @@ for (const [index, board] of boards.entries()) {
         const filename = path.basename(args.path);
         let source = fs.readFileSync(args.path, "utf8");
         if (args.path === path.join(root, "web/app.js")) source = narrowedApp;
+        if (filename === "board-defaults.js") {
+          source = `export const BOARD_DEFAULTS = ${JSON.stringify({[board]:metadata[board].defaults})};`;
+        }
         if (filename === "board-pin-policy.js") {
           source = replaceFunction(source, "boardChipFamily", `export function boardChipFamily() { return ${JSON.stringify(chip)}; }`);
           source = replaceFunction(source, "chipPins", `export function chipPins(chip, output = false) { return output ? ${JSON.stringify(policy.chipPins(chip, true, board))} : ${JSON.stringify(policy.chipPins(chip, false, board))}; }`);

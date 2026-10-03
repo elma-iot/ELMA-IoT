@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {packCompactGraph,expandCompactGraph} from '../web/modules/logic-compact-codec.js';
+const g={schemaVersion:1,nodes:[{id:'n',type:'bridge.number',name:'Custom number',position:{x:12,y:34},parameters:{value:42},ports:[{id:'in'}]}],connections:[{id:'wire',source:{node:'n',port:'out'},target:{node:'other',port:'in'},routingPoints:[{x:30,y:40,controlIn:{x:-10,y:0},controlOut:{x:10,y:0}}]}],groups:[{id:'g',name:'Example',color:'#123456',mode:'playing',nodes:['n'],rect:{x:0,y:0,width:500,height:400}}],view:{zoom:.5,labels:[]}};
+const before=structuredClone(g),packed=packCompactGraph(g),restored=expandCompactGraph(packed);
+assert.deepEqual(g,before);assert(!packed.nodes[0].ports);assert(!packed.nodes[0].position);
+for(const key of ['connections','groups','view'])assert.deepEqual(restored[key],g[key]);
+for(const key of ['name','position','parameters','id','type'])assert.deepEqual(restored.nodes[0][key],g.nodes[0][key]);
+assert.deepEqual(expandCompactGraph(packCompactGraph(packed)),restored);
+assert.throws(()=>expandCompactGraph({...packed,layoutGzip:'bad'}));
+console.log('Compact GZIP layout, groups, handles, values and immutable source passed');

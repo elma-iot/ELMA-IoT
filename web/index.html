@@ -580,19 +580,6 @@
               <label>Saved Volume (%)
                 <input form="settingsForm" name="device.savedVolumePercent" type="number" min="0" max="100">
               </label>
-              <label>Status LED type
-                <select id="statusLedType" form="settingsForm" name="device.statusLedType">
-                  <option value="regular">Regular LED</option>
-                  <option value="rgb">RGB LED (3 GPIOs)</option>
-                  <option value="neopixel">RGB NeoPixel / WS2812</option>
-                </select>
-              </label>
-              <label class="status-led-rgb-field">RGB green GPIO
-                <select id="statusLedGreenPin" form="settingsForm" name="device.statusLedGreenPin"></select>
-              </label>
-              <label class="status-led-rgb-field">RGB blue GPIO
-                <select id="statusLedBluePin" form="settingsForm" name="device.statusLedBluePin"></select>
-              </label>
             </div>
             <div class="row gpio-remap-source">
               <label>SD CS
@@ -857,6 +844,28 @@
               <div class="gpio-controls-field-main">
                 <select id="statusLedPin" form="settingsForm" name="device.statusLedPin" aria-label="Status LED GPIO"></select>
                 <small>Saved status output, including assignments not shown on the board diagram. Choose a valid pin matching your wiring.</small>
+              </div>
+            </label>
+            <label class="gpio-controls-field">
+              <span class="gpio-controls-field-label">Status LED type</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedType" form="settingsForm" name="device.statusLedType">
+                  <option value="regular">Regular LED</option>
+                  <option value="rgb">RGB LED (3 GPIOs)</option>
+                  <option value="neopixel">RGB NeoPixel / WS2812</option>
+                </select>
+              </div>
+            </label>
+            <label class="gpio-controls-field status-led-rgb-field">
+              <span class="gpio-controls-field-label">RGB green GPIO</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedGreenPin" form="settingsForm" name="device.statusLedGreenPin"></select>
+              </div>
+            </label>
+            <label class="gpio-controls-field status-led-rgb-field">
+              <span class="gpio-controls-field-label">RGB blue GPIO</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedBluePin" form="settingsForm" name="device.statusLedBluePin"></select>
               </div>
             </label>
             <label class="gpio-controls-field gpio-controls-field-audio">

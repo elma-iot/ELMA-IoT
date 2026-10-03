@@ -1,3 +1,4 @@
+import {arrayControls} from './led-array.js';
 export function createConfigurationPeripheralsTab({
   state,
   elements,
@@ -313,6 +314,10 @@ export function createConfigurationPeripheralsTab({
         singularLabel: "control",
       }));
       elements.peripheralControlsList.appendChild(row);
+      if(selectedValue==='ws2812-neopixel-led-strip'){
+        state.peripheralHelperBindings ||= {};const key=`control:${index}`;const values=state.peripheralHelperBindings[key]||{};
+        elements.peripheralControlsList.append(arrayControls(values,256,next=>{state.peripheralHelperBindings[key]=next;renderPeripheralDiagram();queueSettingsSave(150);}));
+      }
     });
   }
 

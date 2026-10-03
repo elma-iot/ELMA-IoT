@@ -9,7 +9,7 @@ export function occupiedPeripheralPins({roles,ownRoles=new Set(),bindings={},own
   const occupied=new Set(),add=value=>{if(value!==null&&value!==undefined&&value!==''&&Number.isInteger(Number(value))&&Number(value)>=0)occupied.add(Number(value));};
   for(const [role,pin] of roles)if(!ownRoles.has(role))add(pin);
   for(const [slot,signals] of Object.entries(bindings))if(slot!==ownSlot)for(const [signal,pin] of Object.entries(signals||{})){
-    if(!['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE'].includes(signal))add(pin);
+    if(!signal.startsWith('LED_')&&!['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE'].includes(signal))add(pin);
   }
   return occupied;
 }

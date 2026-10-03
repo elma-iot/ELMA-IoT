@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {applyLiveLedBinding} from '../web/modules/logic-hardware.js';
+const led={id:'led',type:'hardware.led',binding:{pin:8,ledType:'regular'},parameters:{brightness:100},ports:[{id:'toggle'},{id:'red'},{id:'out'},{id:'brightness'}]};
+const graph={devices:[structuredClone(led)],nodes:[structuredClone(led)],connections:[{source:{node:'plot',port:'out'},target:{node:'led',port:'toggle'}}],groups:[{id:'g',nodes:['led'],mode:'playing'}]};
+const preserved=JSON.stringify([graph.connections,graph.groups,graph.nodes[0].parameters]);
+assert.equal(applyLiveLedBinding(graph,{kind:'led',pin:48,ledType:'neopixel'}),true);
+assert.equal(graph.nodes[0].binding.pin,48);
+assert.equal(graph.nodes[0].ports[1].enabled,true);
+assert.equal(applyLiveLedBinding(graph,{kind:'led',pin:48,ledType:'neopixel'}),false);
+assert.equal(applyLiveLedBinding(graph,{kind:'led',pin:21,ledType:'regular',brightnessSupported:true}),true);
+assert.equal(graph.nodes[0].ports[1].enabled,false);
+assert.equal(graph.nodes[0].ports[3].enabled,true);
+applyLiveLedBinding(graph,{kind:'led',pin:-1,ledType:'regular'});
+assert.ok(graph.nodes[0].ports.every(port=>!port.enabled));
+assert.equal(JSON.stringify([graph.connections,graph.groups,graph.nodes[0].parameters]),preserved);
+console.log('PASS: live web LED pin/type/port updates preserve wiring and group state');

@@ -289,9 +289,9 @@ export function createConfigurationSettingsPersistenceModule({
 
     payload.mqtt.port = Number(payload.mqtt.port || 1883);
     payload.device.savedVolumePercent = Number(elements.volumeSlider?.value || payload.device.savedVolumePercent || 5);
-    payload.device.statusLedPin = Number(elements.statusLedPin?.value || payload.device.statusLedPin || state.settings?.device?.statusLedPin || 0);
-    payload.device.statusLedGreenPin = Number(elements.statusLedGreenPin?.value || payload.device.statusLedGreenPin || state.settings?.device?.statusLedGreenPin || 0);
-    payload.device.statusLedBluePin = Number(elements.statusLedBluePin?.value || payload.device.statusLedBluePin || state.settings?.device?.statusLedBluePin || 0);
+    payload.device.statusLedPin = Number(elements.statusLedPin?.value ?? payload.device.statusLedPin ?? state.settings?.device?.statusLedPin ?? -1);
+    payload.device.statusLedGreenPin = Number(elements.statusLedGreenPin?.value ?? payload.device.statusLedGreenPin ?? state.settings?.device?.statusLedGreenPin ?? -1);
+    payload.device.statusLedBluePin = Number(elements.statusLedBluePin?.value ?? payload.device.statusLedBluePin ?? state.settings?.device?.statusLedBluePin ?? -1);
     payload.device.audioMuted = Boolean(elements.audioMutedToggle?.checked ?? payload.device.audioMuted ?? true);
     payload.device.lowBatterySleepThresholdPercent = Number(payload.device.lowBatterySleepThresholdPercent || 20);
     payload.device.lowBatteryWakeIntervalMinutes = Number(payload.device.lowBatteryWakeIntervalMinutes || 0);

@@ -1,9 +1,27 @@
 #include "logic_runtime.h"
 #include "logic_text.h"
+#include "logic_sleep_contract.h"
 #include <algorithm>
 #include <cstring>
+#include <cstdlib>
+#include <cctype>
 
 namespace ElmaLogic {
+void Runtime::setPeripheralBinding(const char* id,JsonObjectConst binding){
+ for(const char* collection:{"devices","nodes"})for(JsonObject item:graph_[collection].as<JsonArray>())if(item["peripheral"]["id"]==id)item["binding"].set(binding);
+}
+void Runtime::setLedBinding(JsonObjectConst binding) {
+    // Metadata only: keep timers, running groups and unsaved execution state.
+    for(const char* collection:{"devices","nodes"})for(JsonObject item:graph_[collection].as<JsonArray>()) {
+        if(item["type"]!="hardware.led")continue;
+        item["binding"].set(binding);
+        for(JsonObject port:item["ports"].as<JsonArray>()) {
+            const std::string id=port["id"]|"";
+            const bool color=id=="red"||id=="green"||id=="blue"||id=="brightness";
+            port["enabled"]=(binding["pin"]|-1)>=0 && (!color || binding["ledType"]!="regular");
+        }
+    }
+}
 namespace {
 void setBuzzerPreset(JsonObject source,const char* requested) {
     const std::string preset=requested?requested:"beep";
@@ -18,14 +36,18 @@ void setBuzzerPreset(JsonObject source,const char* requested) {
 }
 }
 bool Runtime::begin(const char* payload, Action action, std::string& error) {
-    suspend(); graph_.clear(); previous_.clear(); cache_.clear(); started_ = false; paused_ = false; error_.clear();
-    if (std::strlen(payload) > 32768 || deserializeJson(graph_, payload) ||
-        graph_["schemaVersion"] != 1 || !graph_["nodes"].is<JsonArray>() ||
-        !graph_["connections"].is<JsonArray>() || graph_["nodes"].size() > 64 || graph_["connections"].size() > 128) {
-        error = "Invalid/oversized compiled Logics payload"; graph_.clear(); return false;
-    }
+    if(std::strlen(payload)>32768){error="Invalid/oversized compiled Logics payload";return false;}
+    suspend();graph_.clear();previous_.clear();cache_.clear();
+    JsonDocument document;
+    if(deserializeJson(document,payload)){error="Invalid compiled Logics JSON";return false;}
+    return begin(std::move(document),std::move(action),error);
+}
+bool Runtime::begin(JsonDocument&& payload, Action action, std::string& error) {
+    if(payload.overflowed() || payload["schemaVersion"]!=1 || !payload["nodes"].is<JsonArray>() || !payload["connections"].is<JsonArray>() || payload["nodes"].size()>64 || payload["connections"].size()>128 || measureJson(payload)>32768){error="Invalid/oversized compiled Logics payload";return false;}
+    suspend();states_.clear();states_.shrink_to_fit();pulses_.clear();pulses_.shrink_to_fit();activity_.clear();activity_.shrink_to_fit();
+    graph_=std::move(payload);previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();
     states_.assign(graph_["nodes"].size(), State{}); action_ = std::move(action);
-    pulses_.reserve(128); activity_.assign(states_.size(), Activity{});
+    pulses_.reserve(std::min(size_t(128),graph_["connections"].size()+size_t(4))); activity_.assign(states_.size(), Activity{});
     for (JsonObjectConst edge : graph_["connections"].as<JsonArrayConst>()) {
         if (index(edge["source"]["node"] | "") < 0 || index(edge["target"]["node"] | "") < 0) {
             error = "Compiled Logics contains a missing node"; graph_.clear(); return false;
@@ -75,6 +97,40 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
         if((!linked(n,"append")||!appended.isNull()) && appendText(input(n,"value").as<std::string>(),appended,input(n,"separator").as<std::string>(),text))result.set(text);
         else error_="Text value unavailable or exceeds 1024 bytes";
     }
+    else if(type=="hardware.wake_gpio") {
+        const std::string pin=std::to_string(node(n)["parameters"]["pin"]|-1);
+        result["type"]=type;result["parameters"].set(node(n)["parameters"]);
+        result["binding"]["allowedPins"][pin].set(node(n)["binding"]["allowedPins"][pin]);
+    }
+    else if((type=="hardware.sleep"||type=="event.wake")&&std::string(port)=="cause")result.set(status_["power"]["cause"]);
+    else if(type=="clock.alarm") {
+        const std::string source=node(n)["parameters"]["clockSource"]|"utc";
+        auto epoch=status_["clock"][source];
+        const bool valid=!epoch.isNull() && epoch.as<int64_t>()>=946684800LL && epoch.as<int64_t>()<4102444800LL;
+        if(std::string(port)=="valid")result.set(valid);
+        else if(std::string(port)=="epoch" && valid)result.set(epoch);
+        else if(std::string(port)=="clockTime" && valid)result.set(alarmClockText(epoch.as<int64_t>()));
+    }
+    else if(type=="timing.countdown") {
+        const auto& state=states_[n];
+        if(std::string(port)=="running")result.set(state.pending && !paused_ && !state.frozen);
+        else if(std::string(port)=="remaining") {
+            const uint32_t at=state.frozen?state.frozenAt:paused_?pausedAt_:now_;
+            if(state.pending)result.set(std::max(int32_t(0),int32_t(state.due-at))/1000.0);
+            else if(state.initialized)result.set(0.0);
+            else result.set(input(n,"seconds"));
+        }
+    }
+    else if(type=="convert.boolean_number"||type=="convert.boolean_integer") {auto v=input(n,"input");if(!v.isNull())result.set(v.as<bool>()?1:0);}
+    else if(type=="convert.number_integer"||type=="convert.measurement_number") {
+        auto v=input(n,"input");if(!v.isNull()){double x=v.is<bool>()?(v.as<bool>()?1.:0.):v.as<double>();
+        if(std::isfinite(x)){if(type=="convert.measurement_number")result.set(x);else if(x>=-2147483648. && x<=2147483647.)result.set(int32_t(x));}}
+    }
+    else if(type=="convert.text_number") {
+        auto v=input(n,"input");if(v.is<const char*>()){const char* text=v.as<const char*>();char* end=nullptr;double x=std::strtod(text,&end);
+        if(end!=text){while(*end && std::isspace(static_cast<unsigned char>(*end)))++end;if(!*end && std::isfinite(x))result.set(x);}}
+    }
+    else if(type.compare(0,7,"bridge.")==0)result.set(input(n,"value"));
     else if(type=="recording.interval")result.set(input(n,"value"));
     else if (type.compare(0, 6, "value.") == 0) result.set(input(n, "value"));
     else if (type.compare(0, 10, "mainboard.") == 0) {
@@ -147,6 +203,12 @@ bool Runtime::testAction(const char* nodeId, const char* command, std::string& e
     const int found=index(nodeId ? nodeId : "");
     if(found<0){error="Logics test node was not found; save the canvas first";return false;}
     const size_t n=size_t(found);const std::string type=node(n)["type"]|"";
+    if(type=="clock.alarm" && std::string(command?command:"")=="setClock") {
+        int64_t epoch;auto p=node(n)["parameters"];
+        if(!alarmDateTime(p["manualDate"]|"",p["manualTime"]|"",epoch)){error="Set a valid clock date/time (2000-2099)";return false;}
+        JsonDocument args;args["action"]="setClock";args["epoch"]=epoch;args["source"].set(p["clockSource"]);
+        return action_&&action_(node(n),args.as<JsonVariantConst>(),error);
+    }
     const std::string profile=node(n)["peripheral"]["profile"]|"";
     if(type!="peripheral.play" || profile.find("buzzer")==std::string::npos){error="Only a configured Buzzer Play node can be tested here";return false;}
     const std::string requested=command ? command : "";
@@ -168,10 +230,31 @@ bool Runtime::testAction(const char* nodeId, const char* command, std::string& e
 void Runtime::execute(size_t n, const char* trigger) {
     if(!allowed(n))return;
     auto& state = states_[n]; std::string type = node(n)["type"].as<std::string>();
-    if (type=="condition.if" || type=="flow.branch") {
+    if(type=="hardware.sleep") {
+        if(state.sleeping)return;
+        JsonDocument args;args["seconds"].set(input(n,"seconds"));args["wake"].set(input(n,"wake"));std::string error;
+        state.wakeSequence=status_["power"]["sequence"]|0u;
+        if(action_&&action_(node(n),args.as<JsonVariantConst>(),error))state.sleeping=true;
+        else {error_=error.empty()?"Sleep rejected":error;emit(n,"failed");activity_[n].failed=true;}
+    }
+    else if(type=="clock.alarm") {
+        if(std::strcmp(trigger,"rearm")==0)state.alarm=AlarmState{};
+        else if(std::strcmp(trigger,"setClock")==0){std::string message;if(!testAction(node(n)["id"]|"","setClock",message))error_=message;}
+    }
+    else if (type=="condition.if" || type=="flow.branch") {
         auto v = input(n,"condition"); if (!v.isNull()) emit(n,v.as<bool>() ? "true" : "false");
     } else if (type=="flow.gate") { if (input(n,"enabled").as<bool>()) emit(n); }
+    else if(type.compare(0,7,"bridge.")==0)emit(n);
     else if (type=="flow.sequence") { emit(n,"first"); emit(n,"second"); }
+    else if(type=="timing.countdown") {
+        if(std::strcmp(trigger,"stop")==0){state.pending=false;state.initialized=false;}
+        else if(std::strcmp(trigger,"in")==0 || std::strcmp(trigger,"reset")==0) {
+            const uint32_t ms=interval(n);if(!ms)return;
+            const bool run=std::strcmp(trigger,"in")==0 || state.pending;
+            state.interval=ms;state.due=now_+ms;state.pending=run;state.initialized=run;
+        }
+        cache_.remove(node(n)["id"]|"");
+    }
     else if (type.compare(0,7,"timing.")==0) {
         uint32_t ms = interval(n); if (!ms) return;
         if (type=="timing.cooldown") { if (!state.pending || int32_t(now_-state.due)>=0) { emit(n); state.pending=true;state.due=now_+ms; } }
@@ -206,6 +289,7 @@ void Runtime::execute(size_t n, const char* trigger) {
             if(!appendText(input(n,"text").as<std::string>(),appended,input(n,"separator").as<std::string>(),text)){error_="MQTT payload exceeds 1024 bytes or is not a primitive value";activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;return;}
             args["payload"]=text;
         }
+        if(type=="peripheral.strip"){for(const char* key:{"red","green","blue","brightness","effectSpeed"})args[key].set(input(n,key));args["effect"].set(node(n)["parameters"]["effect"]);}
         if(type=="peripheral.text"){args["text"].set(input(n,"text"));args["seconds"].set(input(n,"seconds"));}
         if (type=="peripheral.volume") args["value"].set(input(n,"volume"));
         else if (linked(n,"value") || !node(n)["parameters"]["value"].isNull()) args["value"].set(input(n,"value"));
@@ -215,7 +299,20 @@ void Runtime::execute(size_t n, const char* trigger) {
             for(const char* key:{"state","duty","red","green","blue","brightness"})args[key].set(input(n,key));
         }
         std::string error;
-        if (action_ && action_(target,args.as<JsonVariantConst>(),error)) emit(n);
+        // Never replace a connected-but-unavailable converted value with an action's default.
+        if(type.compare(0,10,"mainboard.")!=0)for(auto p:node(n)["ports"].as<JsonArrayConst>()) {
+            const char* key=p["id"]|"";
+            if(p["direction"]=="input" && p["type"]!="execution" && linked(n,key) && input(n,key).isNull()) {
+                error_="Connected input value unavailable";activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;return;
+            }
+        }
+        if (action_ && action_(target,args.as<JsonVariantConst>(),error)) {
+#if APP_ESP8266_COMPACT
+            // Wi-Fi telemetry may be absent during boot; a later valid sample recovers.
+            if(type=="mainboard.plot" && error_=="Plot value unavailable") error_.clear();
+#endif
+            emit(n);
+        }
         else {error_=error.empty() ? "Logics action failed" : error;activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;}
     }
 }
@@ -262,9 +359,22 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
             state.recordingAt=now;state.recordingStarted=true;
         }
         if(!allowed(n))continue;
+        if(type=="hardware.sleep"&&state.sleeping && status_["power"]["node"]==node(n)["id"] && (status_["power"]["sequence"]|0u)!=state.wakeSequence) {
+            state.sleeping=false;const std::string error=status_["power"]["error"]|"";
+            if(error.empty())emit(n);else {error_=error;activity_[n].failed=true;emit(n,"failed");}
+        }
+        if(type=="event.wake") {
+            uint32_t count=status_["power"]["wakeCount"]|0u;
+            if(count&&count!=state.wakeSequence){state.wakeSequence=count;emit(n);}
+        }
+        if(type=="clock.alarm") {
+            auto p=node(n)["parameters"];const std::string source=p["clockSource"]|"utc";
+            auto epoch=status_["clock"][source];
+            if(alarmDue(p,epoch.isNull()?0:epoch.as<int64_t>(),input(n,"enabled").as<bool>(),state.alarm))emit(n);
+        }
         if((type=="mainboard.save_data"||type=="mainboard.plot") && !linked(n,"in") && state.recordingElapsed>=recordingInterval(n))execute(n,"in");
         if((type=="event.start" || (node(n)["binding"]["kind"]=="lifecycle" && node(n)["binding"]["event"]=="started")) && !state.startSent){state.startSent=true;emit(n);}
-        if(type.compare(0,6,"event.")==0 && type!="event.start") {
+        if(type.compare(0,6,"event.")==0 && type!="event.start" && type!="event.wake") {
             if(changed(n,input(n,"value"),type=="event.rising" ? "rising" : type=="event.falling" ? "falling" : "change"))emit(n);
         } else if(node(n)["binding"]["kind"]=="transition") {
             auto b=node(n)["binding"];if(changed(n,path(b["path"]|""),b["edge"]|"change",b["equals"]))emit(n);
@@ -280,6 +390,7 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
             state.enabled=enabled;
         }
         if(state.pending && int32_t(now_-state.due)>=0 && type!="timing.cooldown") {
+            if(type=="timing.countdown"){state.pending=false;cache_.remove(node(n)["id"]|"");}
             emit(n);
             if(type=="timing.repeat") {if(--state.remaining==0)state.pending=false;else state.due=now_+state.interval;}
             else if(type=="timing.timer")state.due=now_+state.interval;
@@ -303,6 +414,12 @@ void Runtime::telemetry(JsonObject target) const {
     }
     for(size_t n=0;n<activity_.size();++n) {
         const std::string id=node(n)["id"].as<std::string>();
+        if(node(n)["type"]=="timing.countdown" && states_[n].pending) {
+            const auto& state=states_[n];
+            const uint32_t at=state.frozen?state.frozenAt:paused_?pausedAt_:now_;
+            target["values"][id]["remaining"]=std::max(int32_t(0),int32_t(state.due-at))/1000.0;
+            target["values"][id]["running"]=!paused_ && !state.frozen;
+        }
         auto item=target["activity"][id];
         item["sequence"]=activity_[n].sequence;item["at"]=activity_[n].at;item["failed"]=activity_[n].failed;
     }
@@ -326,7 +443,7 @@ bool Runtime::allowed(size_t n) const {
 }
 void Runtime::freezeStates(uint32_t now) {
     for(size_t n=0;n<states_.size();++n){auto& state=states_[n];bool blocked=!allowed(n);
-        if(blocked&&!state.frozen){state.frozen=true;state.frozenAt=now;}
+        if(blocked&&!state.frozen){state.frozen=true;state.frozenAt=now;state.alarm.previous=0;}
         else if(!blocked&&state.frozen){if(state.pending)state.due+=now-state.frozenAt;state.recordingAt=now;state.frozen=false;}
     }
 }

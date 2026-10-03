@@ -1,5 +1,59 @@
 # ELMA IoT
 
+## Sleep / Wake GPIO / On Wake — 2026-10-03
+
+The Power palette has **Sleep**, **Wake GPIO**, and **On Wake**. Example: `Countdown Timer.Finished → Sleep.Sleep`, `Wake GPIO.Source → Sleep.Wake source`, and `On Wake.Out → Built-in LED.Toggle`. Sleep is configured for Light or Deep mode. Its optional wake timer defaults to 5 seconds, with a supported range of 0.001–604800 seconds (up to seven days); a connected Seconds value overrides the stored delay. At least the timer or a Wake GPIO must be configured. One GPIO and the timer can be active together; the first hardware wake source wins.
+
+| Selected chip family | Light-sleep GPIO wake | Deep-sleep GPIO wake |
+| --- | --- | --- |
+| ESP32 | Available digital inputs | RTC inputs: 0, 2, 4, 12–15, 25–27, 32–39 |
+| ESP32-S3 | Available digital inputs | 0–21 |
+| ESP32-C3 | Available digital inputs | 0–5 |
+
+These silicon sets are intersected with each board's exposed, unreserved GPIO capabilities and peripheral/Logics assignments. This covers the 12 selectable Windows board profiles; board-art assets for other chips do not imply executable firmware support. Wake GPIO uses High/Low level triggering and an **external pull resistor**; already-active levels reject entry to avoid immediate wake loops. CPU execution/Boolean wires cannot wake sleeping hardware. USB/UART, touch, ULP, automatic modem sleep and hibernation power-domain presets are not exposed by this integration. Capabilities match the installed Arduino-ESP32/ESP-IDF 4.4 sleep APIs; see [Espressif sleep documentation](https://docs.espressif.com/projects/esp-idf/en/v4.4.8/esp32/api-reference/system/sleep_modes.html).
+
+**Light sleep** resumes RAM and emits Awake only after a successful return. Wi-Fi/AP connections drop during sleep and restart afterward; clients may need to reconnect. **Deep sleep** reboots the device, so Awake is disabled and On Wake handles startup instead. On Wake also fires on light return, but not cold boot. Wake cause is the ESP-IDF enum (timer 4, GPIO 7, EXT0 2). Saved global/group start modes still apply. RAM-only manual clocks, countdown progress, plot buffers and occurrence guards do not survive deep sleep. Timers follow elapsed runtime time after light wake; missed software events are not hardware wake sources. An external RTC alarm output may be wired to Wake GPIO, but the DS3231 time service does not program RTC alarm registers.
+
+Sleep entry is deferred outside the graph execution lock. New plot recording submissions are gated while existing batches flush; preparation times out after three seconds instead of discarding queued work. Active audio/firmware updates and busy storage reject entry. Motors are stopped before entry. Rejected emits on failure with the reason shown in Logics. This is chip sleep, not external-peripheral power management: displays, LEDs, relay state or other loads can remain powered, and no board-current figures are claimed. Avoid an unconditional immediate boot-to-deep-sleep loop when interactive access is needed. Physical wake timing, GPIO biasing and current consumption remain hardware acceptance tests; no device was flashed.
+
+## Alarm Clock and DS3231 RTC — 2026-10-03
+
+Logics → Timing includes **Alarm Clock** (`clock.alarm`). Choose a specific date or weekday checkboxes, with HH:mm:ss time; defaults are 07:00:00 Monday–Friday. All dates/times are UTC, with no local-time/DST conversion, and valid years are 2000–2099. Sources are UTC/NTP, Manual or DS3231 RTC. Connect **Alarm → GPIO/LED/action** without a lifecycle Start wire. Enabled accepts a Boolean; outputs include Clock valid, UTC seconds and Clock time. Rearm clears the in-memory occurrence guard.
+
+Manual and RTC sources use Set clock date/time plus the Set clock execution input, or the Set clock button in the live device editor. Save the graph before using that button. Each source is shared by all alarm nodes; setting Manual or RTC updates every alarm using that source. UTC uses existing NTP settings. Manual clock state runs in RAM and must be initialized after reboot; do not repeatedly wire Set clock from a periodic trigger. An RTC retains battery-backed time and is not overwritten by booting or loading the graph.
+
+Add **DS3231 RTC** under Sensors and wire SDA/SCL and power/ground in Configuration. Firmware uses [Adafruit RTClib](https://adafruit.github.io/RTClib/html/class_r_t_c___d_s3231.html) 2.1.4 with selected GPIO bindings, a dedicated I²C controller where available, one-second polling, 20 ms I²C transaction timeouts, and bounded mutex acquisition. Missing hardware, invalid dates or lost clock power leave Clock valid false. Clock writes are read back for verification. Only one RTC module is supported. ESP32-C3 has one I²C controller: the current adapters reject simultaneous RTC and enabled I²C-display configurations. Physical module operation has not been tested.
+
+Alarms do not replay overdue occurrences at boot, re-enable, resume or after a forward clock jump exceeding 60 seconds. Normal polling can cross a deadline; duplicate/backward-clock protection is in RAM and resets on reboot/Rearm. Pause prevents alarms while wall-clock time continues. Schedules persist in project/device configuration; occurrence history does not. Desktop/device labels cover the 20 existing languages. Android editor/peripheral requirements are recorded in the Windows repository's WINDOWS-ANDROID-PARITY.md.
+
+Validation: 26 Python graph/compiler/help/GPIO/catalog tests and portable C++ calendar, alarm-runtime and countdown-regression tests passed, alongside web calendar validation and weekday-control layout checks across all 20 locales. ESP32 and ESP32-C3 target compiler checks passed for the RTC service, runtime, main integration and settings code; ESP32-S3 passed a full isolated link with unused audio/display/SD excluded. No device was flashed.
+
+## Countdown Timer — 2026-10-03
+
+The Logics **Timing** category includes a one-shot **Countdown Timer** alongside the existing periodic Timer. Its Seconds setting defaults to 5 (positive seconds, maximum 86400, millisecond scheduling resolution). Wire **On Start → Start → Finished → Built-in LED.Toggle**, or connect Finished to a GPIO or another action. The Start input restarts a running timer. Reset restores the full duration and continues only if already running; Stop cancels without firing Finished. Duration changes take effect on the next Start/Reset.
+
+Remaining (s) is a numeric output and Running is Boolean, usable for conditions, Plot and Save Data. The device web Logics canvas displays live remaining seconds in a large readout; the Windows editor configures the graph and does not simulate an ESP countdown. Global/group pause preserves remaining time. Only configuration is persisted: after reboot, lifecycle wiring starts a fresh countdown. Multiple countdown nodes have independent runtime state and never block the ESP loop. Host tests cover completion, reset/cancel, retrigger, pause/resume and the millisecond clock wrapping; physical timing precision depends on loop load.
+
+Validation: 23 Python graph/compiler/help/parity tests, native connector/control layout, portable C++ countdown tests, regenerated board/language bundles and an isolated ESP32-S3 link passed. The S3 Super Mini test binary is 1,742,512 bytes with unused audio/display/SD excluded. No device was flashed.
+
+## Live LED configuration and grouped startup — 2026-10-02
+
+Status LED pin/type selection is available in the Configuration tab of both companion Windows and device-web interfaces. Types are `regular`, `neopixel` (WS2812-compatible) and `rgb` (three GPIOs). Select the type matching the actual hardware; changing only the GPIO does not change the electrical protocol. All settings persist and participate in hardware configuration transfers. GPIO0 is valid; `-1` disables the LED. Active three-pin RGB requires distinct usable output pins.
+
+Logics LED actions now use current device settings instead of reapplying the binding embedded at compile time. Pin/type changes reconfigure the driver, preserve its colour/on state, and refresh the web Logics binding/ports without resetting group or sampling timers. Board metadata supplies defaults where declared; custom LED hardware remains configurable across board families.
+
+The native editor now starts the global scheduler when starting a group from Stop/Pause, saving that state for compilation while keeping unrelated groups stopped. Firmware restores saved modes at boot, without the old unconditional storage-upgrade stop. Recognized legacy first-crash/storage-upgrade guards migrate to normal startup; explicit user Stop/Pause and exhausted current recovery guards remain respected. Panic/watchdog resets allow three automatic retries, then persist a stop/error requiring review and explicit restart. A stable 30-second running period or clean reset clears the retry streak. An unwriteable retry counter stops safely with a specific error.
+
+Validation: native Qt controls in all 20 languages, selective transfer and 12-board LED binding checks, grouped-start compilation, host C++ grouped sampling/LED rebinding and recovery-policy tests, and web binding continuity. Physical LED output and power-cycle recovery still require device acceptance; no firmware was flashed during these changes.
+
+Final isolated S3 build: `esp32s3_notifier_hacs`, S3 Super Mini, unused audio/display/SD excluded, 1,740,336-byte binary against a 2,031,616-byte application partition. Board-specific web bundles regenerated successfully. ESP32 and ESP32-C3 compiler checks pass for the changed main/Logics runtime adapters; these checks are not full links or physical board tests. Selective Windows Logics transfer also includes the global startup mode.
+
+## Unreleased compilation audit — 2026-10-02
+
+The size-fit policy now recognizes both installed audio library names and inherited no-audio flags. Arduino SD/SD_MMC dependencies remain available when required by the active audio decoder, even if the application SD backend is excluded. The VIEWE LVGL configuration now has the expected include guard. Regression tests cover all valid exclusion combinations across the resolved full-application profiles.
+
+The companion Windows audit covers all 12 board mappings and 97 concrete peripheral profiles, including GPIO preflight, representative family builds and board-specific compiler checks. See [COMPILATION-AUDIT.md](../ELMA-IoT-Windows-main/COMPILATION-AUDIT.md) in the sibling Windows checkout for results and size limits. Generic SDMMC is not implemented; use MicroSD SPI or VIEWE's fixed onboard SDMMC adapter. Catalog availability alone does not establish driver or hardware support. No firmware was flashed for this audit.
+
 ![ELMA IoT logo](Docs/elma_iot_logo.svg)
 
 ELMA IoT stands for Elnur Mehdiyev Automation and Internet of Things. This project is a custom PlatformIO firmware base for ESP32 and ESP32-S3 home automation devices with a browser-based configuration UI, MQTT and Home Assistant integration, local storage management, GitHub-release-based update discovery, and configurable pin mapping for audio, OLED, battery, SD, and status hardware.

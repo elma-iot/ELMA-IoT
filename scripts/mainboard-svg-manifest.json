@@ -1,5 +1,4 @@
 {
-  "viewe-uedx24320028e-wb-a.svg": 14,
   "esp32-s3-supermini-breadboard.svg": 1,
   "esp32-s3-zero-breadboard.svg": 2,
   "esp32-s3-psram-breadboard.svg": 3,
@@ -10,7 +9,18 @@
   "esp32-wroom-breadboard.svg": 8,
   "esp32-mini-breadboard.svg": 9,
   "wemos-lolin32-mini-breadboard.svg": 10,
-  "esp32-c3-breadboard.svg": 11,
+  "wemos-d1-mini-esp32-breadboard.svg": 15,
   "esp32-s2-mini-breadboard.svg": 12,
-  "esp32-c6-mini-breadboard.svg": 13
+  "wemos-s2-mini-breadboard.svg": 24,
+  "esp32-c6-mini-breadboard.svg": 13,
+  "esp32-c2-esp8684-breadboard.svg": 16,
+  "esp32-c3-breadboard.svg": 11,
+  "esp8266-esp01-breadboard.svg": 17,
+  "esp8266-esp01s-breadboard.svg": 18,
+  "wemos-d1-mini-lite-breadboard.svg": 19,
+  "esp8266-esp12e-breadboard.svg": 21,
+  "esp8266-esp12f-breadboard.svg": 22,
+  "esp8285-generic-breadboard.svg": 23,
+  "viewe-uedx24320028e-wb-a.svg": 14,
+  "wemos-d1-mini-breadboard.svg": 20
 }

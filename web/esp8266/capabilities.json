@@ -1,0 +1,312 @@
+{
+  "types": [
+    "timing.countdown",
+    "mainboard.wifi.connected",
+    "mainboard.wifi.ap",
+    "mainboard.wifi.ip",
+    "mainboard.wifi.ssid",
+    "mainboard.wifi.ap_ssid",
+    "mainboard.wifi.signal",
+    "mainboard.wifi.on_connected",
+    "mainboard.wifi.on_disconnected",
+    "mainboard.wifi.on_ap_started",
+    "mainboard.wifi.on_ap_stopped",
+    "mainboard.wifi.on_ip_changed",
+    "mainboard.wifi.on_signal_changed",
+    "hardware.gpio",
+    "hardware.led",
+    "event.start",
+    "event.change",
+    "event.rising",
+    "event.falling",
+    "condition.compare",
+    "condition.equal",
+    "condition.not_equal",
+    "condition.gt",
+    "condition.lt",
+    "condition.gte",
+    "condition.lte",
+    "condition.between",
+    "condition.if",
+    "boolean.and",
+    "boolean.or",
+    "boolean.not",
+    "flow.gate",
+    "flow.sequence",
+    "flow.branch",
+    "timing.delay",
+    "timing.timer",
+    "timing.repeat",
+    "timing.debounce",
+    "timing.cooldown",
+    "value.constant",
+    "value.number",
+    "value.boolean",
+    "value.percentage",
+    "value.integer",
+    "value.text",
+    "mainboard.plot",
+    "mainboard.hardware.cpu_speed",
+    "mainboard.hardware.cpu_cores",
+    "mainboard.hardware.heap_free",
+    "mainboard.hardware.heap_block",
+    "mainboard.hardware.flash_size",
+    "mainboard.hardware.sketch_size",
+    "mainboard.hardware.temperature_available",
+    "mainboard.esp8266.vcc",
+    "mainboard.esp8266.sketch_free",
+    "mainboard.esp8266.uptime",
+    "mainboard.esp8266.reset_reason",
+    "mainboard.esp8266.wifi_channel",
+    "mainboard.esp8266.mac",
+    "mainboard.esp8266.bssid",
+    "bridge.number",
+    "bridge.integer",
+    "bridge.boolean",
+    "bridge.string",
+    "convert.boolean_number",
+    "convert.number_integer",
+    "convert.text_number",
+    "convert.boolean_integer",
+    "convert.measurement_number",
+    "peripheral.reference",
+    "peripheral.strip",
+    "peripheral.on",
+    "peripheral.off",
+    "peripheral.toggle",
+    "peripheral.set",
+    "peripheral.state",
+    "peripheral.rising",
+    "peripheral.falling",
+    "peripheral.value",
+    "peripheral.x",
+    "peripheral.y",
+    "peripheral.pressed"
+  ],
+  "devices": [
+    {
+      "type": "hardware.led",
+      "title": "Built-in LED",
+      "category": "Hardware",
+      "ports": [
+        {
+          "id": "on",
+          "label": "ON",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "off",
+          "label": "OFF",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "toggle",
+          "label": "Toggle",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "write",
+          "label": "Set color",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "release",
+          "label": "Automatic status",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "out",
+          "label": "Done",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "digital",
+          "label": "Is on",
+          "type": "boolean",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "brightness",
+          "label": "Brightness",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "red": 0,
+        "green": 255,
+        "blue": 0,
+        "brightness": 20.0
+      },
+      "helpId": "logics.hardware-led",
+      "description": "Controls the configured status LED or the board\u2019s built-in LED. Automatic status returns ownership to network indicators. RGB controls are available on NeoPixel/RGB hardware.",
+      "binding": {
+        "kind": "led",
+        "pin": 2,
+        "ledType": "regular"
+      }
+    },
+    {
+      "type": "hardware.gpio",
+      "title": "GPIO",
+      "category": "Hardware",
+      "ports": [
+        {
+          "id": "write",
+          "label": "Set level",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "toggle",
+          "label": "Toggle",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "pwm",
+          "label": "Write PWM",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "state",
+          "label": "Level input",
+          "type": "boolean",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "duty",
+          "label": "Duty %",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "out",
+          "label": "Done",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "digital",
+          "label": "Digital read",
+          "type": "boolean",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "analog",
+          "label": "Analog raw",
+          "type": "integer",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "millivolts",
+          "label": "Millivolts",
+          "type": "integer",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "pin": -1,
+        "mode": "output",
+        "state": true,
+        "duty": 50.0,
+        "frequency": 1000
+      },
+      "helpId": "logics.hardware-gpio",
+      "description": "Select an unused board GPIO. Ports follow the pin capabilities and selected input/output mode. Analog reads use ADC1 while Wi-Fi is active. PWM supports two independent channels.",
+      "binding": {
+        "kind": "gpio",
+        "pwmAllowed": true,
+        "allowedPins": {
+          "4": {
+            "input": true,
+            "output": true,
+            "pwm": true,
+            "analog": false,
+            "pull": true
+          },
+          "5": {
+            "input": true,
+            "output": true,
+            "pwm": true,
+            "analog": false,
+            "pull": true
+          },
+          "12": {
+            "input": true,
+            "output": true,
+            "pwm": true,
+            "analog": false,
+            "pull": true
+          },
+          "13": {
+            "input": true,
+            "output": true,
+            "pwm": true,
+            "analog": false,
+            "pull": true
+          },
+          "14": {
+            "input": true,
+            "output": true,
+            "pwm": true,
+            "analog": false,
+            "pull": true
+          },
+          "16": {
+            "input": true,
+            "output": true,
+            "pwm": true,
+            "analog": false,
+            "pull": false
+          }
+        }
+      }
+    }
+  ]
+}

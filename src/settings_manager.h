@@ -5,6 +5,7 @@
 #include <Preferences.h>
 
 #include "settings_schema.h"
+bool isSafeOutputPinForBoard(uint8_t pin);
 
 class SettingsManager {
   public:

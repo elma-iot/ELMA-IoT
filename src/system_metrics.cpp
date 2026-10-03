@@ -50,6 +50,12 @@ const char* compiledBoardProfile() {
     return "esp32-mini";
 #elif APP_COMPILED_BOARD_PROFILE_ID == 10
     return "wemos-lolin32-mini";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 12
+    return "esp32-s2-psram";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 24
+    return "esp32-s2-wemos-mini";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 15
+    return "wemos-d1-mini-esp32";
 #elif APP_COMPILED_BOARD_PROFILE_ID == 11
     return "esp32-c3";
 #else

@@ -44,22 +44,9 @@ SKIPPED_WEB_ASSETS = {
     "ttp223-touch-icon.svg",
 }
 
-BOARD_ASSET_IDS = {
-    "viewe-uedx24320028e-wb-a.svg": 14,
-    "esp32-s3-supermini-breadboard.svg": 1,
-    "esp32-s3-zero-breadboard.svg": 2,
-    "esp32-s3-psram-breadboard.svg": 3,
-    "esp32-spk-n16r8-breadboard.svg": 4,
-    "esp32-s3-devkit-c1-n8r8-v1-breadboard.svg": 5,
-    "esp32-s3-cam-module-breadboard.svg": 6,
-    "esp32-wrover-breadboard.svg": 7,
-    "esp32-wroom-breadboard.svg": 8,
-    "esp32-mini-breadboard.svg": 9,
-    "wemos-lolin32-mini-breadboard.svg": 10,
-    "esp32-c3-breadboard.svg": 11,
-    "esp32-s2-mini-breadboard.svg": 12,
-    "esp32-c6-mini-breadboard.svg": 13,
-}
+BOARD_ASSET_IDS = json.loads((ROOT / "scripts/mainboard-svg-manifest.json").read_text(encoding="utf-8"))
+
+SKIPPED_WEB_ASSETS.difference_update(BOARD_ASSET_IDS)
 
 assert BOARD_ASSET_IDS == json.loads((ROOT / "scripts/mainboard-svg-manifest.json").read_text(encoding="utf-8"))
 
@@ -76,6 +63,7 @@ def audit_board_assets(source, target, env):
 
 default_board_ids = {
     "viewe_uedx24320028e": "14",
+    "esp32s2_designer_hacs": "24",
     "esp32_notifier": "8", "esp32_notifier_hacs": "8",
     "esp32_notifier_hacs_slim": "8", "esp32_notifier_hacs_legacy_ota": "8",
     "esp32_notifier_slim": "8", "esp32_designer_noaudio": "8",
@@ -127,7 +115,7 @@ language_codes = ["en","es","zh","hi","ar","pt","bn","ru","ja","de","fr","ko","t
 language = os.environ.get("ELMA_COMPILED_LANGUAGE", "en")
 env.Append(CPPDEFINES=[("APP_COMPILED_LANGUAGE_ID", language_codes.index(language)), ("APP_COMPILED_THEME_ID", {"automatic":0,"light":1,"dark":2}[os.environ.get("ELMA_COMPILED_THEME", "automatic")])])
 
-if os.environ.get("ELMA_PORTABLE_BUILDER") == "1" and HEADER.is_file() and SOURCE.is_file():
+if os.environ.get("ELMA_PORTABLE_BUILDER") == "1" and os.environ.get("ELMA_REBUILD_WEB") != "1" and HEADER.is_file() and SOURCE.is_file():
     install_shared_fallback(SOURCE,peripheral_svg_manifest)
     selected_label = os.environ.get("ELMA_SELECTED_BOARD_PROFILE", "all supported boards")
     print(f"[web-assets] portable builder is using the prebundled configurator for {selected_label}")
@@ -272,7 +260,7 @@ def build_web_assets() -> None:
 
         relative_path = path.relative_to(WEB_DIR)
         relative_path_str = relative_path.as_posix()
-        if relative_path_str in ("app.js", "firmware-i18n.js") or relative_path_str.startswith(("modules/", "i18n/")) or relative_path_str in SKIPPED_WEB_ASSETS:
+        if relative_path_str in ("app.js", "firmware-i18n.js") or relative_path_str.startswith(("modules/", "i18n/", "esp8266/")) or relative_path_str in SKIPPED_WEB_ASSETS:
             continue
 
         target_path = BUILD_WEB_DIR / relative_path

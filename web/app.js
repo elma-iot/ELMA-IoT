@@ -1,3 +1,4 @@
+import {arrayOptions,arraySvg} from './modules/led-array.js';
 import './modules/security-tab.js';
 import {createLogicsTab} from './modules/logic-editor.js';
 import {installOnlineHelpLinks} from './modules/online-help.js';
@@ -274,6 +275,7 @@ const PERIPHERAL_DISPLAY_PROFILE_OPTIONS = [
 ];
 const PERIPHERAL_SENSOR_PROFILE_OPTIONS = [
   { value: "none", label: "None" },
+  { value: "ds3231-rtc", label: "DS3231 RTC" },
   { value: "bno055", label: "BNO055" },
   { value: "bno085-bno080", label: "BNO085 / BNO080" },
   { value: "mpu6050", label: "MPU6050" },
@@ -581,7 +583,7 @@ const GPIO_BOARD_ASSETS = {
   },
   "esp8266-esp01": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8266 ESP-01 module" },
   "esp8266-esp01s": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8266 ESP-01S module" },
-  "esp8266-wemos-d1-mini-lite": { src: "/wemos-d1-mini-lite-breadboard.svg", alt: "Wemos D1 Mini Lite ESP8266 board" },
+  "esp8266-wemos-d1-mini-lite": { src: "/wemos-d1-mini-lite-breadboard.svg", alt: "Wemos D1 Mini Lite ESP8285 board" },
   "esp8266-esp12e": { src: "/esp8266-esp12e-breadboard.svg", alt: "ESP8266 ESP-12E module" },
   "esp8266-esp12f": { src: "/esp8266-esp12f-breadboard.svg", alt: "ESP8266 ESP-12F development board" },
   "esp8285-generic": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8285 family module" },
@@ -3737,6 +3739,7 @@ function peripheralDiagramTemplatePins(groupKey, profileValue) {
       }
       return ["SIG", "VCC", "GND"];
     case "sensor":
+      if (profile === "ds3231-rtc") return ["SDA", "SCL", "VCC", "GND"];
       if (profile.includes("ds18b20")) {
         return ["DQ", "VCC", "GND"];
       }
@@ -3908,6 +3911,7 @@ function peripheralDiagramPlaceholderMarkup(node) {
 }
 
 function peripheralDiagramNodeMarkup(node) {
+  if(node.profileValue==="ws2812-neopixel-led-strip"){try{const a=arrayOptions(state.peripheralHelperBindings?.[`control:${node.index}`]);node={...node,src:"data:image/svg+xml,"+encodeURIComponent(arraySvg(a)),label:`${node.label} (${a.count} LEDs)`};}catch{}}
   const styleValue = peripheralDiagramInlineStyle(node);
   const styleAttribute = styleValue ? ` style="${escapeHtml(styleValue)}"` : "";
   const usesAsset = peripheralDiagramUsesAsset(node);
@@ -5016,18 +5020,16 @@ function syncStatusLedTypeFields(preferBoardDefaults = false) {
     field.hidden = !rgb;
   }
   if (!rgb) return;
-  const fallbackPins = activeChipFamily() === "esp32c3" ? [7, 6] : [23, 21];
   const red = Number(elements.statusLedPin?.value);
-  let green = Number(elements.statusLedGreenPin?.value);
-  let blue = Number(elements.statusLedBluePin?.value);
-  if (preferBoardDefaults || !Number.isFinite(green) || green === red) {
-    green = fallbackPins.find((pin) => pin !== red) ?? fallbackPins[0];
-    elements.statusLedGreenPin.value = String(green);
-  }
-  if (preferBoardDefaults || !Number.isFinite(blue) || blue === red || blue === green) {
-    blue = fallbackPins.find((pin) => pin !== red && pin !== green) ?? (activeChipFamily() === "esp32c3" ? 5 : 19);
-    elements.statusLedBluePin.value = String(blue);
-  }
+  const choose=(field,excluded)=>{
+    const allowed=[...(field?.options||[])].filter(o=>!o.disabled&&Number(o.value)>=0&&Number(o.value)!==255&&!excluded.includes(Number(o.value))).map(o=>Number(o.value));
+    const current=Number(field?.value);
+    const pin=allowed.includes(current)?current:(allowed[0]??-1);
+    if(field)field.value=String(pin);
+    return pin;
+  };
+  const green=choose(elements.statusLedGreenPin,[red]);
+  choose(elements.statusLedBluePin,[red,green]);
 }
 
 function chipMaxPin() {
@@ -7999,7 +8001,7 @@ function gpioRoleMap(settings = state.settings, status = state.status) {
     addRole(battery.chargingSensePin, "Charge Sense");
   }
   addRole(currentGpioRoleNumericValue(elements.statusLedPin, device.statusLedPin), statusLedRoleLabel(settings, status));
-  if(String(document.querySelector('[name="device.statusLedType"]')?.value||device.statusLedType||"").toLowerCase()==="rgb"){
+  if(String(document.querySelector('[name="device.statusLedType"]')?.value||device.statusLedType||"").toLowerCase()==="rgb" && validBoardPins(true).includes(currentGpioRoleNumericValue(elements.statusLedPin,device.statusLedPin))){
     addRole(currentGpioRoleNumericValue(elements.statusLedGreenPin, device.statusLedGreenPin), "Status LED green");
     addRole(currentGpioRoleNumericValue(elements.statusLedBluePin, device.statusLedBluePin), "Status LED blue");
   }
@@ -8049,7 +8051,7 @@ function gpioRoleMap(settings = state.settings, status = state.status) {
     }
     const profileLabel = peripheralHelperProfileLabel(groupKey, profileValue, index);
     for (const [signalLabel, pinValue] of Object.entries(slotBindings)) {
-      if (["CONTACT", "MAIN_CONTROL", "SOURCE", "INPUT_VOLTAGE", "OUTPUT_VOLTAGE"].includes(String(signalLabel || "").trim().toUpperCase())) {
+      if (String(signalLabel).startsWith("LED_") || ["CONTACT", "MAIN_CONTROL", "SOURCE", "INPUT_VOLTAGE", "OUTPUT_VOLTAGE"].includes(String(signalLabel || "").trim().toUpperCase())) {
         continue;
       }
       const numericPin = Number(pinValue);
@@ -8100,7 +8102,7 @@ function gpioConfigRoleDefinitions(settings = state.settings) {
   const definitions = [
     { key: "device.statusLedPin", label: statusLedRoleLabel(settings), element: elements.statusLedPin, isAssigned: (value) => Number.isFinite(value) },
   ];
-  if(String(document.querySelector('[name="device.statusLedType"]')?.value||settings?.device?.statusLedType||"").toLowerCase()==="rgb")definitions.push(
+  if(String(document.querySelector('[name="device.statusLedType"]')?.value||settings?.device?.statusLedType||"").toLowerCase()==="rgb" && validBoardPins(true).includes(currentGpioRoleNumericValue(elements.statusLedPin,settings?.device?.statusLedPin)))definitions.push(
     {key:"device.statusLedGreenPin",label:"Status LED green",element:elements.statusLedGreenPin,isAssigned:value=>Number.isFinite(value)},
     {key:"device.statusLedBluePin",label:"Status LED blue",element:elements.statusLedBluePin,isAssigned:value=>Number.isFinite(value)}
   );
@@ -8995,9 +8997,9 @@ function parseConfigurationBackup(text) {
 }
 
 function validateSettingsPayload(submittedSettings) {
-  if (submittedSettings.device?.statusLedType === "rgb") {
+  if (submittedSettings.device?.statusLedType === "rgb" && ![-1,255].includes(Number(submittedSettings.device.statusLedPin))) {
     const pins=[submittedSettings.device.statusLedPin,submittedSettings.device.statusLedGreenPin,submittedSettings.device.statusLedBluePin].map(Number);
-    if(pins.some(pin=>!Number.isFinite(pin))||new Set(pins).size!==3)throw new Error("RGB status LED red, green and blue must use three different valid GPIOs.");
+    if(pins.some(pin=>!validBoardPins(true).includes(pin))||new Set(pins).size!==3)throw new Error("RGB status LED red, green and blue must use three different valid GPIOs.");
   }
   if (submittedSettings.oled?.enabled !== false && oledPinsConflictInternally(submittedSettings)) {
     throw new Error("OLED SDA, SCL, and RESET must use different GPIOs.");
@@ -9605,7 +9607,7 @@ for (const field of [elements.oledSdaPin, elements.oledSclPin, elements.oledRese
     state.settingsDirty = true;
   });
 }
-elements.statusLedType?.addEventListener("change", () => syncStatusLedTypeFields(true));
+elements.statusLedType?.addEventListener("change", () => {syncGpioMappingControls();syncStatusLedTypeFields(true);queueSettingsSave(150);});
 elements.useStaticIpToggle.addEventListener("change", updateConditionalVisibility);
 
 for (const field of elements.settingsForm.elements) {

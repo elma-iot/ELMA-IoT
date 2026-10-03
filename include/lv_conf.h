@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LV_CONF_H
+#define LV_CONF_H
 #include <esp_heap_caps.h>
 #define LV_COLOR_DEPTH 16
 #define LV_COLOR_16_SWAP 1
@@ -13,3 +14,4 @@
 #define LV_USE_LOG 0
 #define LV_BUILD_EXAMPLES 0
 #define LV_USE_DEMO_WIDGETS 0
+#endif // LV_CONF_H
