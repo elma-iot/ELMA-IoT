@@ -26,9 +26,15 @@ class WifiPowerTests(unittest.TestCase):
         settings = (ROOT / "src/settings_manager.cpp").read_text()
         for mode in ("sta", "ap"):
             self.assertIn(f'readFloat("wifi_{mode}_tx", settings.wifi.{mode}TxPowerDbm)', settings)
-            self.assertIn(f'writeFloatIfChanged("wifi_{mode}_tx", sanitized.wifi.{mode}TxPowerDbm)', settings)
+            # Persistence now removes values equal to the compiled defaults.
+            # Check both the selected value and its matching baseline, then the
+            # float adapter below; a direct writer call is no longer expected.
+            self.assertIn(f'storeFloat("wifi_{mode}_tx", sanitized.wifi.{mode}TxPowerDbm, baseline.wifi.{mode}TxPowerDbm)', settings)
             self.assertIn(f'wifi["{mode}TxPowerDbm"] = settings.wifi.{mode}TxPowerDbm', settings)
             self.assertIn(f'settings.wifi.{mode}TxPowerDbm = wifi["{mode}TxPowerDbm"].as<float>()', settings)
+        adapter = settings.split("auto storeFloat =", 1)[1].split("};", 1)[0]
+        self.assertIn("value == initial ? removeDefault(key)", adapter)
+        self.assertIn("writeFloatIfChanged(key, value)", adapter)
         manager = (ROOT / "src/wifi_manager.cpp").read_text()
         restart = manager.split("bool wifiRestartRequired", 1)[1].split("}  // namespace", 1)[0]
         self.assertNotIn("TxPower", restart)
