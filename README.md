@@ -65,12 +65,40 @@ Project story and current device write-up:
 
 ## Current Release
 
-- Firmware version: `v0.1.56`
+- Firmware version: `v0.1.58`
 - Primary release repository: `elma-iot/ELMA-IoT`
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
-- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.56.bin`
+- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.58.bin`
 
-v0.1.56 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
+v0.1.58 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
+
+### VIEWE updates — 2026-10-05
+
+Windows 0.1.77 bundles the current firmware source with separate 2.8-inch and
+3.5-inch VIEWE panel profiles, R3 pin artwork, portrait web-ordered tabs and a
+live Wi-Fi/MQTT/time status bar. Settings/actions use shared services and protect
+in-progress edits. The 3.5-inch panel selection resolved the reported black
+picture. See [VIEWE validation](Docs/VIEWE-LCD-BRINGUP.md) and the
+[online touchscreen guide](https://elma-iot.github.io/elma-iot-docs/en/guides/viewe-touchscreen/).
+
+Release asset names for `v0.1.58`:
+
+These are expected naming conventions when building a generic release, not a
+claim that all binaries are published. Configured images remain target-specific.
+
+- `esp32-notifier-v0.1.58.bin`
+- `esp32-notifier-hacs-v0.1.58.bin`
+- `esp32-notifier-hacs-slim-v0.1.58.bin`
+- `esp32-notifier-hacs-legacy-ota-v0.1.58.bin`
+- `esp32s3-notifier-v0.1.58.bin`
+- `esp32s3-notifier-hacs-v0.1.58.bin`
+- `esp32s3-notifier-hacs-slim-v0.1.58.bin`
+- `esp32c3-notifier-hacs-v0.1.58.bin`
+- `esp32-ota-bridge-v0.1.58.bin`
+- `esp32s3-ota-bridge-v0.1.58.bin`
+- `esp32c3-ota-bridge-v0.1.58.bin`
+
+- [release-assets/v0.1.58/release-notes.md](release-assets/v0.1.58/release-notes.md)
 
 ### Device source changes after v0.1.56
 
