@@ -107,6 +107,8 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             if(!connected&&p["required"]!=true&&!(p["direction"]=="output"&&p["type"]!="execution"))continue;
             auto q=leanPorts.add<JsonObject>();for(const char* key:{"id","type","direction"})q[key].set(p[key]);if(p["required"]==true)q["required"]=true;}
         target["binding"].set(spec["binding"]);
+        // Live configuration updates locate the running node by peripheral identity.
+        if(spec["peripheral"]["id"].is<const char*>())target["peripheral"]["id"].set(spec["peripheral"]["id"]);
 #else
         target["name"]=n["name"]|spec["title"]|type;
         target["ports"].set(spec["ports"]);target["binding"].set(spec["binding"]);target["peripheral"].set(spec["peripheral"]);

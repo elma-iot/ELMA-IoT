@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Сохранить и применить светодиодную матрицу",
     "LED array wiring": "Схема подключения светодиодной матрицы",
     "DO → next array only": "DO → только следующий массив",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Анимированный предварительный просмотр использует настроенные значения по умолчанию. Более позднее действие Logics может их переопределить. Save применяет эти значения к активному массиву; схема подключения использует сохраненные положения Windows и выбранные контакты платы."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Анимированный предварительный просмотр использует настроенные значения по умолчанию. Более позднее действие Logics может их переопределить. Save применяет эти значения к активному массиву; схема подключения использует сохраненные положения Windows и выбранные контакты платы.",
+    "LED arrays": "Светодиодные массивы",
+    "Add LED array": "Добавить светодиодный массив",
+    "Default effect": "Эффект по умолчанию",
+    "Default brightness": "Яркость по умолчанию",
+    "Effect speed": "Скорость эффекта",
+    "Resource details": "Ресурсы устройства",
+    "Default brightness (%)": "Яркость по умолчанию (%)",
+    "Effect speed (%)": "Скорость эффекта (%)"
   },
   "rtl": false,
   "shell": {

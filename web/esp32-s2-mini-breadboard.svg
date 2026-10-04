@@ -4987,7 +4987,7 @@
       stroke-width="0"
     />
     <circle
-      r="29"
+ data-pin="1"      r="29"
       cy="285.41815"
       cx="53.937576"
       class="pad-rst"
@@ -4998,7 +4998,7 @@
       stroke-width="20"
     />
     <circle
-      cy="385.17709"
+ data-pin="2"      cy="385.17709"
       cx="53.937576"
       class="pad-a0"
       id="connector1pin"
@@ -5009,7 +5009,7 @@
       stroke-width="20"
     />
     <circle
-      cy="484.93433"
+ data-pin="4"      cy="484.93433"
       cx="53.937576"
       class="pad-d0"
       id="connector2pin"
@@ -5020,7 +5020,7 @@
       stroke-width="20"
     />
     <circle
-      cy="584.69324"
+ data-pin="6"      cy="584.69324"
       cx="53.937576"
       class="pad-d5"
       id="connector3pin"
@@ -5031,7 +5031,7 @@
       stroke-width="20"
     />
     <circle
-      cy="684.45044"
+ data-pin="8"      cy="684.45044"
       cx="53.937576"
       class="pad-d6"
       id="connector4pin"
@@ -5042,7 +5042,7 @@
       stroke-width="20"
     />
     <circle
-      cy="784.2077"
+ data-pin="10"      cy="784.2077"
       cx="53.937576"
       class="pad-d7"
       id="connector5pin"
@@ -5053,7 +5053,7 @@
       stroke-width="20"
     />
     <circle
-      cy="883.96661"
+ data-pin="13"      cy="883.96661"
       cx="53.937576"
       class="pad-d8"
       id="connector6pin"
@@ -5064,7 +5064,7 @@
       stroke-width="20"
     />
     <circle
-      cy="983.72388"
+ data-pin="14"      cy="983.72388"
       cx="53.937576"
       class="pad-3v3"
       id="connector7pin"
@@ -5075,7 +5075,7 @@
       stroke-width="20"
     />
     <circle
-      r="29"
+ data-pin="EN"      r="29"
       cy="285.41815"
       cx="154.00003"
       class="pad-rst"
@@ -5086,7 +5086,7 @@
       stroke-width="20"
     />
     <circle
-      cy="385.17709"
+ data-pin="3"      cy="385.17709"
       cx="154.00003"
       class="pad-a0"
       id="connector9pin"
@@ -5097,7 +5097,7 @@
       stroke-width="20"
     />
     <circle
-      cy="484.93433"
+ data-pin="5"      cy="484.93433"
       cx="154.00003"
       class="pad-d0"
       id="connector10pin"
@@ -5108,7 +5108,7 @@
       stroke-width="20"
     />
     <circle
-      cy="584.69324"
+ data-pin="7"      cy="584.69324"
       cx="154.00003"
       class="pad-d5"
       id="connector11pin"
@@ -5119,7 +5119,7 @@
       stroke-width="20"
     />
     <circle
-      cy="684.45044"
+ data-pin="9"      cy="684.45044"
       cx="154.00003"
       class="pad-d6"
       id="connector12pin"
@@ -5130,7 +5130,7 @@
       stroke-width="20"
     />
     <circle
-      cy="784.2077"
+ data-pin="11"      cy="784.2077"
       cx="154.00003"
       class="pad-d7"
       id="connector13pin"
@@ -5141,7 +5141,7 @@
       stroke-width="20"
     />
     <circle
-      cy="883.96661"
+ data-pin="12"      cy="883.96661"
       cx="154.00003"
       class="pad-d8"
       id="connector14pin"
@@ -5152,7 +5152,7 @@
       stroke-width="20"
     />
     <circle
-      cy="983.72388"
+ data-pin="3V3"      cy="983.72388"
       cx="154.00003"
       class="pad-3v3"
       id="connector15pin"
@@ -5163,7 +5163,7 @@
       stroke-width="20"
     />
     <circle
-      cy="983.72388"
+ data-pin="15"      cy="983.72388"
       cx="953.9389"
       class="pad-5v"
       id="connector16pin"
@@ -5174,7 +5174,7 @@
       stroke-width="20"
     />
     <circle
-      cy="883.96661"
+ data-pin="GND"      cy="883.96661"
       cx="953.9389"
       class="pad-g"
       id="connector17pin"
@@ -5185,7 +5185,7 @@
       stroke-width="20"
     />
     <circle
-      cy="784.2077"
+ data-pin="17"      cy="784.2077"
       cx="953.9389"
       class="pad-d4"
       id="connector18pin"
@@ -5196,7 +5196,7 @@
       stroke-width="20"
     />
     <circle
-      cy="684.45044"
+ data-pin="21"      cy="684.45044"
       cx="953.9389"
       class="pad-d3"
       id="connector19pin"
@@ -5207,7 +5207,7 @@
       stroke-width="20"
     />
     <circle
-      cy="584.69324"
+ data-pin="34"      cy="584.69324"
       cx="953.9389"
       class="pad-d2"
       id="connector20pin"
@@ -5218,7 +5218,7 @@
       stroke-width="20"
     />
     <circle
-      cy="484.93433"
+ data-pin="36"      cy="484.93433"
       cx="953.9389"
       class="pad-d1"
       id="connector21pin"
@@ -5229,7 +5229,7 @@
       stroke-width="20"
     />
     <circle
-      cy="385.17709"
+ data-pin="38"      cy="385.17709"
       cx="953.9389"
       class="pad-rx"
       id="connector22pin"
@@ -5240,7 +5240,7 @@
       stroke-width="20"
     />
     <circle
-      cy="285.41815"
+ data-pin="40"      cy="285.41815"
       cx="953.9389"
       class="pad-tx"
       id="connector23pin"
@@ -5251,7 +5251,7 @@
       stroke-width="20"
     />
     <circle
-      cy="983.72388"
+ data-pin="5V"      cy="983.72388"
       cx="854.00024"
       class="pad-5v"
       id="connector24pin"
@@ -5262,7 +5262,7 @@
       stroke-width="20"
     />
     <circle
-      cy="883.96661"
+ data-pin="GND"      cy="883.96661"
       cx="854.00024"
       class="pad-g"
       id="connector25pin"
@@ -5274,7 +5274,7 @@
       fill-opacity="1"
     />
     <circle
-      cy="784.2077"
+ data-pin="16"      cy="784.2077"
       cx="854.00024"
       class="pad-d4"
       id="connector26pin"
@@ -5286,7 +5286,7 @@
       fill-opacity="1"
     />
     <circle
-      cy="684.45044"
+ data-pin="18"      cy="684.45044"
       cx="854.00024"
       class="pad-d3"
       id="connector27pin"
@@ -5298,7 +5298,7 @@
       fill-opacity="1"
     />
     <circle
-      cy="584.69324"
+ data-pin="33"      cy="584.69324"
       cx="854.00024"
       class="pad-d2"
       id="connector28pin"
@@ -5309,7 +5309,7 @@
       stroke-width="20"
     />
     <circle
-      cy="484.93433"
+ data-pin="35"      cy="484.93433"
       cx="854.00024"
       class="pad-d1"
       id="connector29pin"
@@ -5320,7 +5320,7 @@
       stroke-width="20"
     />
     <circle
-      cy="385.17709"
+ data-pin="37"      cy="385.17709"
       cx="854.00024"
       class="pad-rx"
       id="connector30pin"
@@ -5331,7 +5331,7 @@
       stroke-width="20"
     />
     <circle
-      cy="285.41815"
+ data-pin="39"      cy="285.41815"
       cx="854.00024"
       class="pad-tx"
       id="connector31pin"

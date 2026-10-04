@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "एलईडी ऐरे को सहेजें और लागू करें",
     "LED array wiring": "एलईडी ऐरे वायरिंग",
     "DO → next array only": "DO → केवल अगली सरणी",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "एनिमेटेड पूर्वावलोकन कॉन्फ़िगर किए गए डिफ़ॉल्ट का उपयोग करता है। बाद की लॉजिक्स कार्रवाई उन्हें ओवरराइड कर सकती है। सेव इन मानों को सक्रिय सरणी पर लागू करता है; वायरिंग आरेख सहेजे गए विंडोज़ स्थितियों और चयनित बोर्ड पिन संपर्कों का उपयोग करता है।"
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "एनिमेटेड पूर्वावलोकन कॉन्फ़िगर किए गए डिफ़ॉल्ट का उपयोग करता है। बाद की लॉजिक्स कार्रवाई उन्हें ओवरराइड कर सकती है। सेव इन मानों को सक्रिय सरणी पर लागू करता है; वायरिंग आरेख सहेजे गए विंडोज़ स्थितियों और चयनित बोर्ड पिन संपर्कों का उपयोग करता है।",
+    "LED arrays": "एलईडी ऐरे",
+    "Add LED array": "एलईडी ऐरे जोड़ें",
+    "Default effect": "डिफ़ॉल्ट प्रभाव",
+    "Default brightness": "डिफ़ॉल्ट चमक",
+    "Effect speed": "प्रभाव की गति",
+    "Resource details": "संसाधन विवरण",
+    "Default brightness (%)": "डिफ़ॉल्ट चमक (%)",
+    "Effect speed (%)": "प्रभाव की गति (%)"
   },
   "rtl": false,
   "shell": {

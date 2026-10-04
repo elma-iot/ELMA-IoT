@@ -2,11 +2,12 @@ import {animateArray} from '../modules/led-effects.js';
 import {arrayOptions,arraySvg,arrayDefaults,arrayControls} from '../modules/led-array.js';
 import {createLogicsTab} from '../modules/logic-editor.js';
 
-const logic=createLogicsTab();
+const logic=createLogicsTab({request:(path,data)=>request(path,data)});
 
 const $=s=>document.querySelector(s);
 
-const request=async(path,data)=>{const r=await fetch(path,{cache:'no-store',signal:AbortSignal.timeout(12000),...(data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{})});const text=await r.text();let result;try{result=text?JSON.parse(text):{};}catch{throw Error(r.ok?'Device returned incomplete data; retry shortly':`Device request failed (${r.status})`);}if(!r.ok)throw Error(result.error||`Device busy or unavailable (${r.status}); retry shortly`);if(!text)throw Error('Device returned an empty response; retry shortly');return result;};
+let requestQueue=Promise.resolve();
+const request=(path,data)=>{const next=requestQueue.then(async()=>{const r=await fetch(path,{cache:'no-store',signal:AbortSignal.timeout(12000),...(data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{})});const text=await r.text();let result;try{result=text?JSON.parse(text):{};}catch{throw Error(r.ok?'Device returned incomplete data; retry shortly':`Device request failed (${r.status})`);}if(!r.ok||result.error)throw Error(result.error||`Device busy or unavailable (${r.status}); retry shortly`);if(!text)throw Error('Device returned an empty response; retry shortly');return result;});requestQueue=next.catch(()=>{});return next;};
 
 function showError(message){$('#status').textContent=message;$('#status').hidden=!message;}
 
@@ -33,21 +34,35 @@ const form=$('#settings'),wifiForm=$('#wifi-settings'),deviceForm=$('#device-set
 let saving=false;
 async function save(data){saving=true;try{const accepted=await request('/api/settings',data);if(accepted.pending){$('#message').textContent='Applying configuration…';let complete=false;for(let attempt=0;attempt<30;attempt++){await new Promise(resolve=>setTimeout(resolve,500));const result=await request('/api/config-operation');if(result.operation!==accepted.operation)throw Error('Configuration operation changed; reload to verify saved values');if(!result.pending){if(result.error)throw Error(result.error);complete=true;break;}}if(!complete)throw Error('Configuration was not confirmed; reload to verify saved values');}$('#message').textContent='Saved';}finally{saving=false;}}
 
-let configurationReady=false;
+let configurationReady=false;const liveArrays=new Map();
+let arraySaveTimer,arraySavePending=null,arraySaveActive=false;
+function scheduleArraySave(bindings){arraySavePending=JSON.parse(JSON.stringify(bindings));clearTimeout(arraySaveTimer);arraySaveTimer=setTimeout(flushArraySave,350);}
+async function flushArraySave(){if(arraySaveActive||!arraySavePending)return;if(saving){arraySaveTimer=setTimeout(flushArraySave,350);return;}arraySaveActive=true;const bindings=arraySavePending;arraySavePending=null;try{await save({ui:{peripheralHelperBindings:bindings}});showError('');renderStatus(await request('/api/status'));}catch(e){showError(e.message);}finally{arraySaveActive=false;if(arraySavePending)arraySaveTimer=setTimeout(flushArraySave,350);}}
 function loadConfiguration(){return Promise.resolve().then(async()=>[await request('/api/board'),await request('/api/settings')]).then(([board,s])=>{
- document.querySelectorAll('[data-led-array-preview]').forEach(p=>p.remove());
+ document.querySelectorAll('[data-led-array-preview],.array-wiring').forEach(p=>p.remove());
+ liveArrays.clear();
 
  $('#board-name').textContent=board.name||board.id;
  const parse=v=>typeof v==='string'?JSON.parse(v):v||{};
  const profiles=parse(s.ui?.peripheralProfiles),bindings=parse(s.ui?.peripheralHelperBindings);
+ const wledTab=$('[data-tab="wled"]');wledTab.hidden=!(profiles.controls||[]).includes('ws2812-neopixel-led-strip');
+ if(wledTab.hidden&&wledTab.getAttribute('aria-selected')==='true')selectTab(tabs.find(tab=>tab.dataset.tab==='gpio'));
+
  for(const [i,p] of (profiles.controls||[]).entries())if(p==='ws2812-neopixel-led-strip'){
   const panel=document.createElement('section');panel.dataset.ledArrayPreview='';panel.className='array-configuration';
   const limit=board.chip==='esp32c2'?32:['esp8266','esp8285'].includes(board.chip)?128:256;
-  const values={...bindings[`control:${i}`]},controls=arrayControls(values,limit,next=>{bindings[`control:${i}`]=next;renderDiagram(next);});
-  const pinLabel=document.createElement('label');pinLabel.textContent='DI / Data GPIO';const pin=document.createElement('select');
-  for(const gpio of board.pins)pin.append(new Option(`GPIO${gpio}`,gpio));pin.value=values.DIN;pin.onchange=()=>{values.DIN=pin.value;bindings[`control:${i}`]={...values};renderDiagram(values);};pinLabel.append(pin);
-  const saveButton=document.createElement('button');saveButton.textContent='Save and apply LED array';saveButton.type='button';saveButton.onclick=async()=>{saveButton.disabled=true;try{await save({ui:{peripheralHelperBindings:bindings}});showError('');}catch(e){showError(e.message);}finally{saveButton.disabled=false;}};
-  const left=document.createElement('div');left.append(pinLabel,controls,saveButton);
+  const values={...bindings[`control:${i}`]};
+  const configPanel=document.createElement('section');configPanel.dataset.ledArrayPreview='';configPanel.className='array-configuration';
+  function renderControls(){
+   for(const host of [panel,configPanel]){
+    const title=document.createElement('h3');title.textContent=`WS2812 / NeoPixel LED array ${i+1}`;
+    const controls=arrayControls(values,limit,next=>{Object.assign(values,next);bindings[`control:${i}`]={...values};renderDiagram(values);scheduleArraySave(bindings);renderControls();},{showPreview:false,compact:host===configPanel,effects:board.ledEffects});
+    const pinLabel=document.createElement('label');pinLabel.textContent='DI / Data GPIO';const pin=document.createElement('select');
+    for(const gpio of board.pins)pin.append(new Option(`GPIO${gpio}`,gpio));pin.value=values.DIN;
+    pin.onchange=()=>{values.DIN=pin.value;bindings[`control:${i}`]={...values};renderDiagram(values);scheduleArraySave(bindings);renderControls();};pinLabel.append(pin);
+    host.replaceChildren(title,pinLabel,controls);
+   }
+  }
   const diagram=document.createElement('div');diagram.className='array-wiring';
   function renderDiagram(next){
    const options=arrayOptions(next,limit),positions=parse(s.ui?.peripheralDiagramPositions),boardKey='BOARD_'+board.id.toUpperCase().replaceAll('-','_');
@@ -61,13 +76,13 @@ function loadConfiguration(){return Promise.resolve().then(async()=>[await reque
    }
    diagram.innerHTML=`<svg viewBox="${minX} ${minY} ${Math.max(bx+width,ax+aw)-minX+80} ${Math.max(by+height,ay+ah)-minY+70}" role="img" aria-label="LED array wiring"><image href="/board.svg" x="${bx}" y="${by}" width="${width}" height="${height}" preserveAspectRatio="none"/>${wires}<g data-array-pixels>${svg}</g><text x="${ax}" y="${ay+ah+20}" fill="currentColor" font-size="12">DO → next array only</text></svg>`;
   }
-  renderDiagram(values);const stop=animateArray({get isConnected(){return diagram.isConnected;},querySelectorAll:selector=>diagram.querySelectorAll(`[data-array-pixels] ${selector}`)},()=>arrayOptions(values,limit),()=>arrayDefaults(values));
+  renderDiagram(values);const stop=animateArray({get isConnected(){return diagram.isConnected;},querySelectorAll:selector=>diagram.querySelectorAll(`[data-array-pixels] ${selector}`)},()=>arrayOptions(values,limit),()=>arrayDefaults(values),()=>liveArrays.get(Number(values.DIN)));
   const watch=new MutationObserver(()=>{if(!panel.isConnected){stop();watch.disconnect();}});queueMicrotask(()=>watch.observe(document.body,{childList:true,subtree:true}));
-  const hint=document.createElement('p');hint.textContent='Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.';
-  panel.append(left,diagram,hint);form.after(panel);
+  renderControls();$('#tab-wled').append(panel);$('#tab-gpio').append(configPanel);$('#wled-scheme').append(diagram);
+
  }
 
- const image=$('[data-board-image]');let imageRetries=0;
+ const image=$('[data-board-image]');image.hidden=!!document.querySelector('.array-wiring');let imageRetries=0;
  image.onerror=()=>{if(imageRetries++<2)setTimeout(()=>{image.src='/board.svg?retry='+imageRetries;},1000);};
  image.src='/board.svg';
 
@@ -98,6 +113,7 @@ for(const message of document.querySelectorAll('[data-unavailable]'))message.tex
 const security=$('[data-tab="security"]');for(const key of ['aria-label','title','data-tooltip'])security.setAttribute(key,'Security');
 
 function renderStatus(s){
+ if(Array.isArray(s.ledArrays)){liveArrays.clear();for(const array of s.ledArrays)liveArrays.set(array.pin,{...array,received:performance.now()});}
  const plotButton=$('[data-tab="plots"]');plotButton.hidden=!s.plotsAvailable;
  if(plotButton.hidden&&$('#tab-plots').classList.contains('active'))selectTab(tabs[0]);
 

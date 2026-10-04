@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "保存并应用 LED 阵列",
     "LED array wiring": "LED阵列接线",
     "DO → next array only": "DO → 仅下一个数组",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "动画预览使用配置的默认值。稍后的逻辑操作可以覆盖它们。 Save 将这些值应用到活动数组；接线图使用保存的 Windows 位置和选定的板引脚触点。"
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "动画预览使用配置的默认值。稍后的逻辑操作可以覆盖它们。 Save 将这些值应用到活动数组；接线图使用保存的 Windows 位置和选定的板引脚触点。",
+    "LED arrays": "LED 阵列",
+    "Add LED array": "添加 LED 阵列",
+    "Default effect": "默认效果",
+    "Default brightness": "默认亮度",
+    "Effect speed": "效果速度",
+    "Resource details": "资源详情",
+    "Default brightness (%)": "默认亮度 (%)",
+    "Effect speed (%)": "效果速度 (%)"
   },
   "rtl": false,
   "shell": {

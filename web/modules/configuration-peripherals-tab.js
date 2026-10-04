@@ -294,16 +294,29 @@ export function createConfigurationPeripheralsTab({
 
     state.peripheralControlProfiles = normalizedPeripheralControlProfiles();
     const total = state.peripheralControlProfiles.length;
+    const hasArray=state.peripheralControlProfiles.includes('ws2812-neopixel-led-strip');
+    const wledTab=document.querySelector('[data-tab="wled"]');
+    if(wledTab){
+      const wasActive=wledTab.getAttribute('aria-selected')==='true';
+      wledTab.hidden=!hasArray;
+      if(!hasArray&&wasActive)document.querySelector('[data-tab="gpio"]')?.click();
+    }
+
     elements.peripheralControlsList.innerHTML = "";
+    const ledList=document.getElementById('wledControlsList');
+    if(ledList)ledList.replaceChildren();
 
     state.peripheralControlProfiles.forEach((selectedValue, index) => {
+      const ledProfile=['ws2812-neopixel-led-strip','led-pwm-dimmer'].includes(selectedValue);
+      for(const targetList of [elements.peripheralControlsList,...(ledList&&ledProfile?[ledList]:[])]) {
       const row = document.createElement("div");
       row.className = "peripheral-profile-row";
 
       const select = document.createElement("select");
       select.dataset.peripheralControlIndex = String(index);
       select.setAttribute("aria-label", `Controls ${index + 1} peripheral profile`);
-      appendPeripheralOptions(select, peripheralControlProfileOptions, selectedValue);
+      const isLed=['ws2812-neopixel-led-strip','led-pwm-dimmer'].includes(selectedValue);
+      appendPeripheralOptions(select, isLed ? peripheralControlProfileOptions.filter(option=>['none','ws2812-neopixel-led-strip','led-pwm-dimmer'].includes(option.value)) : peripheralControlProfileOptions, selectedValue);
       row.appendChild(buildPeripheralProfileComposite("control", selectedValue, index, select, peripheralProfileInstanceLabel("Control", index, total)));
       row.appendChild(buildPeripheralActionButton({
         addDatasetKey: "peripheralControlAdd",
@@ -313,10 +326,19 @@ export function createConfigurationPeripheralsTab({
         maxCount: maxPeripheralControls,
         singularLabel: "control",
       }));
-      elements.peripheralControlsList.appendChild(row);
+      if(targetList===ledList){
+        const ids=new Map();
+        for(const field of row.querySelectorAll('[id]')){ids.set(field.id,'wled-'+field.id);field.id='wled-'+field.id;}
+        for(const field of row.querySelectorAll('[for],[aria-labelledby]'))for(const attribute of ['for','aria-labelledby']){
+          if(field.hasAttribute(attribute))field.setAttribute(attribute,field.getAttribute(attribute).split(' ').map(id=>ids.get(id)||id).join(' '));
+        }
+      }
+      targetList.appendChild(row);
       if(selectedValue==='ws2812-neopixel-led-strip'){
         state.peripheralHelperBindings ||= {};const key=`control:${index}`;const values=state.peripheralHelperBindings[key]||{};
-        elements.peripheralControlsList.append(arrayControls(values,256,next=>{state.peripheralHelperBindings[key]=next;renderPeripheralDiagram();queueSettingsSave(150);}));
+        const capabilities=state.status?.ledCapabilities;
+        targetList.append(arrayControls(values,capabilities?.limits?.[key]||256,next=>{state.peripheralHelperBindings[key]=next;queueSettingsSave(150);renderPeripheralControlControls();renderPeripheralDiagram();},{showPreview:false,compact:targetList===elements.peripheralControlsList,...(capabilities?.effects?{effects:capabilities.effects}:{})}));
+      }
       }
     });
   }
@@ -687,7 +709,8 @@ export function createConfigurationPeripheralsTab({
       onPeripheralConfigurationChange?.();
     });
 
-    elements.peripheralControlsList?.addEventListener("change", (event) => {
+    for(const controlList of [elements.peripheralControlsList,document.getElementById('wledControlsList')]) {
+    controlList?.addEventListener("change", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLSelectElement)) {
         return;
@@ -699,6 +722,7 @@ export function createConfigurationPeripheralsTab({
           String(target.dataset.peripheralHelperSignal || "IN1"),
           String(target.value || ""),
         );
+        renderPeripheralControlControls();
         syncGpioMappingControls();
         renderPeripheralDiagram();
         queueSettingsSave(0);
@@ -718,7 +742,7 @@ export function createConfigurationPeripheralsTab({
       onPeripheralConfigurationChange?.();
     });
 
-    elements.peripheralControlsList?.addEventListener("click", (event) => {
+    controlList?.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLButtonElement)) {
         return;
@@ -729,7 +753,7 @@ export function createConfigurationPeripheralsTab({
         if (state.peripheralControlProfiles.length >= maxPeripheralControls) {
           return;
         }
-        state.peripheralControlProfiles.push("none");
+        state.peripheralControlProfiles.push(controlList?.id==='wledControlsList'?'ws2812-neopixel-led-strip':"none");
         renderPeripheralControlControls();
         syncGpioMappingControls();
         savePeripheralProfileSelections();
@@ -748,6 +772,18 @@ export function createConfigurationPeripheralsTab({
       syncGpioMappingControls();
       savePeripheralProfileSelections();
       onPeripheralConfigurationChange?.();
+    });
+
+    }
+    document.getElementById('wledAddArray')?.addEventListener('click',()=>{
+      let index=state.peripheralControlProfiles.indexOf('none');
+      if(index<0){
+        if(state.peripheralControlProfiles.length>=maxPeripheralControls)return;
+        index=state.peripheralControlProfiles.length;state.peripheralControlProfiles.push('none');
+      }
+      state.peripheralControlProfiles[index]='ws2812-neopixel-led-strip';
+      renderPeripheralControlControls();syncGpioMappingControls();renderPeripheralDiagram();
+      savePeripheralProfileSelections();queueSettingsSave(150);onPeripheralConfigurationChange?.();
     });
 
     elements.peripheralExpansionsList?.addEventListener("change", (event) => {
@@ -993,6 +1029,7 @@ export function createConfigurationPeripheralsTab({
       elements.peripheralStorageList,
       elements.peripheralCommunicationList,
       elements.peripheralControlsList,
+      document.getElementById('wledControlsList'),
       elements.peripheralExpansionsList,
     ].filter(Boolean);
     for (const container of peripheralInteractionContainers) {

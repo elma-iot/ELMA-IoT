@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "حفظ وتطبيق مجموعة LED",
     "LED array wiring": "أسلاك صفيف LED",
     "DO → next array only": "افعل → المصفوفة التالية فقط",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "تستخدم المعاينة المتحركة الإعدادات الافتراضية التي تم تكوينها. يمكن أن يؤدي إجراء منطقي لاحق إلى تجاوزها. يطبق الحفظ هذه القيم على المصفوفة النشطة؛ يستخدم مخطط الأسلاك مواضع Windows المحفوظة وجهات اتصال دبوس اللوحة المحددة."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "تستخدم المعاينة المتحركة الإعدادات الافتراضية التي تم تكوينها. يمكن أن يؤدي إجراء منطقي لاحق إلى تجاوزها. يطبق الحفظ هذه القيم على المصفوفة النشطة؛ يستخدم مخطط الأسلاك مواضع Windows المحفوظة وجهات اتصال دبوس اللوحة المحددة.",
+    "LED arrays": "مصفوفات LED",
+    "Add LED array": "إضافة مصفوفة LED",
+    "Default effect": "التأثير الافتراضي",
+    "Default brightness": "السطوع الافتراضي",
+    "Effect speed": "سرعة التأثير",
+    "Resource details": "تفاصيل الموارد",
+    "Default brightness (%)": "السطوع الافتراضي (%)",
+    "Effect speed (%)": "سرعة التأثير (%)"
   },
   "rtl": true,
   "shell": {

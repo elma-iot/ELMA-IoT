@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Salva e applica la serie di LED",
     "LED array wiring": "Cablaggio array di LED",
     "DO → next array only": "DO → solo array successivo",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "L'anteprima animata utilizza le impostazioni predefinite configurate. Un'azione Logica successiva può sovrascriverli. Save applica questi valori all'array attivo; lo schema elettrico utilizza le posizioni Windows salvate e i contatti dei pin della scheda selezionati."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "L'anteprima animata utilizza le impostazioni predefinite configurate. Un'azione Logica successiva può sovrascriverli. Save applica questi valori all'array attivo; lo schema elettrico utilizza le posizioni Windows salvate e i contatti dei pin della scheda selezionati.",
+    "LED arrays": "Gruppi di LED",
+    "Add LED array": "Aggiungi gruppo di LED",
+    "Default effect": "Effetto predefinito",
+    "Default brightness": "Luminosità predefinita",
+    "Effect speed": "Velocità dell’effetto",
+    "Resource details": "Dettagli delle risorse",
+    "Default brightness (%)": "Luminosità predefinita (%)",
+    "Effect speed (%)": "Velocità dell’effetto (%)"
   },
   "rtl": false,
   "shell": {

@@ -68,6 +68,7 @@ export function createConfigurationSettingsPersistenceModule({
   updateGpioBoardSelectorMode,
   applyBackupUiState,
 }) {
+  let pendingSnapshot = null;
   function settingsSubsetMatches(actual, expected) {
     if (expected === null || typeof expected !== "object") {
       if (typeof expected === "number") {
@@ -83,8 +84,10 @@ export function createConfigurationSettingsPersistenceModule({
   }
 
   async function refreshSettingsAfterSave(expectedSettings, attempts = 8, delayMs = 250) {
+    const revision = Number(state.settingsEditRevision || 0);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const loadedSettings = await request("/api/settings");
+      if (state.settingsDirty || Number(state.settingsEditRevision || 0) !== revision) return false;
       if (settingsSubsetMatches(loadedSettings, expectedSettings)) {
         state.settings = loadedSettings;
         fillForm(loadedSettings);
@@ -343,6 +346,9 @@ export function createConfigurationSettingsPersistenceModule({
     }
     state.settingsDirty = true;
     state.settingsEditRevision = Number(state.settingsEditRevision || 0) + 1;
+    // Capture the edit itself, rather than later reading controls that a
+    // concurrent response or tab change may have rebuilt.
+    pendingSnapshot = currentSettingsSnapshot();
     // Android may suspend WebView timers immediately when the app backgrounds.
     // Commit the complete peripheral snapshot before the deferred UI autosave.
     if (document.body.classList.contains("android-designer") && window.elmaPersistAndroidDraft) {
@@ -373,10 +379,10 @@ export function createConfigurationSettingsPersistenceModule({
 
     const previousSettings = state.settings;
     const submittedRevision = Number(state.settingsEditRevision || 0);
-    // The PC Designer already owns the authoritative in-memory form state.
-    // Rebuilding every control and polling the loopback backend after each
-    // keystroke/change interrupts open selects and makes clicks feel lost.
-    const lightweightAutosave = silent && document.body.classList.contains("local-builder-mode");
+    // Both desktop and device pages already own the current form state.
+    // Autosave must not rebuild controls or start a readback that races the
+    // next edit (including edits in the mirrored WLED panel).
+    const lightweightAutosave = silent;
     submittedSettings.sd ||= {};
     applyPeripheralProfileSelections(submittedSettings);
     submittedSettings.ui = normalizeUiSettings(submittedSettings.ui);
@@ -401,7 +407,8 @@ export function createConfigurationSettingsPersistenceModule({
         if (Number(state.settingsEditRevision || 0) === submittedRevision) {
           state.settingsDirty = false;
         }
-        if (!lightweightAutosave) {
+        // A response for an older snapshot must never replace newer controls.
+        if (!lightweightAutosave && Number(state.settingsEditRevision || 0) === submittedRevision) {
           fillForm(submittedSettings);
           applyBackupUiState({
             gpioBoard: {
@@ -433,6 +440,10 @@ export function createConfigurationSettingsPersistenceModule({
       } finally {
         state.settingsSaving = false;
         state.settingsSavePromise = null;
+        if (pendingSnapshot) {
+          if (state.settingsSaveTimer) window.clearTimeout(state.settingsSaveTimer);
+          state.settingsSaveTimer = window.setTimeout(() => saveSettings({silent:true}).catch(handleError), 0);
+        }
       }
     })();
 
@@ -500,7 +511,8 @@ export function createConfigurationSettingsPersistenceModule({
       state.settingsSaveTimer = null;
     }
     normalizeDecimalField(elements.batteryMeasuredVoltage);
-    const submittedSettings = currentSettingsSnapshot();
+    const submittedSettings = silent && pendingSnapshot ? pendingSnapshot : currentSettingsSnapshot();
+    pendingSnapshot = null;
     await applySettingsPayload(submittedSettings, {
       silent,
       successMessage: silent ? "Settings auto-saved" : "Settings saved",

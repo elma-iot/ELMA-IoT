@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "LED 어레이 저장 및 적용",
     "LED array wiring": "LED 어레이 배선",
     "DO → next array only": "DO → 다음 배열만",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "애니메이션 미리보기는 구성된 기본값을 사용합니다. 이후의 Logics 작업이 이를 재정의할 수 있습니다. 저장은 이 값을 활성 배열에 적용합니다. 배선 다이어그램은 저장된 Windows 위치와 선택한 보드 핀 접점을 사용합니다."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "애니메이션 미리보기는 구성된 기본값을 사용합니다. 이후의 Logics 작업이 이를 재정의할 수 있습니다. 저장은 이 값을 활성 배열에 적용합니다. 배선 다이어그램은 저장된 Windows 위치와 선택한 보드 핀 접점을 사용합니다.",
+    "LED arrays": "LED 배열",
+    "Add LED array": "LED 배열 추가",
+    "Default effect": "기본 효과",
+    "Default brightness": "기본 밝기",
+    "Effect speed": "효과 속도",
+    "Resource details": "리소스 세부 정보",
+    "Default brightness (%)": "기본 밝기 (%)",
+    "Effect speed (%)": "효과 속도 (%)"
   },
   "rtl": false,
   "shell": {

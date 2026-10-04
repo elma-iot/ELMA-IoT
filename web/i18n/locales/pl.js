@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Zapisz i zastosuj tablicę LED",
     "LED array wiring": "Okablowanie tablicy LED",
     "DO → next array only": "DO → tylko następna tablica",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Animowany podgląd korzysta ze skonfigurowanych ustawień domyślnych. Późniejsza akcja Logiki może je zastąpić. Zapisz stosuje te wartości do aktywnej tablicy; schemat połączeń wykorzystuje zapisane pozycje Windows i wybrane styki pinów płytki."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Animowany podgląd korzysta ze skonfigurowanych ustawień domyślnych. Późniejsza akcja Logiki może je zastąpić. Zapisz stosuje te wartości do aktywnej tablicy; schemat połączeń wykorzystuje zapisane pozycje Windows i wybrane styki pinów płytki.",
+    "LED arrays": "Układy LED",
+    "Add LED array": "Dodaj układ LED",
+    "Default effect": "Efekt domyślny",
+    "Default brightness": "Jasność domyślna",
+    "Effect speed": "Prędkość efektu",
+    "Resource details": "Szczegóły zasobów",
+    "Default brightness (%)": "Jasność domyślna (%)",
+    "Effect speed (%)": "Prędkość efektu (%)"
   },
   "rtl": false,
   "shell": {

@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Save and apply LED array",
     "LED array wiring": "LED array wiring",
     "DO → next array only": "DO → next array only",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.",
+    "LED arrays": "LED arrays",
+    "Add LED array": "Add LED array",
+    "Default effect": "Default effect",
+    "Default brightness": "Default brightness",
+    "Effect speed": "Effect speed",
+    "Resource details": "Resource details",
+    "Default brightness (%)": "Default brightness (%)",
+    "Effect speed (%)": "Effect speed (%)"
   },
   "rtl": false,
   "shell": {

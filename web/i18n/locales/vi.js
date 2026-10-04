@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Lưu và áp dụng mảng LED",
     "LED array wiring": "Đấu dây mảng LED",
     "DO → next array only": "LÀM → chỉ mảng tiếp theo",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Bản xem trước hoạt ảnh sử dụng các giá trị mặc định đã được định cấu hình. Một hành động Logic sau này có thể ghi đè lên chúng. Lưu áp dụng các giá trị này cho mảng hoạt động; sơ đồ nối dây sử dụng các vị trí Windows đã lưu và các điểm tiếp xúc chân bảng đã chọn."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Bản xem trước hoạt ảnh sử dụng các giá trị mặc định đã được định cấu hình. Một hành động Logic sau này có thể ghi đè lên chúng. Lưu áp dụng các giá trị này cho mảng hoạt động; sơ đồ nối dây sử dụng các vị trí Windows đã lưu và các điểm tiếp xúc chân bảng đã chọn.",
+    "LED arrays": "Dãy LED",
+    "Add LED array": "Thêm dãy LED",
+    "Default effect": "Hiệu ứng mặc định",
+    "Default brightness": "Độ sáng mặc định",
+    "Effect speed": "Tốc độ hiệu ứng",
+    "Resource details": "Chi tiết tài nguyên",
+    "Default brightness (%)": "Độ sáng mặc định (%)",
+    "Effect speed (%)": "Tốc độ hiệu ứng (%)"
   },
   "rtl": false,
   "shell": {

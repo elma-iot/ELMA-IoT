@@ -197,7 +197,7 @@ bool devices(JsonDocument& d,JsonVariantConst graph={}){
  if(graph.isNull()){JsonDocument filter;for(const char* key:{"type","parameters","binding","peripheral","ports","name"})filter[0][key]=true;if(deserializeJson(d,FPSTR(ELMA_8266_DEVICES),DeserializationOption::Filter(filter)))return false;}
  else {JsonDocument filter;filter[0]["type"]=true;filter[0]["parameters"]=true;filter[0]["peripheral"]=true;
   for(const char* key:{"id","type","direction","required"})filter[0]["ports"][0][key]=true;
-  for(const char* key:{"kind","pin","ledType","brightnessSupported","activeLow","greenPin","bluePin","pwmAllowed","maxPwmFrequency","group","index","pins","count","maxCount","layout","rows","columns","serpentine","defaults"})filter[0]["binding"][key]=true;
+  for(const char* key:{"kind","pin","ledType","brightnessSupported","activeLow","greenPin","bluePin","pwmAllowed","maxPwmFrequency","group","index","pins","count","maxCount","layout","rows","columns","serpentine","defaults","segments","arrayCount","perArrayCount","sync"})filter[0]["binding"][key]=true;
   for(JsonObjectConst n:graph["nodes"].as<JsonArrayConst>())if(n["type"]=="hardware.gpio")filter[0]["binding"]["allowedPins"][String(n["parameters"]["pin"]|-1)]=true;
   if(deserializeJson(d,FPSTR(ELMA_8266_DEVICES),DeserializationOption::Filter(filter)))return false;
  }
@@ -291,9 +291,12 @@ bool copyStoredFile(const char* from,const char* to){File input=LittleFS.open(fr
 bool recoverConfiguration(){if(!LittleFS.exists("/config.pending"))return true;String marker=readFile("/config.pending",8);if(!copyStoredFile("/settings.backup","/settings.json"))return false;if(marker=="graph"){if(!copyStoredFile("/logics.backup","/logics.json"))return false;}else LittleFS.remove("/logics.json");return LittleFS.remove("/config.pending");}
 // Transfer ownership to the asynchronous response: no second JSON tree and no
 // contiguous serialized copy. This is essential for ESP8266's small heap.
+static unsigned activeJsonResponses=0;
+bool deferJsonRequest(AsyncWebServerRequest* req){if(!activeJsonResponses)return false;req->send(503,"application/json","{\"error\":\"Device busy; retry shortly\"}");return true;}
 class OwnedJsonResponse:public AsyncJsonResponse {
 public:
- explicit OwnedJsonResponse(JsonDocument& source){_jsonBuffer=std::move(source);_root=_jsonBuffer.as<JsonVariant>();setLength();}
+ ~OwnedJsonResponse() override{--activeJsonResponses;}
+ explicit OwnedJsonResponse(JsonDocument& source){++activeJsonResponses;_jsonBuffer=std::move(source);_root=_jsonBuffer.as<JsonVariant>();setLength();}
 };
 void jsonReply(AsyncWebServerRequest* req,JsonDocument& d,int code=200){
  if(d.overflowed()){req->send(503,"application/json","{\"error\":\"Insufficient heap for response; reduce graph size\"}");return;}
@@ -317,7 +320,7 @@ bool applyConfiguration(JsonVariantConst v,String& error,const char* stagedGraph
   JsonDocument helpers,bindings,filter;
   if(deserializeJson(helpers,next["ui"]["peripheralHelperBindings"].as<const char*>())){error="Invalid peripheral options";return false;}
   filter[0]["type"]=true;filter[0]["peripheral"]["id"]=true;
-  for(const char* key:{"pins","count","index","layout","rows","columns","serpentine","maxCount","defaults"})filter[0]["binding"][key]=true;
+  for(const char* key:{"kind","group","pins","count","index","layout","rows","columns","serpentine","maxCount","defaults"})filter[0]["binding"][key]=true;
   if(deserializeJson(bindings,FPSTR(ELMA_8266_DEVICES),DeserializationOption::Filter(filter))){error="Cannot validate array configuration";return false;}filter.clear();
   for(JsonObject n:bindings.as<JsonArray>())if(LedArrays::matches(n)){
    String key="control:"+String(n["binding"]["index"]|0);std::string why;
@@ -329,7 +332,14 @@ bool applyConfiguration(JsonVariantConst v,String& error,const char* stagedGraph
   }
   for(JsonObjectConst a:bindings.as<JsonArrayConst>())if(LedArrays::matches(a))for(JsonObjectConst b:bindings.as<JsonArrayConst>())if(a["peripheral"]["id"]!=b["peripheral"]["id"])
    for(JsonPairConst port:b["binding"]["pins"].as<JsonObjectConst>())if(port.value().is<int>()&&port.value().as<int>()==(a["binding"]["pins"]["DIN"]|-1)){error="LED data GPIO is used by another peripheral";return false;}
-  helpers.clear();if(next.overflowed()||bindings.overflowed()){error="Insufficient memory for array configuration";return false;}
+  helpers.clear();
+  // Five action definitions can share one physical array. Release duplicates
+  // before copying bindings into the running graph on the small ESP8266 heap.
+  JsonArray unique=bindings.as<JsonArray>();
+  for(size_t i=unique.size();i>0;--i)if(LedArrays::matches(unique[i-1])){
+   for(size_t j=0;j<i-1;++j)if(unique[j]["peripheral"]["id"]==unique[i-1]["peripheral"]["id"]){unique.remove(i-1);break;}
+  }
+  if(next.overflowed()||bindings.overflowed()){error="Insufficient memory for array configuration";return false;}
   if(!saveJsonFile("/settings.array.tmp",next)){error="Cannot save array settings";return false;}
   if(!LittleFS.rename("/settings.array.tmp","/settings.json")){error="Cannot commit array settings";return false;}
   config=std::move(next);LedArrays::reset();
@@ -363,8 +373,9 @@ class StoredGraphResponse:public AsyncAbstractResponse {
  static constexpr const char* empty="{\"schemaVersion\":1,\"nodes\":[],\"connections\":[]}";
 public:
  explicit StoredGraphResponse(JsonDocument& metadata):graph_(LittleFS.open("/logics.json","r")),metadata_(std::move(metadata)){
-  graphLength_=graph_?graph_.size():strlen(empty);devicesLength_=strlen_P(ELMA_8266_DEVICES);_code=200;_contentType="application/json";_contentLength=strlen(prefix)+graphLength_+strlen(devicePrefix)+devicesLength_+measureJson(metadata_);_sendContentLength=true;
+  ++activeJsonResponses;graphLength_=graph_?graph_.size():strlen(empty);devicesLength_=strlen_P(ELMA_8266_DEVICES);_code=200;_contentType="application/json";_contentLength=strlen(prefix)+graphLength_+strlen(devicePrefix)+devicesLength_+measureJson(metadata_);_sendContentLength=true;
  }
+ ~StoredGraphResponse() override{--activeJsonResponses;}
  bool _sourceValid()const override{return true;}
  size_t _fillBuffer(uint8_t* data,size_t len)override{
   size_t offset=_sentLength,written=0,head=strlen(prefix);
@@ -378,7 +389,7 @@ public:
   }return written;
  }
 };
-void logicReply(AsyncWebServerRequest* req,bool live=false){StateGuard guard;if(provisioningBusy){req->send(503,"application/json","{\"error\":\"Provisioning in progress\"}");return;}JsonDocument out;if(!live){JsonDocument types;deserializeJson(types,FPSTR(ELMA_8266_TYPES));out["supportedTypes"].set(types);types.clear();out["audioEnabled"]=false;out["compactGraph"]=true;}out["ledBinding"]["brightnessSupported"]=true;out["ledBinding"]["kind"]="led";out["ledBinding"]["pin"]=config["device"]["statusLedPin"]|-1;out["ledBinding"]["ledType"]=config["device"]["statusLedType"]|"regular";out["ledBinding"]["greenPin"]=config["device"]["statusLedGreenPin"]|-1;out["ledBinding"]["bluePin"]=config["device"]["statusLedBluePin"]|-1;out["mode"]=mode;auto groups=out["groups"].to<JsonArray>();for(JsonObjectConst g:runtime.graph()["groups"].as<JsonArrayConst>()){auto state=groups.add<JsonObject>();state["id"].set(g["id"]);state["mode"].set(g["mode"]);}if(live)runtime.telemetry(out["live"].to<JsonObject>());if(live){jsonReply(req,out);return;}if(out.overflowed()){errorReply(req,"Insufficient memory for editor metadata",503);return;}req->send(new StoredGraphResponse(out));}
+void logicReply(AsyncWebServerRequest* req,bool live=false){StateGuard guard;if(deferJsonRequest(req))return;if(provisioningBusy){req->send(503,"application/json","{\"error\":\"Provisioning in progress\"}");return;}JsonDocument out;if(!live){JsonDocument types;deserializeJson(types,FPSTR(ELMA_8266_TYPES));out["supportedTypes"].set(types);types.clear();out["audioEnabled"]=false;out["compactGraph"]=true;}out["ledBinding"]["brightnessSupported"]=true;out["ledBinding"]["kind"]="led";out["ledBinding"]["pin"]=config["device"]["statusLedPin"]|-1;out["ledBinding"]["ledType"]=config["device"]["statusLedType"]|"regular";out["ledBinding"]["greenPin"]=config["device"]["statusLedGreenPin"]|-1;out["ledBinding"]["bluePin"]=config["device"]["statusLedBluePin"]|-1;out["mode"]=mode;auto groups=out["groups"].to<JsonArray>();for(JsonObjectConst g:runtime.graph()["groups"].as<JsonArrayConst>()){auto state=groups.add<JsonObject>();state["id"].set(g["id"]);state["mode"].set(g["mode"]);}if(live)runtime.telemetry(out["live"].to<JsonObject>());if(live){jsonReply(req,out);return;}if(out.overflowed()){errorReply(req,"Insufficient memory for editor metadata",503);return;}req->send(new StoredGraphResponse(out));}
 // Same bounded one-sample serial protocol as plot_telemetry.cpp on full targets.
 void plotSerialReply(JsonDocument& out,uint32_t after,uint32_t boot){
  if(boot!=bootId||after>sampleSequence)after=0;
@@ -418,9 +429,9 @@ public:
  }
 };
 void setupHttp(){for(const auto& asset:ELMA_8266_ASSETS){auto* a=&asset;server.on(a->path,HTTP_GET,[a](AsyncWebServerRequest* r){auto* response=r->beginResponse_P(200,a->type,a->data,a->size);response->addHeader("Content-Encoding","gzip");response->addHeader("Cache-Control","no-cache");r->send(response);});}
- server.on("/api/board",HTTP_GET,[](AsyncWebServerRequest* r){JsonDocument out;deserializeJson(out,FPSTR(ELMA_COMPACT_BOARD_INFO));jsonReply(r,out);});
- server.on("/api/status",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;if(provisioningBusy){r->send(503,"application/json","{\"error\":\"Configuration transfer in progress; retry shortly\"}");return;}updateStatus();JsonDocument out;out.set(status);jsonReply(r,out);});
- server.on("/api/settings",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;JsonDocument out;out.set(config);out["wifi"].remove("password");jsonReply(r,out);});
+ server.on("/api/board",HTTP_GET,[](AsyncWebServerRequest* r){JsonDocument out;deserializeJson(out,FPSTR(ELMA_COMPACT_BOARD_INFO));JsonArray effects=out["ledEffects"].to<JsonArray>();for(int i=0;i<10;i++)if(LedEffects::enabled(i))effects.add(LedEffects::names[i]);jsonReply(r,out);});
+ server.on("/api/status",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;if(deferJsonRequest(r))return;if(provisioningBusy){r->send(503,"application/json","{\"error\":\"Configuration transfer in progress; retry shortly\"}");return;}updateStatus();JsonDocument out;out.set(status);LedArrays::snapshot(out["ledArrays"].to<JsonArray>(),mode=="playing");jsonReply(r,out);});
+ server.on("/api/settings",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;if(deferJsonRequest(r))return;JsonDocument out;out.set(config);out["wifi"].remove("password");jsonReply(r,out);});
  server.on("/api/config-operation",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;JsonDocument out;out["operation"]=settingsOperation;out["pending"]=settingsApplying||pendingSettings.length()>0;out["error"]=settingsResult;jsonReply(r,out);});
  auto* settings=new AsyncCallbackJsonWebHandler("/api/settings",[](AsyncWebServerRequest* r,JsonVariant& v){StateGuard guard;if(settingsApplying||pendingSettings.length()||provisioningBusy){errorReply(r,"Configuration is already being applied",409);return;}serializeJson(v,pendingSettings);settingsResult="";++settingsOperation;JsonDocument out;out["pending"]=true;out["operation"]=settingsOperation;jsonReply(r,out,202);});settings->setMaxContentLength(kConfigLimit);server.addHandler(settings);
  server.on("/api/logics",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;logicReply(r,r->hasParam("live"));});
@@ -459,6 +470,6 @@ if(!recoverConfiguration())fault="Configuration recovery failed";
 defaults();String saved=readFile("/settings.json",kConfigLimit);if(saved.length()){JsonDocument d;if(!deserializeJson(d,saved))config.set(d);}saved="";mode=readFile("/mode",16);if(mode!="paused"&&mode!="stopped")mode="playing";setLed(false);connectWifi();
 if(!LittleFS.exists("/logics.json")&&config["windowsLogic"].is<JsonObject>()){if(!saveJsonFile("/logics.json",config["windowsLogic"]))fault="Cannot persist default Logics";}
 config.remove("windowsLogic");packPeripheralMetadata(config);{JsonDocument lean;lean.set(config);config=std::move(lean);}loadSavedGraph(fault);setupHttp();Serial.println("[clone] provisioning ready");}
-void loop(){StateGuard guard;serialTick();if(pendingSettings.length()){settingsApplying=true;provisioningBusy=true;Serial.println("[settings] applying");JsonDocument incoming;auto parsed=deserializeJson(incoming,pendingSettings);pendingSettings="";if(parsed)settingsResult="Invalid settings JSON";else if(!applyConfiguration(incoming.as<JsonVariantConst>(),settingsResult,nullptr,&incoming)){}incoming.clear();settingsApplying=false;provisioningBusy=false;Serial.println("[settings] complete "+settingsResult);return;}if(provisioningBusy){yield();return;}uint32_t now=millis();if(applyArrayDefaultsPending){applyArrayDefaultsPending=false;if(mode=="playing")for(JsonObjectConst n:runtime.nodes())if(LedArrays::matches(n)){JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";std::string why;if(!LedArrays::action(n,args.as<JsonVariantConst>(),why))fault=why.c_str();}}LedArrays::tick(now,mode=="playing");if(wifiReconfigureAt&&int32_t(now-wifiReconfigureAt)>=0){wifiReconfigureAt=0;connectWifi();}if(now-lastTick>=25){lastTick=now;if(!ledManual){bool wanted=WiFi.status()==WL_CONNECTED||((now/500)%2);if(wanted!=ledOn)setLed(wanted);}updateStatus();if(mode=="playing")runtime.tick(now,status.as<JsonVariantConst>());fault=runtime.error().c_str();}if(now-lastNetwork>=5000){lastNetwork=now;networkReport();}if(WiFi.status()==WL_CONNECTED&&WiFi.getMode()==WIFI_AP_STA&&WiFi.softAPgetStationNum()==0)WiFi.softAPdisconnect(true);yield();}
+void loop(){StateGuard guard;serialTick();if(pendingSettings.length()){settingsApplying=true;provisioningBusy=true;Serial.println("[settings] applying");JsonDocument incoming;auto parsed=deserializeJson(incoming,pendingSettings);pendingSettings="";if(parsed)settingsResult="Invalid settings JSON";else if(!applyConfiguration(incoming.as<JsonVariantConst>(),settingsResult,nullptr,&incoming)){}incoming.clear();settingsApplying=false;provisioningBusy=false;Serial.println("[settings] complete "+settingsResult);return;}if(provisioningBusy){yield();return;}uint32_t now=millis();if(applyArrayDefaultsPending){applyArrayDefaultsPending=false;JsonDocument arrayDevices;devices(arrayDevices);for(JsonObjectConst n:arrayDevices.as<JsonArrayConst>())if(LedArrays::matches(n)){JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";args["configured"]=true;std::string why;if(!LedArrays::action(n,args.as<JsonVariantConst>(),why))fault=why.c_str();}}LedArrays::bootWifi((WiFi.getMode()&WIFI_AP)!=0,WiFi.status()==WL_CONNECTED,now);LedArrays::tick(now);if(wifiReconfigureAt&&int32_t(now-wifiReconfigureAt)>=0){wifiReconfigureAt=0;connectWifi();}if(now-lastTick>=25){lastTick=now;if(!ledManual){bool wanted=WiFi.status()==WL_CONNECTED||((now/500)%2);if(wanted!=ledOn)setLed(wanted);}updateStatus();if(mode=="playing")runtime.tick(now,status.as<JsonVariantConst>());fault=runtime.error().c_str();}if(now-lastNetwork>=5000){lastNetwork=now;networkReport();}if(WiFi.status()==WL_CONNECTED&&WiFi.getMode()==WIFI_AP_STA&&WiFi.softAPgetStationNum()==0)WiFi.softAPdisconnect(true);yield();}
 
 #endif // ESP8266

@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "LED dizisini kaydedin ve uygulayın",
     "LED array wiring": "LED dizisi kablolaması",
     "DO → next array only": "DO → yalnızca sonraki dizi",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Animasyonlu önizleme, yapılandırılmış varsayılanları kullanır. Daha sonraki bir Logics eylemi bunları geçersiz kılabilir. Kaydet, bu değerleri etkin diziye uygular; kablo bağlantı şeması kayıtlı Windows konumlarını ve seçilen kart pin kontaklarını kullanır."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Animasyonlu önizleme, yapılandırılmış varsayılanları kullanır. Daha sonraki bir Logics eylemi bunları geçersiz kılabilir. Kaydet, bu değerleri etkin diziye uygular; kablo bağlantı şeması kayıtlı Windows konumlarını ve seçilen kart pin kontaklarını kullanır.",
+    "LED arrays": "LED dizileri",
+    "Add LED array": "LED dizisi ekle",
+    "Default effect": "Varsayılan efekt",
+    "Default brightness": "Varsayılan parlaklık",
+    "Effect speed": "Efekt hızı",
+    "Resource details": "Kaynak ayrıntıları",
+    "Default brightness (%)": "Varsayılan parlaklık (%)",
+    "Effect speed (%)": "Efekt hızı (%)"
   },
   "rtl": false,
   "shell": {

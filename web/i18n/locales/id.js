@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Simpan dan terapkan susunan LED",
     "LED array wiring": "kabel susunan LED",
     "DO → next array only": "LAKUKAN → array berikutnya saja",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Pratinjau animasi menggunakan default yang dikonfigurasi. Tindakan Logika selanjutnya dapat menimpanya. Simpan menerapkan nilai-nilai ini ke array aktif; diagram pengkabelan menggunakan posisi Windows yang disimpan dan kontak pin papan yang dipilih."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Pratinjau animasi menggunakan default yang dikonfigurasi. Tindakan Logika selanjutnya dapat menimpanya. Simpan menerapkan nilai-nilai ini ke array aktif; diagram pengkabelan menggunakan posisi Windows yang disimpan dan kontak pin papan yang dipilih.",
+    "LED arrays": "Larik LED",
+    "Add LED array": "Tambahkan larik LED",
+    "Default effect": "Efek bawaan",
+    "Default brightness": "Kecerahan bawaan",
+    "Effect speed": "Kecepatan efek",
+    "Resource details": "Detail sumber daya",
+    "Default brightness (%)": "Kecerahan bawaan (%)",
+    "Effect speed (%)": "Kecepatan efek (%)"
   },
   "rtl": false,
   "shell": {

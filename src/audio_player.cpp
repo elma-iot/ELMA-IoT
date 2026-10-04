@@ -12,6 +12,7 @@
 #include <memory>
 #include <driver/i2s.h>
 #include "logic_audio_dsp.h"
+#include "led_audio.h"
 
 #include "default_config.h"
 #include "playback_text.h"
@@ -482,6 +483,7 @@ void audio_process_i2s(uint32_t* sample, bool* continueI2S) {
             g_impl->overlay.phaseQ16 += g_impl->overlay.stepQ16;
         }
     }
+    if(sample&&g_impl)LedAudio::playback().push(int16_t(*sample>>16),int16_t(*sample),g_impl->activeSampleRateHz);
     if (continueI2S != nullptr) {
         *continueI2S = true;
     }

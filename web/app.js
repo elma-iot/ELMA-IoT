@@ -1,4 +1,8 @@
-import {arrayOptions,arraySvg} from './modules/led-array.js';
+import {arrayOptions,arraySvg,arrayDefaults} from './modules/led-array.js';
+import {animateArray} from './modules/led-effects.js';
+const liveLedArrays = new Map();
+let stopDiagramArrays = [];
+let renderedLedCapabilities = '';
 import './modules/security-tab.js';
 import {createLogicsTab} from './modules/logic-editor.js';
 import {installOnlineHelpLinks} from './modules/online-help.js';
@@ -121,7 +125,9 @@ const state = {
   settingsSaveTimer: null,
   settingsSavePromise: null,
   settingsDirty: false,
-  settingsLoading: false,
+  // Initial diagram/profile rendering may fire persistence hooks. Do not let
+  // cached browser defaults overwrite the device before its first settings GET.
+  settingsLoading: true,
   settingsSaving: false,
   wifiScanRequestId: 0,
   firmwareReleasesLoaded: false,
@@ -3911,20 +3917,24 @@ function peripheralDiagramPlaceholderMarkup(node) {
 }
 
 function peripheralDiagramNodeMarkup(node) {
-  if(node.profileValue==="ws2812-neopixel-led-strip"){try{const a=arrayOptions(state.peripheralHelperBindings?.[`control:${node.index}`]);node={...node,src:"data:image/svg+xml,"+encodeURIComponent(arraySvg(a)),label:`${node.label} (${a.count} LEDs)`};}catch{}}
+  let ledSvg = "",ledWidth=160;
+  if(node.profileValue==="ws2812-neopixel-led-strip"){
+    const a=arrayOptions(state.peripheralHelperBindings?.[`control:${node.index}`]);
+    ledWidth=Math.min(960,160*a.arrayCount);ledSvg=arraySvg(a);node={...node,label:`${node.label} (${a.count} LEDs)`};
+  }
   const styleValue = peripheralDiagramInlineStyle(node);
   const styleAttribute = styleValue ? ` style="${escapeHtml(styleValue)}"` : "";
   const usesAsset = peripheralDiagramUsesAsset(node);
   const rotation = peripheralDiagramRotation(node.id);
   const visualStyle = rotation ? ` style="transform:rotate(${rotation}deg);"` : "";
 
-  if (usesAsset) {
+  if (usesAsset || ledSvg) {
     return `
       <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
         <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
         <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">↻</button>
         <div class="peripheral-diagram-node-visual"${visualStyle}>
-          <img src="${escapeHtml(node.src)}" alt="${escapeHtml(node.title || node.label)} module" draggable="false" />
+          ${ledSvg ? `<div data-led-array-index="${node.index}" style="width:${ledWidth}px;max-height:220px;display:flex;align-items:center">${ledSvg}</div>` : `<img src="${escapeHtml(node.src)}" alt="${escapeHtml(node.title || node.label)} module" draggable="false" />`}
         </div>
         <div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>
       </div>
@@ -4700,7 +4710,14 @@ function renderPeripheralDiagramNow() {
     const content = kind === "pin" ? `<span class="peripheral-diagram-node-block-pin">${label}</span>` : kind === "element" ? `<div class="peripheral-diagram-node-block"><div class="peripheral-diagram-node-block-title">${label}</div></div>` : label;
     return `<div class="peripheral-diagram-canvas-object peripheral-diagram-canvas-object-${escapeHtml(kind)}" data-canvas-object-id="${escapeHtml(entry.id || "")}" style="position:absolute;left:${left}px;top:${top}px;z-index:${z};">${content}</div>`;
   }).join("");
+  stopDiagramArrays.forEach(stop => stop());
+  stopDiagramArrays = [];
   elements.peripheralDiagramItems.innerHTML = visibleNodes.map((node) => peripheralDiagramNodeMarkup(node)).join("") + canvasObjectMarkup;
+  for(const preview of elements.peripheralDiagramItems.querySelectorAll('[data-led-array-index]')){
+    const values=()=>state.peripheralHelperBindings?.[`control:${preview.dataset.ledArrayIndex}`]||{};
+    const live=document.body.classList.contains('local-builder-mode')?undefined:()=>liveLedArrays.get(Number(values().DIN));
+    stopDiagramArrays.push(animateArray(preview,()=>arrayOptions(values()),()=>arrayDefaults(values()),live));
+  }
   const boardNodeId = peripheralDiagramBoardNodeId(activeGpioBoardProfile());
   if (elements.peripheralDiagramBoardShell) elements.peripheralDiagramBoardShell.hidden = Boolean(hiddenNodes[boardNodeId]);
   applyResponsivePeripheralDiagramPositions();
@@ -9092,6 +9109,15 @@ function escapeHtml(value) {
 
 function renderStatus(status) {
   statusRenderModule?.renderStatus(status);
+  if(Array.isArray(status.ledArrays)){
+    liveLedArrays.clear();
+    for(const array of status.ledArrays)liveLedArrays.set(array.pin,{...array,received:performance.now()});
+  }
+  const capabilities=JSON.stringify(status.ledCapabilities||null);
+  if(status.ledCapabilities&&capabilities!==renderedLedCapabilities){
+    renderedLedCapabilities=capabilities;
+    configurationPeripheralsTab?.renderPeripheralControlControls();
+  }
   wifiTab?.renderPowerStatus(status);
   refreshVisibleNativeTouchDiagram(status);
   updateTouchLivePolling();

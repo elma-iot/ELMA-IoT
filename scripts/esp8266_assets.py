@@ -3,6 +3,10 @@ Import("env")
 from pathlib import Path
 import gzip,json,os
 root=Path(env['PROJECT_DIR'])
+import sys
+sys.path.insert(0,str(root/'scripts'))
+from led_modules import apply as apply_led_modules
+apply_led_modules(env)
 board=os.environ.get('ELMA_SELECTED_BOARD_PROFILE') or {'esp32c6_compact':'esp32-c6','esp32c2_compact':'esp32-c2-esp8684','esp8266_1m':'esp8266-esp01s','esp8285_1m':'esp8285-generic'}.get(env['PIOENV'],'esp8266-wemos-d1-mini')
 boards=json.loads((root/'scripts/runtime-board-catalog.json').read_text(encoding='utf8'))
 info=boards[board];chip=info['chip'];small=chip in ('esp8266','esp8285')

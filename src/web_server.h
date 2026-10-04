@@ -36,6 +36,7 @@ class WebServerManager {
     using MotorRunHandler = std::function<bool(uint8_t, bool, uint32_t, int8_t, String&)>;
     using MotorConfigSaver = std::function<bool(JsonVariantConst, String&)>;
     using StatusAppender = std::function<void(JsonObject)>;
+    void setLedStatusAppender(StatusAppender appender) { ledStatusAppender_=appender; }
 
     WebServerManager();
     void begin(
@@ -64,6 +65,7 @@ class WebServerManager {
     bool webUiLocked() const;
 
   private:
+    StatusAppender ledStatusAppender_;
     LogicsGetter logicsGetter_;
     LogicsHandler logicsHandler_;
 #ifndef APP_DISABLE_WEB_UI

@@ -5,6 +5,7 @@
 #include "alarm_clock_service.h"
 #include "logic_sleep_service.h"
 #include "logic_audio_dispatch.h"
+#include "led_microphone.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
 #include <Arduino.h>
@@ -15,6 +16,7 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 #include <memory>
+#include <freertos/semphr.h>
 
 #include "default_config.h"
 #include "motor_runtime_config.h"
@@ -351,6 +353,18 @@ DeferredActions* deferredActions = nullptr;
 QueueHandle_t logicAudioQueue = nullptr;
 BuzzerMelody buzzerMelody;
 LogicDevice logicDevice;
+// Registered with esp_restart as well as called before OTA rollback.
+void extinguishLedsForRestart(){
+    logicDevice.shuttingDown();
+    statusLedColorKnown=false;writeStatusLed(false);
+    // Remove PWM/output drive for discrete LEDs (active-high or active-low).
+    if(statusLedInitialized&&!activeStatusLedIsNeoPixel){
+        ledcDetachPin(activeStatusLedPin);pinMode(activeStatusLedPin,INPUT);
+        if(activeStatusLedIsRgb){ledcDetachPin(activeStatusLedGreenPin);ledcDetachPin(activeStatusLedBluePin);pinMode(activeStatusLedGreenPin,INPUT);pinMode(activeStatusLedBluePin,INPUT);}
+    }
+    delayMicroseconds(300);
+}
+
 bool queueAudioSourceOwned(JsonVariantConst source, String& error,const char* owner) {
     if (otaManager != nullptr && otaManager->isFirmwareTransferActive()) {error="Firmware update is active";return false;}
     JsonDocument resolved;
@@ -1779,6 +1793,7 @@ void serviceWapeTriggerPulse() {
     DebugLog.printf("[rollback] %s\n", reason.c_str());
     Serial.flush();
     DebugLog.service(true);
+    extinguishLedsForRestart();
     const esp_err_t result = esp_ota_mark_app_invalid_rollback_and_reboot();
     DebugLog.printf("[rollback] esp_ota_mark_app_invalid_rollback_and_reboot failed: %d\n", static_cast<int>(result));
     Serial.flush();
@@ -3033,7 +3048,23 @@ bool extractMotorRuntimeConfigFromJson(JsonVariantConst root, String& rawConfig)
     return !rawConfig.isEmpty();
 }
 
+// TCP callbacks and the main loop must not save different generations of the
+// pending configuration at the same time. The main loop only tries this lock.
+class SettingsApplyGuard {
+    SemaphoreHandle_t mutex_;
+    bool locked_;
+public:
+    explicit SettingsApplyGuard(TickType_t wait=portMAX_DELAY) {
+        static SemaphoreHandle_t mutex=xSemaphoreCreateRecursiveMutex();
+        mutex_=mutex;locked_=mutex_&&xSemaphoreTakeRecursive(mutex_,wait)==pdTRUE;
+    }
+    ~SettingsApplyGuard(){if(locked_)xSemaphoreGiveRecursive(mutex_);}
+    explicit operator bool()const{return locked_;}
+};
+
 bool saveSettingsFromJson(JsonVariantConst root, String& error) {
+    SettingsApplyGuard guard;
+    if(!guard){error="Configuration is busy; try saving again";return false;}
     // The Wi-Fi power button sends exactly these two fields. Do not reinitialize
     // motors, displays, storage or audio for a radio-power-only adjustment.
     const JsonObjectConst object = root.as<JsonObjectConst>();
@@ -3600,6 +3631,8 @@ void executePlaybackCommand(const PlaybackCommand& command) {
         }
         mqttManager->publishState();
     } else if (command.action == "ota_auto_update") {
+        SettingsApplyGuard guard;
+        if(!guard)return;
         bool enabled = false;
         if (!payloadEnablesSwitch(command.payload, enabled)) {
             const String message = "OTA auto-update MQTT payload must be ON or OFF.";
@@ -3928,6 +3961,7 @@ void processDeferredActions() {
 }  // namespace
 
 void setup() {
+    esp_register_shutdown_handler(extinguishLedsForRestart);
     Serial.begin(115200);
     DebugLog.begin();
     beginSystemMetrics();
@@ -4138,6 +4172,7 @@ void setup() {
         appendAugmentedMotorStatus(root);
     });
     if (!logicAudioQueue) logicAudioQueue=xQueueCreate(9,sizeof(char*));
+    webServer->setLedStatusAppender([](JsonObject result){logicDevice.ledSnapshot(result);});
     webServer->setLogicsHandlers([](JsonDocument& result,bool graph){logicDevice.snapshot(result,graph);},
         [](JsonVariantConst command,JsonDocument& result,String& error){return logicDevice.request(command,result,error);});
 
@@ -4286,6 +4321,8 @@ void setup() {
 
 namespace {
 void flushPendingSettingsNow() {
+    SettingsApplyGuard guard(0);
+    if(!guard)return;
     if (deferredActions == nullptr || !deferredActions->settingsApplyPending) {
         return;
     }
@@ -4666,6 +4703,23 @@ void loop() {
     const bool audioLatencySensitive = playbackStateBeforeLogic == "playing" || playbackStateBeforeLogic == "buffering";
     logicDevice.configureStatusLed(settings->device);
     logicDevice.configureLedArrays(settings->ui.peripheralHelperBindings);
+#ifndef APP_DISABLE_AUDIO
+    static String micProfiles,micBindings;static bool micPlayback=false;
+    if(micProfiles!=settings->ui.peripheralProfileSelections||micBindings!=settings->ui.peripheralHelperBindings||micPlayback!=activeAudioOutputEnabled){
+      micProfiles=settings->ui.peripheralProfileSelections;micBindings=settings->ui.peripheralHelperBindings;micPlayback=activeAudioOutputEnabled;
+      JsonDocument profiles,bindings;deserializeJson(profiles,micProfiles);deserializeJson(bindings,micBindings);LedMicrophone::Config config;config.playback=micPlayback;
+      unsigned index=0;for(JsonVariantConst entry:profiles["audioInProfiles"].as<JsonArrayConst>()){
+        String profile=entry|"none";if(profile=="inmp441-i2s-mic"||profile=="sph0645-ics43434-i2s-mic"||profile=="i2s-microphone-generic"){
+          JsonObjectConst pins=bindings["audioIn:"+String(index)];
+          auto pin=[&](const char* key){return pins[key].isNull()?-1:pins[key].is<int>()?pins[key].as<int>():String(pins[key].as<const char*>()).toInt();};
+          config.clock=pin("SCK");config.word=pin("WS");config.data=pin("SD");break;
+        }index++;
+      }
+      // No capture task or I2S allocation unless a microphone was selected.
+      if(config.data>=0||LedMicrophone::commands())LedMicrophone::configure(config);
+    }
+#endif
+
     if(!logicSleepPending())logicDevice.loop(now, otaManager->isFirmwareTransferActive(),
                      audioLatencySensitive ? kLogicPollIntervalDuringAudioMs : 100U);
     processDeferredActions();

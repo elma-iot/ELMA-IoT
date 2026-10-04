@@ -15,6 +15,8 @@ sys.path.insert(0,str(ROOT / "scripts"))
 from project_defaults import generate_defaults
 from fit_features import apply as apply_fit_features
 apply_fit_features(env)
+from led_modules import apply as apply_led_modules
+apply_led_modules(env)
 defaults_file=os.environ.get("ELMA_PROJECT_DEFAULTS_FILE","")
 generate_defaults(ROOT,Path(defaults_file).read_text(encoding="utf-8") if defaults_file else os.environ.get("ELMA_PROJECT_DEFAULTS_JSON","{}"))
 WEB_DIR = ROOT / "web"
@@ -115,11 +117,18 @@ language_codes = ["en","es","zh","hi","ar","pt","bn","ru","ja","de","fr","ko","t
 language = os.environ.get("ELMA_COMPILED_LANGUAGE", "en")
 env.Append(CPPDEFINES=[("APP_COMPILED_LANGUAGE_ID", language_codes.index(language)), ("APP_COMPILED_THEME_ID", {"automatic":0,"light":1,"dark":2}[os.environ.get("ELMA_COMPILED_THEME", "automatic")])])
 
-if os.environ.get("ELMA_PORTABLE_BUILDER") == "1" and os.environ.get("ELMA_REBUILD_WEB") != "1" and HEADER.is_file() and SOURCE.is_file():
+from web_asset_version import source_digest, matches, PREFIX
+web_source_digest = source_digest(ROOT)
+if os.environ.get("ELMA_PORTABLE_BUILDER") == "1" and os.environ.get("ELMA_REBUILD_WEB") != "1" and HEADER.is_file() and SOURCE.is_file() and matches(SOURCE, web_source_digest):
     install_shared_fallback(SOURCE,peripheral_svg_manifest)
     selected_label = os.environ.get("ELMA_SELECTED_BOARD_PROFILE", "all supported boards")
     print(f"[web-assets] portable builder is using the prebundled configurator for {selected_label}")
     Return()
+
+if os.environ.get("ELMA_PORTABLE_BUILDER") == "1":
+    print("[web-assets] Source changed: rebuilding the embedded configurator")
+    if not shutil.which(os.environ.get("ELMA_NODE_EXECUTABLE", "node")):
+        raise SystemExit("The embedded web interface is outdated. Rebuild the application package with Node.js installed, or install Node.js to rebuild this source workspace. The old interface will not be flashed.")
 
 
 def is_gzip_payload(data: bytes) -> bool:
@@ -330,6 +339,7 @@ header_lines = [
 ]
 
 source_lines = [
+    PREFIX + web_source_digest,
     '#include "generated_web_assets.h"',
     "",
 ]

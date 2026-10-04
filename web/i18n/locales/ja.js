@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "LED アレイの保存と適用",
     "LED array wiring": "LEDアレイ配線",
     "DO → next array only": "DO → 次の配列のみ",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "アニメーション プレビューは設定されたデフォルトを使用します。後のロジック アクションでそれらをオーバーライドできます。保存すると、これらの値がアクティブな配列に適用されます。配線図では、保存された Windows 位置と選択したボード ピン接点が使用されます。"
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "アニメーション プレビューは設定されたデフォルトを使用します。後のロジック アクションでそれらをオーバーライドできます。保存すると、これらの値がアクティブな配列に適用されます。配線図では、保存された Windows 位置と選択したボード ピン接点が使用されます。",
+    "LED arrays": "LEDアレイ",
+    "Add LED array": "LEDアレイを追加",
+    "Default effect": "既定のエフェクト",
+    "Default brightness": "既定の明るさ",
+    "Effect speed": "エフェクトの速度",
+    "Resource details": "リソースの詳細",
+    "Default brightness (%)": "既定の明るさ (%)",
+    "Effect speed (%)": "エフェクトの速度 (%)"
   },
   "rtl": false,
   "shell": {

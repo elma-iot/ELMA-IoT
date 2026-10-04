@@ -1,4 +1,5 @@
 #include <driver/gpio.h>
+#include <WiFi.h>
 #include "logic_device.h"
 #include "led_array.h"
 #include "portable_peripherals.h"
@@ -131,9 +132,12 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
 
 // Called from the main loop so array allocation/refresh never runs in TCP callbacks.
 void LogicDevice::configureLedArrays(const String& helpers){
- if(arrayHelpers_==helpers||!mutex_||xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+ if(shutdown_||arrayHelpers_==helpers||!mutex_||xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+ // A TCP settings save can replace the source String while pixels are being
+ // allocated. Cache exactly the document we applied, never the newer reference.
+ const String appliedHelpers=helpers;
  JsonDocument options,updated;std::string error;
- if(deserializeJson(options,helpers)){xSemaphoreGive(mutex_);return;}
+ if(deserializeJson(options,appliedHelpers)){xSemaphoreGive(mutex_);return;}
  updated.set(devices_);
  for(JsonObject n:updated.as<JsonArray>())if(LedArrays::matches(n)){
   String key="control:"+String(n["binding"]["index"]|0);
@@ -152,11 +156,11 @@ void LogicDevice::configureLedArrays(const String& helpers){
   LedArrays::reset();devices_=std::move(updated);
   for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(LedArrays::matches(n)){
    runtime_.setPeripheralBinding(n["peripheral"]["id"]|"",n["binding"]);
-   if(mode_=="playing"){JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";LedArrays::action(n,args.as<JsonVariantConst>(),error);}
+   {JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";args["configured"]=true;LedArrays::action(n,args.as<JsonVariantConst>(),error);}
   }
-  arrayHelpers_=helpers;
+  arrayHelpers_=appliedHelpers;
  }
- if(!error.empty()){reportedError_=error;arrayHelpers_=helpers;}
+ if(!error.empty()){reportedError_=error;arrayHelpers_=appliedHelpers;}
  xSemaphoreGive(mutex_);
 }
 
@@ -241,8 +245,10 @@ bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::strin
 void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs) {
     if(!mutex_ || xSemaphoreTake(mutex_,0)!=pdTRUE)return;
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
+    if(shutdown_)return;
     updating_=updating;
-    LedArrays::tick(now,mode_=="playing"&&!updating);
+    LedArrays::bootWifi((WiFi.getMode()&WIFI_AP)!=0,WiFi.status()==WL_CONNECTED,now);
+    LedArrays::tick(now,!updating);
     if (!runtime_.active() || !state_)return;
     if (updating) {runtime_.suspend();polled_=false;return;}
     if (polled_ && uint32_t(now-lastPoll_)<(mode_=="playing"?runtime_.recordingPollInterval(minimumPollIntervalMs):minimumPollIntervalMs))return;
@@ -308,8 +314,9 @@ void LogicDevice::enterRecoverySafeMode(const char* warning) {
 void LogicDevice::shuttingDown() {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE)return;
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
-    if(shutdown_ || mode_!="playing")return;
-    shutdown_=true;runtime_.lifecycle("shutting_down");runtime_.suspend();gpio_.reset();
+    if(shutdown_)return;
+    shutdown_=true;if(mode_=="playing")runtime_.lifecycle("shutting_down");runtime_.suspend();gpio_.reset();
+    if(!LedArrays::shutdown())Serial.println("[led] Shutdown frame transmission timed out");
 }
 
 bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String& error) {
@@ -329,6 +336,20 @@ void LogicDevice::applyMode(const std::string& mode) {
     } else if(mode_=="paused")runtime_.resume(millis());
     else runtime_.restart();
     mode_=mode;
+}
+void LogicDevice::ledSnapshot(JsonObject response) {
+    // HTTP reads must not restart the graph or race the LED render task.
+    if(!mutex_ || xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+    LedArrays::snapshot(response["ledArrays"].to<JsonArray>(),mode_=="playing");
+    JsonObject capabilities=response["ledCapabilities"].to<JsonObject>();
+    JsonArray effects=capabilities["effects"].to<JsonArray>();
+    for(int i=0;i<16;i++)if(LedEffects::enabled(i))effects.add(LedEffects::names[i]);
+    JsonObject limits=capabilities["limits"].to<JsonObject>();
+    for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(LedArrays::matches(n)){
+        String key="control:"+String(n["binding"]["index"]|0);
+        limits[key]=n["binding"]["maxCount"]|256;
+    }
+    xSemaphoreGive(mutex_);
 }
 void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){response["error"]="Logics busy";return;}

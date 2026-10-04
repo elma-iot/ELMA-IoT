@@ -1150,6 +1150,7 @@ void WebServerManager::registerApiRoutes() {
         if (motorStatusAppender_) {
             motorStatusAppender_(doc["motor"].to<JsonObject>());
         }
+        if (ledStatusAppender_) ledStatusAppender_(doc.as<JsonObject>());
 #endif
         sendJson(request, doc);
     });

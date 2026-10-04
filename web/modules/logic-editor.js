@@ -54,6 +54,7 @@ export function createLogicsTab(options={}){
  function paste(){if(!clipboard)return;editor.begin();const part=clone(clipboard),previous=new Set(part.groups.map(g=>g.id)),ids=duplicate(part,new Set(part.nodes.map(n=>n.id))),newGroups=part.groups.filter(g=>!previous.has(g.id));editor.graph.groups.push(...newGroups);editor.graph.nodes.push(...part.nodes.filter(n=>ids.has(n.id)));editor.graph.connections.push(...part.connections.filter(e=>ids.has(e.source.node)));const attached=new Set(newGroups.map(g=>g.id));editor.graph.view.labels??=[];editor.graph.view.labels.push(...(part.view?.labels||[]).filter(label=>attached.has(label.groupId)));editor.selected=ids;editor.changed();}
 
  async function request(payload,live=false){
+  if(options.request)return options.request('/api/logics'+(live?'?live=1':''),payload);
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
   try{const response=await fetch('/api/logics'+(live?'?live=1':''),{cache:'no-store',signal:controller.signal,...(payload?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}:{})});
    const result=await response.json();if(!response.ok||result.error)throw Error(result.error||`Logics request failed (${response.status})`);return result;

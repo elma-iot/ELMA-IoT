@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Enregistrer et appliquer un tableau de LED",
     "LED array wiring": "Câblage du réseau de LED",
     "DO → next array only": "DO → tableau suivant uniquement",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "L'aperçu animé utilise les valeurs par défaut configurées. Une action Logics ultérieure peut les remplacer. Save applique ces valeurs au tableau actif ; le schéma de câblage utilise les positions Windows enregistrées et les contacts des broches de la carte sélectionnés."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "L'aperçu animé utilise les valeurs par défaut configurées. Une action Logics ultérieure peut les remplacer. Save applique ces valeurs au tableau actif ; le schéma de câblage utilise les positions Windows enregistrées et les contacts des broches de la carte sélectionnés.",
+    "LED arrays": "Ensembles de LED",
+    "Add LED array": "Ajouter un ensemble de LED",
+    "Default effect": "Effet par défaut",
+    "Default brightness": "Luminosité par défaut",
+    "Effect speed": "Vitesse de l’effet",
+    "Resource details": "Détails des ressources",
+    "Default brightness (%)": "Luminosité par défaut (%)",
+    "Effect speed (%)": "Vitesse de l’effet (%)"
   },
   "rtl": false,
   "shell": {

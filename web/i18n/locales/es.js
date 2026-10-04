@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Guardar y aplicar matriz de LED",
     "LED array wiring": "Cableado del conjunto de LED",
     "DO → next array only": "DO → solo la siguiente matriz",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "La vista previa animada utiliza los valores predeterminados configurados. Una acción lógica posterior puede anularlos. Guardar aplica estos valores a la matriz activa; El diagrama de cableado utiliza las posiciones guardadas de Windows y los contactos de pines de la placa seleccionadas."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "La vista previa animada utiliza los valores predeterminados configurados. Una acción lógica posterior puede anularlos. Guardar aplica estos valores a la matriz activa; El diagrama de cableado utiliza las posiciones guardadas de Windows y los contactos de pines de la placa seleccionadas.",
+    "LED arrays": "Conjuntos de LED",
+    "Add LED array": "Añadir conjunto de LED",
+    "Default effect": "Efecto predeterminado",
+    "Default brightness": "Brillo predeterminado",
+    "Effect speed": "Velocidad del efecto",
+    "Resource details": "Detalles de recursos",
+    "Default brightness (%)": "Brillo predeterminado (%)",
+    "Effect speed (%)": "Velocidad del efecto (%)"
   },
   "rtl": false,
   "shell": {

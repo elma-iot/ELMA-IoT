@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "সংরক্ষণ করুন এবং LED অ্যারে প্রয়োগ করুন",
     "LED array wiring": "LED অ্যারে ওয়্যারিং",
     "DO → next array only": "DO → শুধুমাত্র পরবর্তী অ্যারে",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "অ্যানিমেটেড প্রিভিউ কনফিগার করা ডিফল্ট ব্যবহার করে। একটি পরবর্তী লজিক্স অ্যাকশন তাদের ওভাররাইড করতে পারে। সংরক্ষণ এই মানগুলি সক্রিয় অ্যারেতে প্রয়োগ করে; ওয়্যারিং ডায়াগ্রামটি সংরক্ষিত উইন্ডোজ অবস্থান এবং নির্বাচিত বোর্ড পিন পরিচিতিগুলি ব্যবহার করে।"
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "অ্যানিমেটেড প্রিভিউ কনফিগার করা ডিফল্ট ব্যবহার করে। একটি পরবর্তী লজিক্স অ্যাকশন তাদের ওভাররাইড করতে পারে। সংরক্ষণ এই মানগুলি সক্রিয় অ্যারেতে প্রয়োগ করে; ওয়্যারিং ডায়াগ্রামটি সংরক্ষিত উইন্ডোজ অবস্থান এবং নির্বাচিত বোর্ড পিন পরিচিতিগুলি ব্যবহার করে।",
+    "LED arrays": "এলইডি অ্যারে",
+    "Add LED array": "এলইডি অ্যারে যোগ করুন",
+    "Default effect": "ডিফল্ট ইফেক্ট",
+    "Default brightness": "ডিফল্ট উজ্জ্বলতা",
+    "Effect speed": "ইফেক্টের গতি",
+    "Resource details": "রিসোর্সের বিবরণ",
+    "Default brightness (%)": "ডিফল্ট উজ্জ্বলতা (%)",
+    "Effect speed (%)": "ইফেক্টের গতি (%)"
   },
   "rtl": false,
   "shell": {

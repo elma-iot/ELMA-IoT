@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "آرایه LED را ذخیره و اعمال کنید",
     "LED array wiring": "سیم کشی آرایه LED",
     "DO → next array only": "DO → فقط آرایه بعدی",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "پیش نمایش متحرک از پیش فرض های پیکربندی شده استفاده می کند. اقدام بعدی Logics می تواند آنها را لغو کند. Save این مقادیر را در آرایه فعال اعمال می کند. نمودار سیم کشی از موقعیت های ذخیره شده ویندوز و مخاطبین پین برد انتخاب شده استفاده می کند."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "پیش نمایش متحرک از پیش فرض های پیکربندی شده استفاده می کند. اقدام بعدی Logics می تواند آنها را لغو کند. Save این مقادیر را در آرایه فعال اعمال می کند. نمودار سیم کشی از موقعیت های ذخیره شده ویندوز و مخاطبین پین برد انتخاب شده استفاده می کند.",
+    "LED arrays": "آرایه‌های LED",
+    "Add LED array": "افزودن آرایه LED",
+    "Default effect": "جلوهٔ پیش‌فرض",
+    "Default brightness": "روشنایی پیش‌فرض",
+    "Effect speed": "سرعت جلوه",
+    "Resource details": "جزئیات منابع",
+    "Default brightness (%)": "روشنایی پیش‌فرض (%)",
+    "Effect speed (%)": "سرعت جلوه (%)"
   },
   "rtl": true,
   "shell": {

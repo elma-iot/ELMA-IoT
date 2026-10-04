@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "Збережіть і застосуйте світлодіодну матрицю",
     "LED array wiring": "Електропроводка світлодіодної матриці",
     "DO → next array only": "DO → лише наступний масив",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Анімований попередній перегляд використовує налаштовані параметри за замовчуванням. Пізніша логічна дія може замінити їх. Save застосовує ці значення до активного масиву; схема підключення використовує збережені позиції Windows і вибрані контакти контактів плати."
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "Анімований попередній перегляд використовує налаштовані параметри за замовчуванням. Пізніша логічна дія може замінити їх. Save застосовує ці значення до активного масиву; схема підключення використовує збережені позиції Windows і вибрані контакти контактів плати.",
+    "LED arrays": "Світлодіодні масиви",
+    "Add LED array": "Додати світлодіодний масив",
+    "Default effect": "Ефект за замовчуванням",
+    "Default brightness": "Яскравість за замовчуванням",
+    "Effect speed": "Швидкість ефекту",
+    "Resource details": "Ресурси пристрою",
+    "Default brightness (%)": "Яскравість за замовчуванням (%)",
+    "Effect speed (%)": "Швидкість ефекту (%)"
   },
   "rtl": false,
   "shell": {

@@ -634,7 +634,7 @@
        id="path4334"
        inkscape:connector-curvature="0" />
     <rect
-       ry="20.7082"
+ data-pin="GND"       ry="20.7082"
        y="-583.75458"
        x="5331.2559"
        height="290.74771"
@@ -647,13 +647,13 @@
        id="path4282"
        inkscape:connector-curvature="0" />
     <circle
-       r="148.01703"
+ data-pin="EN"       r="148.01703"
        cy="-879.7887"
        cx="5925.9673"
        id="circle7157"
        style="opacity:1;fill:url(#radialGradient7159);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1" />
     <circle
-       style="opacity:1;fill:url(#radialGradient7163);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+ data-pin="1"       style="opacity:1;fill:url(#radialGradient7163);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="circle7161"
        cx="5925.9673"
        cy="-433.09448"
@@ -712,7 +712,7 @@
        id="path4284"
        inkscape:connector-curvature="0" />
     <circle
-       style="opacity:1;fill:url(#radialGradient7167);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+ data-pin="2"       style="opacity:1;fill:url(#radialGradient7167);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="circle7165"
        cx="5479.2729"
        cy="-879.7887"
@@ -728,7 +728,7 @@
        id="path4288"
        inkscape:connector-curvature="0" />
     <circle
-       r="148.01703"
+ data-pin="RST"       r="148.01703"
        cy="-1339.6987"
        cx="5925.9673"
        id="circle7149"
@@ -858,7 +858,7 @@
        id="path4221"
        inkscape:connector-curvature="0" />
     <circle
-       style="opacity:1;fill:url(#radialGradient7155);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+ data-pin="3V3"       style="opacity:1;fill:url(#radialGradient7155);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="circle7153"
        cx="5925.9673"
        cy="-1786.3929"
@@ -1428,7 +1428,7 @@
        id="circle7615"
        style="opacity:1;fill:#d4d4d4;fill-opacity:1;stroke:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
     <rect
-       style="opacity:1;fill:url(#radialGradient7107);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+ data-pin="3"       style="opacity:1;fill:url(#radialGradient7107);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="rect7099"
        width="296.03406"
        height="290.74771"
@@ -1436,7 +1436,7 @@
        y="-1934.4099"
        ry="20.7082" />
     <circle
-       style="opacity:1;fill:url(#radialGradient7147);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+ data-pin="0"       style="opacity:1;fill:url(#radialGradient7147);fill-opacity:1;fill-rule:nonzero;stroke:#2c5ccb;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="path7139"
        cx="5476.6299"
        cy="-1339.6987"

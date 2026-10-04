@@ -1,5 +1,10 @@
 export const EFFECTS=['solid','blink','breathe','chase','rainbow','color-wipe','theater-chase','theater-chase-rainbow','colorloop','scan'];
-export function effectPixel(effect,i,count,elapsed,speed,brightness,red,green,blue){
+export function effectPixel(effect,i,count,elapsed,speed,brightness,red,green,blue,audio=null){
+ if(effect.startsWith('stream-')||effect.startsWith('mic-')){
+  const kind=effect.split('-')[1],level=audio?.audioLevel||0;
+  const gain=kind==='spectrum'?(audio?.audioBands?.[Math.min(7,Math.floor(i*8/count))]||0):kind==='vu'?(i/count<level?1:0):level;
+  brightness=Math.round(brightness*gain);effect=kind==='spectrum'?'rainbow':'solid';
+ }
  const stepMs=300-Math.floor(speed*275/100),step=Math.floor(elapsed/stepMs),cycle=12000-speed*100;
  let gain=brightness/100;
  if(effect==='blink')gain*=Math.floor(elapsed/(1000-speed*8))%2===0;
@@ -14,8 +19,36 @@ export function effectPixel(effect,i,count,elapsed,speed,brightness,red,green,bl
  }
  return [red,green,blue].map(v=>Math.floor(v*gain+.5));
 }
-export function animateArray(preview,options,defaults){
- let elapsed=0,last=performance.now(),raf=0,stopped=false;
- function frame(now){if(stopped)return;if(!preview.isConnected){raf=requestAnimationFrame(frame);return;}if(!document.hidden&&now-last>=25){elapsed+=Math.min(now-last,25);last=now;const o=options(),d=defaults();preview.querySelectorAll('circle').forEach((pixel,i)=>pixel.setAttribute('fill',`rgb(${effectPixel(d.effect,i,o.count,Math.floor(elapsed),d.effectSpeed,d.brightness,d.red,d.green,d.blue).join(',')})`));}raf=requestAnimationFrame(frame);}
- raf=requestAnimationFrame(frame);return ()=>{stopped=true;cancelAnimationFrame(raf);};
+// LED PWM values are linear intensity; CSS rgb() is sRGB encoded.
+// Transfer function: https://www.w3.org/Graphics/Color/srgb
+export function displayPixel(rgb){
+ return rgb.map(value=>{const x=Math.min(255,Math.max(0,value))/255;return Math.round(255*(x<=.0031308?12.92*x:1.055*x**(1/2.4)-.055));});
+}
+// A runtime sample is optional for offline designer previews.
+export function runtimeFrame(sample,now){
+ if(!sample)return null;
+ const age=Math.max(0,now-sample.received);
+ const delta=sample.running?Math.min(age,3000)+(sample.age||0):0;
+ return {...sample,bootPhase:(sample.bootPhase||0)+delta,phase:(sample.phase+delta)>>>0,...(sample.segments?{segments:sample.segments.map(segment=>({...segment,phase:(segment.phase+delta)>>>0}))}:{})};
+}
+export function animateArray(preview,options,defaults,live){
+ let raf=0,stopped=false;
+ function frame(now){
+  if(stopped)return;
+  if(preview.isConnected&&!document.hidden){
+   const o=options(),sample=live?runtimeFrame(live(),now):null,d=sample||defaults();
+   const phase=sample?sample.phase:now,brightness=live?sample&&sample.on?sample.brightness:0:d.brightness;
+   let offset=0;const segments=o.segments?.length?o.segments:[o];
+   const states=segments.map((segment,index)=>{const entry={...segment,offset};offset+=segment.count;return entry;});
+   preview.querySelectorAll('circle').forEach((pixel,i)=>{
+    if(sample?.bootIndicator){const level=sample.bootIndicator===2?51:Math.round(51*(.5-.5*Math.cos(2*Math.PI*(sample.bootPhase%2000)/2000)));pixel.setAttribute('fill',`rgb(${displayPixel(sample.bootIndicator===2?[0,level,0]:[0,0,level]).join(',')})`);return;}
+    const index=states.findIndex(segment=>i>=segment.offset&&i<segment.offset+segment.count),segment=states[index]||states[0];
+    const runtime=sample?.segments?.[index],settings=runtime||(sample?d:(segment.defaults||d));
+    const level=live?sample&&sample.on?settings.brightness:0:settings.brightness;
+    pixel.setAttribute('fill',`rgb(${displayPixel(effectPixel(settings.effect,i-segment.offset,runtime?.count||segment.count,Math.floor(runtime?.phase??phase),settings.effectSpeed,level,settings.red,settings.green,settings.blue,runtime||sample)).join(',')})`);
+   });
+  }
+  raf=requestAnimationFrame(frame);
+ }
+ frame(performance.now());return ()=>{stopped=true;cancelAnimationFrame(raf);};
 }

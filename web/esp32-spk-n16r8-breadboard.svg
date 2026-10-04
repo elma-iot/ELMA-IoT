@@ -47,16 +47,16 @@
   <rect x="0" y="0" width="300" height="500" rx="10" fill="url(#darkBoardOverlay)"/>
 
   <g fill="#d7d9dc">
-    <circle cx="18" cy="22" r="8.4"/><circle cx="18" cy="48" r="8.4"/><circle cx="18" cy="74" r="8.4"/><circle cx="18" cy="100" r="8.4"/>
-    <circle cx="18" cy="126" r="8.4"/><circle cx="18" cy="152" r="8.4"/><circle cx="18" cy="178" r="8.4"/><circle cx="18" cy="204" r="8.4"/>
-    <circle cx="18" cy="230" r="8.4"/><circle cx="18" cy="256" r="8.4"/><circle cx="18" cy="282" r="8.4"/><circle cx="18" cy="308" r="8.4"/>
-    <circle cx="18" cy="334" r="8.4"/><circle cx="18" cy="360" r="8.4"/><circle cx="18" cy="386" r="8.4"/><circle cx="18" cy="412" r="8.4"/>
-    <circle cx="18" cy="438" r="8.4"/><circle cx="18" cy="464" r="8.4"/>
-    <circle cx="282" cy="22" r="8.4"/><circle cx="282" cy="48" r="8.4"/><circle cx="282" cy="74" r="8.4"/><circle cx="282" cy="100" r="8.4"/>
-    <circle cx="282" cy="126" r="8.4"/><circle cx="282" cy="152" r="8.4"/><circle cx="282" cy="178" r="8.4"/><circle cx="282" cy="204" r="8.4"/>
-    <circle cx="282" cy="230" r="8.4"/><circle cx="282" cy="256" r="8.4"/><circle cx="282" cy="282" r="8.4"/><circle cx="282" cy="308" r="8.4"/>
-    <circle cx="282" cy="334" r="8.4"/><circle cx="282" cy="360" r="8.4"/><circle cx="282" cy="386" r="8.4"/><circle cx="282" cy="412" r="8.4"/>
-    <circle cx="282" cy="438" r="8.4"/><circle cx="282" cy="464" r="8.4"/>
+    <circle data-pin="5V" cx="18" cy="22" r="8.4"/><circle data-pin="GND" cx="18" cy="48" r="8.4"/><circle data-pin="3V3" cx="18" cy="74" r="8.4"/><circle data-pin="GND" cx="18" cy="100" r="8.4"/>
+    <circle data-pin="20" cx="18" cy="126" r="8.4"/><circle data-pin="19" cx="18" cy="152" r="8.4"/><circle data-pin="18" cx="18" cy="178" r="8.4"/><circle data-pin="17" cx="18" cy="204" r="8.4"/>
+    <circle data-pin="16" cx="18" cy="230" r="8.4"/><circle data-pin="15" cx="18" cy="256" r="8.4"/><circle data-pin="14" cx="18" cy="282" r="8.4"/><circle data-pin="13" cx="18" cy="308" r="8.4"/>
+    <circle data-pin="12" cx="18" cy="334" r="8.4"/><circle data-pin="11" cx="18" cy="360" r="8.4"/><circle data-pin="10" cx="18" cy="386" r="8.4"/><circle data-pin="9" cx="18" cy="412" r="8.4"/>
+    <circle data-pin="8" cx="18" cy="438" r="8.4"/><circle data-pin="7" cx="18" cy="464" r="8.4"/>
+    <circle data-pin="5V" cx="282" cy="22" r="8.4"/><circle data-pin="GND" cx="282" cy="48" r="8.4"/><circle data-pin="3V3" cx="282" cy="74" r="8.4"/><circle data-pin="GND" cx="282" cy="100" r="8.4"/>
+    <circle data-pin="NC" cx="282" cy="126" r="8.4"/><circle data-pin="NC" cx="282" cy="152" r="8.4"/><circle data-pin="21" cx="282" cy="178" r="8.4"/><circle data-pin="38" cx="282" cy="204" r="8.4"/>
+    <circle data-pin="39" cx="282" cy="230" r="8.4"/><circle data-pin="40" cx="282" cy="256" r="8.4"/><circle data-pin="43" cx="282" cy="282" r="8.4"/><circle data-pin="44" cx="282" cy="308" r="8.4"/>
+    <circle data-pin="46" cx="282" cy="334" r="8.4"/><circle data-pin="0" cx="282" cy="360" r="8.4"/><circle data-pin="2" cx="282" cy="386" r="8.4"/><circle data-pin="EN" cx="282" cy="412" r="8.4"/>
+    <circle data-pin="1" cx="282" cy="438" r="8.4"/><circle data-pin="3" cx="282" cy="464" r="8.4"/>
   </g>
   <g fill="#7d8187">
     <circle cx="18" cy="22" r="4.9"/><circle cx="18" cy="48" r="4.9"/><circle cx="18" cy="74" r="4.9"/><circle cx="18" cy="100" r="4.9"/>

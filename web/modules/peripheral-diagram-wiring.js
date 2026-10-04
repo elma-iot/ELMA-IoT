@@ -1,5 +1,5 @@
 import {diagramRect,canvasClientPoint} from './diagram-viewport.js';
-import {exactBoardAnchors} from './board-contact-layout.js';
+import {exactBoardAnchors,contactLabelLayout as boardPadLabelLayout} from './board-contact-layout.js';
 import {powerRailTree,obstacleAwareRoute} from './diagram-routing-layout.js';
 import {voltageDividerMaximum} from './voltage-divider.js';
 import {
@@ -840,8 +840,8 @@ function renderSignalLabels(layer, labelEntries) {
     const visualHeight = Math.abs(size.width * Math.sin(radians)) + Math.abs(size.height * Math.cos(radians));
     const halfWidth = visualWidth / 2;
     const halfHeight = visualHeight / 2;
-    let centerX = stageWidth > 0 ? clampValue(rawCenterX, labelPadding + halfWidth, stageWidth - labelPadding - halfWidth) : rawCenterX;
-    let centerY = stageHeight > 0 ? clampValue(rawCenterY, labelPadding + halfHeight, stageHeight - labelPadding - halfHeight) : rawCenterY;
+    let centerX = stageWidth > 0 && !entry.pinContact ? clampValue(rawCenterX, labelPadding + halfWidth, stageWidth - labelPadding - halfWidth) : rawCenterX;
+    let centerY = stageHeight > 0 && !entry.pinContact ? clampValue(rawCenterY, labelPadding + halfHeight, stageHeight - labelPadding - halfHeight) : rawCenterY;
     const ownerCenterX = Number(entry.nodeRect?.left || 0) + (Number(entry.nodeRect?.width || 0) / 2);
     const ownerCenterY = Number(entry.nodeRect?.top || 0) + (Number(entry.nodeRect?.height || 0) / 2);
     const shiftHorizontally = Math.abs(centerY - ownerCenterY) >= Math.abs(centerX - ownerCenterX);
@@ -864,10 +864,10 @@ function renderSignalLabels(layer, labelEntries) {
     // header. Moving these labels to solve a collision made them appear random
     // and disconnected from the artwork.
     for (const [xStep, yStep] of (entry.pinContact ? [[0, 0]] : candidates)) {
-      const candidateX = stageWidth > 0
+      const candidateX = stageWidth > 0 && !entry.pinContact
         ? clampValue(centerX + (xStep * xStepSize), labelPadding + halfWidth, stageWidth - labelPadding - halfWidth)
         : centerX;
-      const candidateY = stageHeight > 0
+      const candidateY = stageHeight > 0 && !entry.pinContact
         ? clampValue(centerY + (yStep * yStepSize), labelPadding + halfHeight, stageHeight - labelPadding - halfHeight)
         : centerY;
       const rect = { left: candidateX - halfWidth, right: candidateX + halfWidth, top: candidateY - halfHeight, bottom: candidateY + halfHeight };
@@ -1945,12 +1945,13 @@ export function createPeripheralDiagramWiringModule({
     // Build-time SVG inspection is the source of truth for supported boards.
     // Both desktop and device web renderers consume these same normalized pad
     // coordinates, avoiding a second hand-maintained visual pin model.
-    const exact=exactBoardAnchors({profile:boardProfile,boardRect,primary,extra,offset:calibration.outerOffset,signalKey,boardRailForPeripheral});
-    if(exact)return exact;
-
     const transform = getComputedStyle(boardImage).transform;
     const matrix = transform && transform !== "none" ? new DOMMatrixReadOnly(transform) : null;
     const turns = matrix ? ((Math.round(Math.atan2(matrix.b, matrix.a) / (Math.PI / 2)) % 4) + 4) % 4 : 0;
+    // Exported contacts already include the board presentation rotation.
+    const exact=exactBoardAnchors({profile:boardProfile,boardRect,primary,extra,offset:calibration.outerOffset,signalKey,boardRailForPeripheral});
+    if(exact)return exact;
+
     const rotatePoint = (x, y, side) => {
       const sides = ["top", "right", "bottom", "left"];
       let nx=x,ny=y;
@@ -2341,8 +2342,12 @@ export function createPeripheralDiagramWiringModule({
       const railLabel = String(entry.label || fallback?.label || "").trim().toUpperCase();
       const isRailLabel = railLabel && (isPositivePowerSignal(railLabel) || isGroundSignal(railLabel));
       const usesSavedLayout = savedBoardLabelIds.has(entry.id);
+      const targetKey=isBoardGpio(fallback)?`gpio:${Number(fallback.pin)}`:`rail:${boardRailForPeripheral("",railLabel)||signalKey(railLabel)}`;
+      const candidates=anchorCandidates.get(targetKey)||[];
+      const contact=candidates.find(a=>a.side===fallback?.contactSide)||candidates[0];
       const displayLayout = usesSavedLayout
         ? { xFactor: entry.xFactor, yFactor: entry.yFactor, rotation: entry.rotation }
+        : contact ? boardPadLabelLayout(contact,boardRect,floatingLabelSize(entry.label))
         : boardContactLabelLayout({ ...fallback, label: entry.label }, boardRect);
       const resolvedEntry = {
         labelKey: entry.id,

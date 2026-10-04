@@ -109,6 +109,7 @@
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h4v4H6z"></path><path d="M14 6h4v4h-4z"></path><path d="M6 14h4v4H6z"></path><path d="M14 14h4v4h-4z"></path><path d="M10 8h4"></path><path d="M8 10v4"></path><path d="M16 10v4"></path><path d="M10 16h4"></path></svg>
           </button>
           <button class="tab-button tab-button-icon tab-logics" type="button" role="tab" aria-label="Logics" data-tooltip="Logics" title="Logics" aria-selected="false" aria-controls="tab-logics" data-tab="logics"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="7" height="6" rx="1"></rect><rect x="15" y="15" width="7" height="6" rx="1"></rect><path d="M9 6h9v9M5 9v9h10"></path></svg></button>
+          <button class="tab-button tab-button-icon tab-wled" type="button" role="tab" aria-label="WLED" data-tooltip="WLED" title="WLED" aria-selected="false" aria-controls="tab-wled" data-tab="wled" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="3"></rect><circle cx="7" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="17" cy="12" r="1.5"></circle><path d="M7 3v2m10-2v2M7 19v2m10-2v2"></path></svg></button>
           <button id="motorTabButton" class="tab-button tab-button-icon tab-motor" type="button" role="tab" aria-label="Motor" data-tooltip="Motor" title="Motor" aria-selected="false" aria-controls="tab-motor" data-tab="motor" hidden>
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="8" height="8" rx="2"></rect><rect x="13" y="8" width="8" height="8" rx="2"></rect><path d="M11 12h2"></path><path d="M6 8V5"></path><path d="M18 8V5"></path><path d="M6 19v-3"></path><path d="M18 19v-3"></path></svg>
           </button>
@@ -172,6 +173,12 @@
             <button type="button" data-security-action="lock" hidden>Lock now</button>
           </div>
           <p>After five incorrect PINs, the next attempt starts a one-minute wait. Further incorrect attempts double the wait, up to two hours. Restarting the device restarts any outstanding wait.</p>
+        </div>
+        <div id="tab-wled" class="tab-panel" role="tabpanel">
+          <h2>WLED</h2>
+          <h3>LED arrays</h3>
+          <div id="wledControlsList" class="peripheral-controls-list"></div>
+          <button id="wledAddArray" type="button">Add LED array</button>
         </div>
         <div id="tab-logics" class="tab-panel" role="tabpanel">
           <div class="logic-palette-bar"><input id="logicPaletteSearch" data-logic-search type="search" placeholder="Search logic / active peripherals" aria-label="Search Logics"><span class="logic-save-controls"><button type="button" class="secondary" data-logic-save>Save &amp; apply</button><span data-logic-dirty class="logic-state-note"></span></span><div class="logic-palette" data-logic-palette></div></div>
@@ -796,6 +803,39 @@
         </div>
 
         <div id="tab-gpio" class="tab-panel active" role="tabpanel">
+          <div id="wledStatusControls" class="gpio-controls">            <label class="gpio-controls-field">
+              <span class="gpio-controls-field-label">Status LED GPIO</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedPin" form="settingsForm" name="device.statusLedPin" aria-label="Status LED GPIO"></select>
+                <small>Saved status output, including assignments not shown on the board diagram. Choose a valid pin matching your wiring.</small>
+              </div>
+
+            </label>
+            <label class="gpio-controls-field">
+              <span class="gpio-controls-field-label">Status LED type</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedType" form="settingsForm" name="device.statusLedType">
+                  <option value="regular">Regular LED</option>
+                  <option value="rgb">RGB LED (3 GPIOs)</option>
+                  <option value="neopixel">RGB NeoPixel / WS2812</option>
+                </select>
+              </div>
+            </label>
+            <label class="gpio-controls-field status-led-rgb-field">
+              <span class="gpio-controls-field-label">RGB green GPIO</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedGreenPin" form="settingsForm" name="device.statusLedGreenPin"></select>
+              </div>
+            </label>
+            <label class="gpio-controls-field status-led-rgb-field">
+              <span class="gpio-controls-field-label">RGB blue GPIO</span>
+              <div class="gpio-controls-field-main">
+                <select id="statusLedBluePin" form="settingsForm" name="device.statusLedBluePin"></select>
+              </div>
+            </label>
+</div>
+
+
           <h2>Configuration</h2>
           <p id="gpioAssignmentWarnings" class="gpio-assignment-warning" role="status" hidden></p>
           <div class="gpio-controls-strip" aria-label="Peripheral profiles">
@@ -837,35 +877,6 @@
               <div class="gpio-controls-field-main">
                 <label class="inline-toggle"><input id="gpioSafetyOverride" type="checkbox" form="settingsForm" name="ui.gpioSafetyOverride"> Show reserved GPIOs</label>
                 <small>Allows strap, USB and onboard pins. Check wiring before use. Automatic assignments stay safe.</small>
-              </div>
-            </label>
-            <label class="gpio-controls-field">
-              <span class="gpio-controls-field-label">Status LED GPIO</span>
-              <div class="gpio-controls-field-main">
-                <select id="statusLedPin" form="settingsForm" name="device.statusLedPin" aria-label="Status LED GPIO"></select>
-                <small>Saved status output, including assignments not shown on the board diagram. Choose a valid pin matching your wiring.</small>
-              </div>
-            </label>
-            <label class="gpio-controls-field">
-              <span class="gpio-controls-field-label">Status LED type</span>
-              <div class="gpio-controls-field-main">
-                <select id="statusLedType" form="settingsForm" name="device.statusLedType">
-                  <option value="regular">Regular LED</option>
-                  <option value="rgb">RGB LED (3 GPIOs)</option>
-                  <option value="neopixel">RGB NeoPixel / WS2812</option>
-                </select>
-              </div>
-            </label>
-            <label class="gpio-controls-field status-led-rgb-field">
-              <span class="gpio-controls-field-label">RGB green GPIO</span>
-              <div class="gpio-controls-field-main">
-                <select id="statusLedGreenPin" form="settingsForm" name="device.statusLedGreenPin"></select>
-              </div>
-            </label>
-            <label class="gpio-controls-field status-led-rgb-field">
-              <span class="gpio-controls-field-label">RGB blue GPIO</span>
-              <div class="gpio-controls-field-main">
-                <select id="statusLedBluePin" form="settingsForm" name="device.statusLedBluePin"></select>
               </div>
             </label>
             <label class="gpio-controls-field gpio-controls-field-audio">

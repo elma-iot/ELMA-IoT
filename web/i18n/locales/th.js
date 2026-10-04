@@ -1760,7 +1760,15 @@ export default {
     "Save and apply LED array": "บันทึกและใช้อาร์เรย์ LED",
     "LED array wiring": "สายไฟ LED Array",
     "DO → next array only": "DO → อาร์เรย์ถัดไปเท่านั้น",
-    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "การแสดงตัวอย่างภาพเคลื่อนไหวใช้ค่าเริ่มต้นที่กำหนดไว้ การกระทำของ Logics ในภายหลังสามารถแทนที่การกระทำเหล่านั้นได้ บันทึกจะใช้ค่าเหล่านี้กับอาร์เรย์ที่ใช้งานอยู่ แผนภาพการเดินสายไฟใช้ตำแหน่ง Windows ที่บันทึกไว้และหน้าสัมผัสพินของบอร์ดที่เลือก"
+    "Animated preview uses configured defaults. A later Logics action can override them. Save applies these values to the active array; the wiring diagram uses the saved Windows positions and selected board pin contacts.": "การแสดงตัวอย่างภาพเคลื่อนไหวใช้ค่าเริ่มต้นที่กำหนดไว้ การกระทำของ Logics ในภายหลังสามารถแทนที่การกระทำเหล่านั้นได้ บันทึกจะใช้ค่าเหล่านี้กับอาร์เรย์ที่ใช้งานอยู่ แผนภาพการเดินสายไฟใช้ตำแหน่ง Windows ที่บันทึกไว้และหน้าสัมผัสพินของบอร์ดที่เลือก",
+    "LED arrays": "ชุด LED",
+    "Add LED array": "เพิ่มชุด LED",
+    "Default effect": "เอฟเฟกต์เริ่มต้น",
+    "Default brightness": "ความสว่างเริ่มต้น",
+    "Effect speed": "ความเร็วเอฟเฟกต์",
+    "Resource details": "รายละเอียดทรัพยากร",
+    "Default brightness (%)": "ความสว่างเริ่มต้น (%)",
+    "Effect speed (%)": "ความเร็วเอฟเฟกต์ (%)"
   },
   "rtl": false,
   "shell": {

@@ -48,6 +48,7 @@ include/generated_project_defaults.h
 
 include/generated_esp8266_assets.h
 include/generated_esp8266_catalog.h
+include/elma_led_modules.h
 
 # ESP-IDF generated components and temporary builder project
 managed_components/
