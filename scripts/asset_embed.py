@@ -18,7 +18,11 @@ apply_fit_features(env)
 from led_modules import apply as apply_led_modules
 apply_led_modules(env)
 defaults_file=os.environ.get("ELMA_PROJECT_DEFAULTS_FILE","")
-generate_defaults(ROOT,Path(defaults_file).read_text(encoding="utf-8") if defaults_file else os.environ.get("ELMA_PROJECT_DEFAULTS_JSON","{}"))
+defaults_json=Path(defaults_file).read_text(encoding="utf-8") if defaults_file else os.environ.get("ELMA_PROJECT_DEFAULTS_JSON","{}")
+generate_defaults(ROOT,defaults_json)
+if env.get("PIOENV") == "viewe_uedx24320028e":
+    from panel_variant import panel_defines
+    env.Append(CPPDEFINES=panel_defines(os.environ.get('ELMA_SELECTED_BOARD_PROFILE', 'viewe-uedx24320028e-wb-a')))
 WEB_DIR = ROOT / "web"
 BUILD_WEB_DIR = ROOT / ".web-build"
 TMP_WEB_DIR = ROOT / ".tmp-webbundle"
@@ -87,12 +91,6 @@ if selected_board_id and selected_board_id not in (*BOARD_ASSET_IDS.values(), 14
     raise SystemExit(f"Unknown ELMA selected board identifier: {selected_board_id}")
 env.Append(CPPDEFINES=[("APP_COMPILED_BOARD_PROFILE_ID", selected_board_id)])
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.elf", audit_board_assets)
-if selected_board_id == 14:
-    for bundled in (HEADER, SOURCE):
-        if bundled.is_file():
-            original = bundled.read_text(encoding="utf-8")
-            updated = original.replace("#if APP_COMPILED_BOARD_PROFILE_ID == 0\n", "#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == 14\n")
-            if updated != original: bundled.write_text(updated, encoding="utf-8")
 
 sys.path.insert(0,str(ROOT / "scripts"))
 from compact_peripheral_assets import load_manifest,budgeted_mask,default_svg
@@ -364,7 +362,7 @@ def asset_guard(asset_path: str):
     if variant:
         return f"#if APP_COMPILED_BOARD_PROFILE_ID == {variant.group(1)}"
     if asset_path in ("app.js", "index.html"):
-        return "#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == 14"
+        return "#if APP_COMPILED_BOARD_PROFILE_ID == 0"
     board_asset_id = BOARD_ASSET_IDS.get(asset_path)
     if board_asset_id:
         return f"#if APP_COMPILED_BOARD_PROFILE_ID == 0 || APP_COMPILED_BOARD_PROFILE_ID == {board_asset_id}"

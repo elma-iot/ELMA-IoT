@@ -25,3 +25,7 @@ test('disabled and Waveshare devices retain the appropriate profiles', () => {
   assert.deepEqual(restore({}).audioProfiles, ['none']);
   assert.deepEqual(restore({oled:{enabled:true,displayType:'wape'}}).displayProfiles,['waveshare-screen']);
 });
+
+test('VIEWE panel survives legacy inference without becoming an I2C OLED', () => {
+  assert.deepEqual(restore({oled:{enabled:true,displayType:'panel'}}).displayProfiles,['viewe-onboard-lcd']);
+});

@@ -9,7 +9,7 @@ const root = fs.realpathSync(path.resolve(process.argv[2]));
 const output = path.resolve(process.argv[3]);
 const boards = ["esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32-spk-n16r8",
   "esp32-s3-devkit-c1", "esp32-s3-cam-module", "esp32-wrover", "esp32-wroom", "esp32-mini",
-  "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6", "wemos-d1-mini-esp32", "esp32-s2-wemos-mini"];
+  "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6", "wemos-d1-mini-esp32", "esp32-s2-wemos-mini", "viewe-uedx24320028e-wb-a", "viewe-uedx32480035e-wb-a"];
 const metadata=JSON.parse(fs.readFileSync(path.join(root,"scripts/runtime-board-catalog.json"),"utf8"));
 const boardIds=JSON.parse(fs.readFileSync(path.join(root,"scripts/mainboard-svg-manifest.json"),"utf8"));
 const app = fs.readFileSync(path.join(root, "web/app.js"), "utf8");
@@ -29,6 +29,9 @@ for (const [index, board] of boards.entries()) {
   const folder = path.join(output, "__boards", String(boardIds[metadata[board].asset.src.slice(1)]));
   fs.mkdirSync(folder, {recursive: true});
   let narrowedApp = app.replace(/^const PC_DESIGNER_RUNTIME = .*;$/m, "const PC_DESIGNER_RUNTIME = false;");
+  if (!board.startsWith("viewe-")) {
+    narrowedApp = narrowedApp.replace(/^  \{ value: "viewe-onboard-lcd",[^\n]*\n/m, "");
+  }
   let maps = 0;
   narrowedApp = narrowedApp.replace(/^const (GPIO_BOARD_\w+) = (\{[^]*?^\});/gm, (_, name, literal) => {
     const data = evaluate(literal); ++maps;
@@ -88,11 +91,16 @@ for (const [index, board] of boards.entries()) {
       });
     }}],
   });
-  const narrowedHtml = html.replace(/<option\b[^>]*value="([^"]+)"[^>]*>[^<]*<\/option>/g, (tag, value) => {
-    if (!boards.includes(value)) return tag;
-    return value === board ? tag.replace(/ selected\b/, "").replace(">", " selected>") : "";
-  });
+  // Narrow the board selector itself, including legacy/custom options that
+  // are not part of this full-firmware build list.
+  let narrowedHtml = html.replace(/(<select\b[^>]*id="gpioBoardSelector"[^>]*>)([^]*?)(<\/select>)/,
+    (_, open, options, close) => open + options.replace(/<option\b[^>]*value="([^"]+)"[^>]*>[^<]*<\/option>/g,
+      (tag, value) => value === board ? tag.replace(/ selected\b/, "").replace(">", " selected>") : "") + close);
+  if (!board.startsWith("viewe-")) narrowedHtml = narrowedHtml.replace(/<option value="viewe-onboard-lcd">[^<]*<\/option>/g, "");
   fs.writeFileSync(path.join(folder, "index.html"), narrowedHtml.replace(/>\s+</g, "><").replace(/\s{2,}/g, " "));
+  const selector = narrowedHtml.match(/<select\b[^>]*id="gpioBoardSelector"[^>]*>([^]*?)<\/select>/)?.[1] || "";
+  const choices = [...selector.matchAll(/<option\b[^>]*value="([^"]+)"/g)].map(match=>match[1]);
+  if (choices.length !== 1 || choices[0] !== board) throw new Error(`Board selector is not fixed to ${board}`);
   const javascript = fs.readFileSync(path.join(folder, "app.js"), "utf8");
   for (const other of boards.filter(value => value !== board)) {
     if (javascript.includes(JSON.stringify(other)) || narrowedHtml.includes(`value="${other}"`)) {

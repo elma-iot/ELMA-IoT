@@ -693,7 +693,7 @@
               <div></div>
             </div>
             <div id="oledModeSection">
-            <label class="check"><input form="settingsForm" name="oled.enabled" type="checkbox"> Enable OLED</label>
+            <label class="check"><input form="settingsForm" name="oled.enabled" type="checkbox"> Enable display</label>
             <div id="panelControls" hidden>
               <label>LCD interface<select form="settingsForm" name="oled.interfaceMode"><option value="lvgl">LVGL mobile interface</option><option value="text">Status / Logics text</option></select></label>
               <label>Backlight %<input form="settingsForm" name="oled.brightness" type="number" min="0" max="100"></label>
@@ -843,6 +843,8 @@
               <span class="gpio-controls-field-label">Board</span>
               <div class="gpio-controls-field-main gpio-controls-field-main-board">
                 <select id="gpioBoardSelector" aria-label="ESP32 board profile">
+                  <option value="viewe-uedx24320028e-wb-a">VIEWE 2.8-inch 240×320 · UEDX24320028E-WB-A</option>
+                  <option value="viewe-uedx32480035e-wb-a">VIEWE 3.5-inch 320×480 · UEDX32480035E-WB-A</option>
                   <option value="esp32-s3-super-mini" selected>ESP32-S3 Super Mini</option>
                   <option value="esp32-s3-zero">ESP32-S3 Zero</option>
                   <option value="esp32-s3-psram">ESP32-S3-N16R8</option>
@@ -954,6 +956,7 @@
                     <div id="peripheralDisplayPrimaryIndexLabel" class="peripheral-profile-index-label" hidden></div>
                     <div class="peripheral-field-composite">
                       <select id="peripheralDisplayProfile" aria-label="Display peripheral profile">
+                  <option value="viewe-onboard-lcd">Onboard LCD + CHSC6540</option>
                   <option value="none">None</option>
                   <option value="i2c-oled" selected>I2C OLED</option>
                   <option value="spi-tft">SPI TFT</option>

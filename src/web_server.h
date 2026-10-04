@@ -63,6 +63,10 @@ class WebServerManager {
     void securityTick();
     void setWebUiLocked(bool locked);
     bool webUiLocked() const;
+#if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
+    void panelSnapshot(const String& page,JsonObject root);
+    bool panelCommand(const String& action,JsonVariantConst args,String& error);
+#endif
 
   private:
     StatusAppender ledStatusAppender_;

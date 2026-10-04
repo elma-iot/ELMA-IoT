@@ -5,44 +5,33 @@
 #include <lvgl.h>
 #include <functional>
 #include <map>
+#include <vector>
 #include <deque>
 #include "app_state.h"
+#include "storage_memory.h"
 class PanelDisplay;
-
-// All commands are dispatched after LVGL returns, through the web UI's handlers.
 class PanelDashboard {
 public:
-    using Snapshot = std::function<void(JsonObject)>;
-    using Command = std::function<bool(const String&, JsonVariantConst, String&)>;
-    explicit PanelDashboard(PanelDisplay& panel): panel_(panel) {}
-    ~PanelDashboard();
-    bool begin(uint8_t rotation);
-    void loop(const AppStateSnapshot&, Snapshot, Command, const String& overlay);
-    bool touched() { bool value=touched_; touched_=false; return value; }
+ using Snapshot=std::function<void(const String&,JsonObject)>;
+ using Command=std::function<bool(const String&,JsonVariantConst,String&)>;
+ explicit PanelDashboard(PanelDisplay& panel):panel_(panel),state_(storageJsonAllocator()){}
+ ~PanelDashboard();bool begin(uint8_t rotation);
+ void loop(const AppStateSnapshot&,Snapshot,Command,const String&);
+ bool touched(){bool v=touched_;touched_=false;return v;}
 private:
-    PanelDisplay& panel_;
-    lv_disp_t* display_=nullptr;
-    lv_indev_t* input_=nullptr;
-    lv_disp_draw_buf_t drawBuffer_{};
-    lv_disp_drv_t displayDriver_{};
-    lv_indev_drv_t inputDriver_{};
-    lv_color_t* pixels_=nullptr;
-    lv_obj_t *screen_=nullptr,*body_=nullptr,*notice_=nullptr,*keyboard_=nullptr,*header_=nullptr;
-    std::map<String,lv_obj_t*> fields_;
-    JsonDocument state_;
-    std::deque<String> commands_;
-    unsigned long tick_=0,refresh_=0,noticeUntil_=0;
-    bool touched_=false;
-    int page_=0;
-    void page(int);
-    lv_obj_t* label(const String&);
-    void button(const char*,const char*);
-    void slider(const char*,const char*,int);
-    void textField(const char*,const char*,const String&,bool secret=false);
-    void queue(const String&,JsonVariantConst);
-    void update();
-    static void event(lv_event_t*);
-    static void flush(lv_disp_drv_t*,const lv_area_t*,lv_color_t*);
-    static void touch(lv_indev_drv_t*,lv_indev_data_t*);
+ struct Field {String path,kind,options;lv_obj_t* object=nullptr;bool dirty=false,secret=false;String submitted;double minimum=-1e9,maximum=1e9;};
+ PanelDisplay& panel_;lv_disp_t* display_=nullptr;lv_indev_t* input_=nullptr;
+ lv_disp_draw_buf_t drawBuffer_{};lv_disp_drv_t displayDriver_{};lv_indev_drv_t inputDriver_{};lv_color_t* pixels_=nullptr;
+ lv_obj_t *screen_=nullptr,*body_=nullptr,*notice_=nullptr,*keyboard_=nullptr,*menu_=nullptr;
+ lv_obj_t *wifi_=nullptr,*mqtt_=nullptr,*extra_=nullptr,*clock_=nullptr,*bars_[4]{};
+ std::map<String,lv_obj_t*> labels_,buttons_;std::map<String,String> drafts_;std::vector<Field> fields_;std::vector<String> tabs_;
+ JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_;
+ unsigned long tick_=0,refresh_=0,noticeUntil_=0;bool touched_=false,frameReported_=false,updating_=false,refreshNow_=true;
+ void page(const String&);void syncMenu();void statusBar(const AppStateSnapshot&);void update();
+ lv_obj_t* label(const String&);void button(const String&,const String&);
+ void field(const String&,const String&,const String& kind="text",const String& options="",double minimum=-1e9,double maximum=1e9);
+ void section(const String&);void queue(const String&,JsonVariantConst);void submit(int index=-1);
+ void settingsFields();void arrays(bool controls);void wiring();String fieldText(const Field&)const;
+ static void event(lv_event_t*);static void flush(lv_disp_drv_t*,const lv_area_t*,lv_color_t*);static void touch(lv_indev_drv_t*,lv_indev_data_t*);
 };
 #endif

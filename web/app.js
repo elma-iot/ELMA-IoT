@@ -273,6 +273,7 @@ const PERIPHERAL_AUDIO_IN_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_DISPLAY_PROFILE_OPTIONS = [
+  { value: "viewe-onboard-lcd", label: "Onboard LCD + CHSC6540" },
   { value: "none", label: "None" },
   { value: "i2c-oled", label: "I2C OLED" },
   { value: "spi-tft", label: "SPI TFT" },
@@ -429,6 +430,7 @@ const EFFECT_SELECT_CONFIG = [
 ];
 const STORAGE_PREVIEW_EMBEDDED_SCAN_MAX_BYTES = 256 * 1024;
 const GPIO_BOARD_PRESENTATION = {
+  "viewe-uedx24320028e-wb-a": { rotation: "none", rank: "Touch display board", recommendation: "VIEWE 240×320 LCD with CHSC6540 touch.", tone: "featured" },
   "esp32-s3-super-mini": {
     rotation: "rotate(-90deg)",
     rank: "Current board",
@@ -530,8 +532,10 @@ const GPIO_BOARD_PRESENTATION = {
   "esp8266-esp12f": { rotation: "rotate(-90deg)", rank: "Legacy ESP8266 module", recommendation: "ESP-12F family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.", tone: "basic" },
   "esp8285-generic": { rotation: "rotate(90deg)", rank: "Legacy integrated-flash module", recommendation: "Generic ESP8285 family target. Confirm the module pinout and flash size before wiring.", tone: "basic" },
   "custom-board": { rotation: "none", rank: "User-defined board", recommendation: "Select the installed ESP chip, expose only pins present on that chip, and edit the labels to match your board silkscreen.", tone: "neutral" },
+  "viewe-uedx32480035e-wb-a": {"rotation":"none","rank":"Touch display board","recommendation":"VIEWE 3.5-inch 320x480 LCD with CHSC6540 touch.","tone":"featured"},
 };
 const GPIO_BOARD_ASSETS = {
+  "viewe-uedx24320028e-wb-a": { src: "/viewe-uedx24320028e-wb-a.svg", alt: "VIEWE UEDX24320028E-WB-A V1.1" },
   "esp32-s3-super-mini": {
     src: "/esp32-s3-supermini-breadboard.svg",
     alt: "ESP32-S3 Super Mini board",
@@ -594,6 +598,7 @@ const GPIO_BOARD_ASSETS = {
   "esp8266-esp12f": { src: "/esp8266-esp12f-breadboard.svg", alt: "ESP8266 ESP-12F development board" },
   "esp8285-generic": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8285 family module" },
   "custom-board": { src: "/esp32-38pinwide-breadboard.svg", alt: "Generic custom ESP board" },
+  "viewe-uedx32480035e-wb-a": {"src":"/viewe-uedx32480035e-wb-a.svg","alt":"VIEWE 3.5-inch 320x480 · UEDX32480035E-WB-A"},
 };
 const OLED_PREVIEW_SCROLL_INTERVAL_MS = 300;
 const DEFAULT_ESP32S3_AUDIO_PINS = {
@@ -613,6 +618,10 @@ const DEFAULT_SD_GPIO_PINS = {
 };
 const DOCUMENTED_BUZZER_PIN = 7;
 const GPIO_BOARD_LAYOUTS = {
+  "viewe-uedx24320028e-wb-a": {
+    left: [...[5,6,7,8,9,10,11,12,2,4,14,15,16,17,18,21,43,44].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"},{pin:null,label:"GND"}],
+    right: [...[0,1,3,13,19,20,38,39,40,41,42,45,47,48].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"5V"},{pin:null,label:"GND"}],
+  },
   "custom-board": {
     left: [0,1,2,3,4,5,12,13,14,15,16].map(pin=>({pin,label:`GPIO${pin}`})),
     right: [17,18,19,21,22,23,25,26,27,32,33,34,35,36,39].map(pin=>({pin,label:`GPIO${pin}`})),
@@ -844,6 +853,7 @@ const GPIO_BOARD_LAYOUTS = {
   "esp8266-esp12e": { left:[{pin:null,label:"RST"},{pin:null,label:"ADC"},{pin:null,label:"EN / CH_PD"},...[16,14,12,13].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}], right:[{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},...[5,4,0,2,15].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"GND"}] },
   "esp8266-esp12f": { left:[{pin:null,label:"RST"},{pin:null,label:"ADC"},{pin:null,label:"EN / CH_PD"},...[16,14,12,13].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}], right:[{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},...[5,4,0,2,15].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"GND"}] },
   "esp8285-generic": { left:[16,14,12,13,15,2].map(pin=>({pin,label:`GPIO${pin}`})), right:[0,4,5,3,1].map(pin=>({pin,label:pin===3?"RX / GPIO3":pin===1?"TX / GPIO1":`GPIO${pin}`})) },
+  "viewe-uedx32480035e-wb-a": {"left":[{"pin":5,"label":"GPIO5"},{"pin":6,"label":"GPIO6"},{"pin":7,"label":"GPIO7"},{"pin":8,"label":"GPIO8"},{"pin":9,"label":"GPIO9"},{"pin":10,"label":"GPIO10"},{"pin":11,"label":"GPIO11"},{"pin":12,"label":"GPIO12"},{"pin":2,"label":"GPIO2"},{"pin":4,"label":"GPIO4"},{"pin":14,"label":"GPIO14"},{"pin":15,"label":"GPIO15"},{"pin":16,"label":"GPIO16"},{"pin":17,"label":"GPIO17"},{"pin":18,"label":"GPIO18"},{"pin":21,"label":"GPIO21"},{"pin":43,"label":"GPIO43"},{"pin":44,"label":"GPIO44"},{"pin":null,"label":"3V3"},{"pin":null,"label":"GND"}],"right":[{"pin":0,"label":"GPIO0"},{"pin":1,"label":"GPIO1"},{"pin":3,"label":"GPIO3"},{"pin":13,"label":"GPIO13"},{"pin":19,"label":"GPIO19"},{"pin":20,"label":"GPIO20"},{"pin":38,"label":"GPIO38"},{"pin":39,"label":"GPIO39"},{"pin":40,"label":"GPIO40"},{"pin":41,"label":"GPIO41"},{"pin":42,"label":"GPIO42"},{"pin":45,"label":"GPIO45"},{"pin":47,"label":"GPIO47"},{"pin":48,"label":"GPIO48"},{"pin":null,"label":"5V"},{"pin":null,"label":"GND"}]},
 };
 const GPIO_BOARD_EXTRA_LAYOUTS = {
   "wemos-d1-mini-esp32": {
@@ -864,6 +874,7 @@ const GPIO_BOARD_EXTRA_LAYOUTS = {
   },
 };
 const GPIO_BOARD_RESERVED_PINS = {
+  "viewe-uedx24320028e-wb-a": Object.fromEntries([1,3,13,38,39,40,41,42,45,47,48].map(pin=>[pin,{label:"Onboard hardware",warning:"Reserved for the VIEWE LCD, touch or buzzer.",kind:"onboard"}])),
   "wemos-d1-mini-esp32": {
     0:{label:"BOOT",warning:"GPIO0 is a boot strap pin.",kind:"strap"},
     1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},
@@ -956,6 +967,7 @@ const GPIO_BOARD_RESERVED_PINS = {
     44: { label: "U0RXD / LED RX", warning: "Board-tied serial pin: GPIO44 is routed to U0RXD and board serial activity.", kind: "serial" },
     46: { label: "LOG", warning: "Reserved strap pin: GPIO46 is tied to strap/log behavior on this board.", kind: "strap" },
   },
+  "viewe-uedx32480035e-wb-a": {"1":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"3":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"13":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"38":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"39":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"40":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"41":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"42":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"45":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"47":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"48":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"}},
 };
 const GPIO_ROLE_OPTIONS = [
   "Unused",
@@ -2350,7 +2362,8 @@ function effectiveDisplayProfile(settings = state.settings) {
   if (settings?.oled?.enabled === false) {
     return "none";
   }
-  return String(settings?.oled?.displayType || "oled").trim().toLowerCase() === "wape" ? "waveshare-screen" : "i2c-oled";
+  const type = String(settings?.oled?.displayType || "oled").trim().toLowerCase();
+  return type === "panel" ? "viewe-onboard-lcd" : type === "wape" ? "waveshare-screen" : "i2c-oled";
 }
 
 function effectiveStorageEnabled(settings = state.settings) {
@@ -4531,7 +4544,7 @@ function renderPeripheralDiagramNow() {
 
   displayProfiles.slice(0, MAX_PERIPHERAL_DISPLAYS).forEach((profile, index) => {
     const normalizedProfile = String(profile || "none");
-    if (normalizedProfile === "none") {
+    if (normalizedProfile === "none" || normalizedProfile === "viewe-onboard-lcd") {
       return;
     }
     const displayAsset = PERIPHERAL_DIAGRAM_ASSET_MAP.display[normalizedProfile];
@@ -8028,7 +8041,7 @@ function gpioRoleMap(settings = state.settings, status = state.status) {
     if (Number(wapeTriggerPin || 0) > 0) {
       addRole(wapeTriggerPin, "Wape Trigger");
     }
-  } else if (oledEnabled) {
+  } else if (oledEnabled && displayProfile !== "viewe-onboard-lcd") {
     addRole(currentGpioRoleNumericValue(elements.oledSdaPin, oled.sdaPin), "OLED SDA");
     addRole(currentGpioRoleNumericValue(elements.oledSclPin, oled.sclPin), "OLED SCL");
     const oledResetPin = currentGpioRoleNumericValue(elements.oledResetPin, oled.resetPin);
@@ -8166,7 +8179,7 @@ function gpioConfigRoleDefinitions(settings = state.settings) {
     );
   }
 
-  if (displayProfile === "none") {
+  if (displayProfile === "none" || displayProfile === "viewe-onboard-lcd") {
     return definitions;
   }
 
@@ -9226,6 +9239,10 @@ async function loadStatus() {
   try {
     const status = await request(`/api/status?ts=${Date.now()}`);
     renderStatus(status);
+    if (status.firmware?.touchscreen && !status.system?.webUiLocked && !document.hidden) {
+      // A transient settings read must not discard an otherwise valid status update.
+      try { await configurationSettingsPersistenceModule?.refreshExternalSettings(); } catch (_) { /* Retry on the next status poll. */ }
+    }
     if (elements.rebootOverlay && !elements.rebootOverlay.hidden) {
       if (!state.rebootOverlayArmed) {
         hideRebootOverlay();

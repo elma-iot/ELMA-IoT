@@ -1,4 +1,5 @@
 #include "settings_manager.h"
+#include "panel_geometry.h"
 #include "generated_project_defaults.h"
 
 #include <ctype.h>
@@ -315,7 +316,11 @@ bool usesLegacyOtaRepository(const String& owner, const String& repository) {
 
 String defaultOtaAssetTemplate() {
 #if APP_HAS_ONBOARD_PANEL
+    #if defined(BOARD_VIEWE_UEDX32480035E_WB_A)
+    return "viewe-uedx32480035e-${version}.bin";
+    #else
     return "viewe-uedx24320028e-${version}.bin";
+    #endif
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
     #ifdef APP_ENABLE_HACS_MQTT
     #ifdef APP_DISABLE_WEB_UI
@@ -657,8 +662,8 @@ SettingsBundle SettingsManager::defaults() const {
 #if APP_HAS_ONBOARD_PANEL
     settings.oled.enabled = true;
     settings.oled.displayType = "panel";
-    settings.oled.width = 240;
-    settings.oled.height = 320;
+    settings.oled.width = kPanelWidth;
+    settings.oled.height = kPanelHeight;
     settings.sd.csPin = 21;
     settings.sd.sckPin = 14;
     settings.sd.mosiPin = 17;
@@ -879,7 +884,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     settings.oled.brightness = min<uint8_t>(settings.oled.brightness, 100);
     settings.oled.width = clampValue<uint16_t>(settings.oled.width, static_cast<uint8_t>(64), static_cast<uint8_t>(128));
     settings.oled.height = clampValue<uint16_t>(settings.oled.height, static_cast<uint8_t>(32), static_cast<uint8_t>(64));
-    if (panel) { settings.oled.width = 240; settings.oled.height = 320; }
+    if (panel) { settings.oled.width = kPanelWidth; settings.oled.height = kPanelHeight; }
     if (settings.oled.rotation != 0 && settings.oled.rotation != 90 && settings.oled.rotation != 180 && settings.oled.rotation != 270) {
         settings.oled.rotation = 0;
     }

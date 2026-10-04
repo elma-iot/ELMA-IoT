@@ -171,7 +171,7 @@ export function createDisplayTab({
       return;
     }
 
-    if (String(elements.displayType?.value || state.settings?.oled?.displayType || "oled").toLowerCase() === "wape") {
+    if (["wape", "panel"].includes(String(elements.displayType?.value || state.settings?.oled?.displayType || "oled").toLowerCase())) {
       if (elements.oledPreviewCard) {
         elements.oledPreviewCard.hidden = true;
       }

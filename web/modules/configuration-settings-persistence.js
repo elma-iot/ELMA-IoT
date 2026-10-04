@@ -69,6 +69,7 @@ export function createConfigurationSettingsPersistenceModule({
   applyBackupUiState,
 }) {
   let pendingSnapshot = null;
+  let remoteFingerprint = "", externalRefreshBusy = false;
   function settingsSubsetMatches(actual, expected) {
     if (expected === null || typeof expected !== "object") {
       if (typeof expected === "number") {
@@ -451,8 +452,9 @@ export function createConfigurationSettingsPersistenceModule({
     return savePromise;
   }
 
-  async function loadSettings() {
-    const loadedSettings = await request("/api/settings");
+  async function loadSettings(incoming = null) {
+    const loadedSettings = incoming || await request("/api/settings");
+    const fingerprint = JSON.stringify(loadedSettings);
     loadedSettings.audio ||= {};
     loadedSettings.sd ||= {};
     if (loadedSettings.audio.enabled === undefined) {
@@ -465,6 +467,7 @@ export function createConfigurationSettingsPersistenceModule({
     if (state.settingsDirty || state.settingsSaving) {
       return;
     }
+    remoteFingerprint = fingerprint;
     state.settings = loadedSettings;
     state.peripheralDiagramPositions = cloneSettingsObject(state.settings.ui.peripheralDiagramPositions) || {};
     restoreGpioBoardPreferences();
@@ -494,6 +497,18 @@ export function createConfigurationSettingsPersistenceModule({
     maybeRefreshVisibleStorageTab();
   }
 
+  async function refreshExternalSettings() {
+    const editing = () => document.activeElement?.matches?.("input,textarea,select,[contenteditable=true]");
+    if (externalRefreshBusy || !state.settings || state.settingsDirty || state.settingsSaving || state.settingsLoading || editing() || isGpioUiInteracting()) return;
+    externalRefreshBusy = true;
+    const revision = Number(state.settingsEditRevision || 0);
+    try {
+      const incoming = await request("/api/settings");
+      if (state.settingsDirty || state.settingsSaving || editing() || Number(state.settingsEditRevision || 0) !== revision) return;
+      if (JSON.stringify(incoming) !== remoteFingerprint) await loadSettings(incoming);
+    } finally { externalRefreshBusy = false; }
+  }
+
   async function saveSettings(options = {}) {
     const { silent = false } = options;
     if (state.settingsLoading) {
@@ -521,6 +536,7 @@ export function createConfigurationSettingsPersistenceModule({
   }
 
   return {
+    refreshExternalSettings,
     settingsSubsetMatches,
     refreshSettingsAfterSave,
     saveDirtyBatteryMeasurement,

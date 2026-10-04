@@ -4176,29 +4176,11 @@ void setup() {
     webServer->setLogicsHandlers([](JsonDocument& result,bool graph){logicDevice.snapshot(result,graph);},
         [](JsonVariantConst command,JsonDocument& result,String& error){return logicDevice.request(command,result,error);});
 
-#if APP_HAS_ONBOARD_PANEL
-    displayManager->setPanelHandlers([](JsonObject root){
-        root["version"]=APP_VERSION;root["ssid"]=settings->wifi.ssid;
-        root["mqttHost"]=settings->mqtt.host;root["mqttPort"]=settings->mqtt.port;root["mqttUsername"]=settings->mqtt.username;
-        root["brightness"]=settings->oled.brightness;root["rotation"]=settings->oled.rotation;
-        root["lastUrl"]=settings->audio.lastPlayback.url;
-        JsonDocument logics;logicDevice.snapshot(logics,false);root["logics"].set(logics);
+#if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
+    displayManager->setPanelHandlers([](const String& page,JsonObject root){
+        webServer->panelSnapshot(page,root);
     },[](const String& action,JsonVariantConst args,String& error){
-        if(action=="settings")return saveSettingsFromJson(args,error);
-        if(action=="logics"){JsonDocument result;return logicDevice.request(args,result,error);}
-        if(action=="volume"){deferredActions->pendingVolume=constrain(args["value"]|0,0,100);deferredActions->volumePending=true;return true;}
-        if(action=="stop"){deferredActions->stopPending=true;deferredActions->playPending=false;return true;}
-        if(action=="play"){clearPreviewResumeState();return playRequest(args["url"]|"","","media","",error,true);}
-        if(action=="mqttRediscover")return mqttManager->requestRediscovery(error);
-        if(action=="mqttConnect"||action=="mqttDisconnect"){
-            const bool connect=action=="mqttConnect";
-            const String host=deferredActions->settingsApplyPending?deferredActions->pendingSettings.mqtt.host:settings->mqtt.host;
-            if(connect&&host.isEmpty()){error="Enter an MQTT host first.";return false;}
-            deferredActions->mqttConnectRequested=connect;deferredActions->mqttConnectionChangePending=true;return true;
-        }
-        if(action=="otaCheck"){bool ok=otaManager->triggerCheck(false);if(!ok)error="Update check unavailable or already running";return ok;}
-        if(action=="reboot"){requestRestartSequence("lcd",false);return true;}
-        error="Unsupported touchscreen action";return false;
+        return webServer->panelCommand(action,args,error);
     });
 #endif
     webServer->setAudioSourceHandler(queueAudioSource);

@@ -28,7 +28,9 @@ bool tickHookRegistered[portNUM_PROCESSORS] = {false};
 #endif
 
 const char* compiledBoardProfile() {
-#if APP_COMPILED_BOARD_PROFILE_ID == 14
+#if APP_COMPILED_BOARD_PROFILE_ID == 25
+    return "viewe-uedx32480035e-wb-a";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 14
     return "viewe-uedx24320028e-wb-a";
 #elif APP_COMPILED_BOARD_PROFILE_ID == 1
     return "esp32-s3-super-mini";

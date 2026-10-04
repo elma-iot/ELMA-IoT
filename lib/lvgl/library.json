@@ -8,7 +8,8 @@
 		"url": "https://github.com/lvgl/lvgl.git"
 	},
 	"build": {
-		"includeDir": "."
+		"includeDir": ".",
+		"flags": ["-DLV_CONF_PATH=../../../include/lv_conf.h"]
 	},
 	"license": "MIT",
 	"homepage": "https://lvgl.io",

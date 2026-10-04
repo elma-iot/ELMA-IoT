@@ -1120,6 +1120,9 @@ void WebServerManager::registerApiRoutes() {
 #endif
         JsonObject firmware = doc["firmware"].to<JsonObject>();
         firmware["version"] = APP_VERSION;
+#if APP_HAS_ONBOARD_PANEL
+        firmware["touchscreen"] = true;
+#endif
         firmware["configurationSnapshotVersion"] = 1;
         firmware["serialConfigurationSnapshot"] = true;
         firmware["selectiveConfigurationApply"] = true;

@@ -26,6 +26,8 @@
       "+<drivers/lcd/esp_panel_lcd_factory.cpp>",
       "+<drivers/lcd/esp_panel_lcd_gc9a01.cpp>",
       "+<drivers/lcd/port/esp_lcd_gc9a01.c>",
+      "+<drivers/lcd/esp_panel_lcd_st7789.cpp>",
+      "+<drivers/lcd/port/esp_lcd_st7789.c>",
       "+<drivers/touch/esp_panel_touch.cpp>",
       "+<drivers/touch/esp_panel_touch_factory.cpp>",
       "+<drivers/touch/esp_panel_touch_chsc6540.cpp>",
