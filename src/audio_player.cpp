@@ -254,11 +254,14 @@ void clearOverlay(AudioPlayer::Impl* impl) {
 
 void recreateAudioEngine(AudioPlayer::Impl* impl) {
     if (impl == nullptr) return;
+#if defined(APP_SPK_BOARD)
+    digitalWrite(46, LOW);
+#endif
     impl->audio.~Audio();
-    new (&impl->audio) Audio();
+    new (&impl->audio) Audio(impl->bclkPin==255 && impl->wsPin==254, I2S_DAC_CHANNEL_LEFT_EN);
     impl->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
     impl->audio.setI2SCommFMT_LSB(false);
-    if (impl->outputEnabled) {
+    if (impl->outputEnabled && impl->bclkPin!=255) {
         impl->audio.setPinout(impl->bclkPin, impl->wsPin, impl->doutPin);
     }
     impl->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO);
@@ -266,6 +269,9 @@ void recreateAudioEngine(AudioPlayer::Impl* impl) {
     impl->audio.setTone(impl->defaultLowDb, impl->defaultPresenceDb, impl->defaultHighDb);
     impl->applyHardwareVolumePercent(impl->volume);
     impl->clockRate = 0;
+#if defined(APP_SPK_BOARD)
+    digitalWrite(46, impl->outputEnabled ? HIGH : LOW);
+#endif
     DebugLog.printf("[audio] decoder and network buffers reset, free heap=%u free psram=%u\n",
                     static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getFreePsram()));
 }
@@ -543,11 +549,19 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
     impl_->wsPin = wsPin;
     impl_->doutPin = doutPin;
     impl_->outputEnabled = outputEnabled;
+#if defined(APP_SPK_BOARD)
+    digitalWrite(46, LOW);pinMode(46, OUTPUT);
+#endif
+    impl_->audio.~Audio();
+    new (&impl_->audio) Audio(bclkPin==255 && wsPin==254, I2S_DAC_CHANNEL_LEFT_EN);
     impl_->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
     impl_->audio.setI2SCommFMT_LSB(false);
-    if (outputEnabled) {
+    if (outputEnabled && bclkPin!=255) {
         impl_->audio.setPinout(bclkPin, wsPin, doutPin);
     }
+#if defined(APP_SPK_BOARD)
+    digitalWrite(46, outputEnabled ? HIGH : LOW);
+#endif
     impl_->requestedSampleRateHz = kPreferredDiagnosticSampleRateHz;
     impl_->diagnosticTestMode = DefaultConfig::AUDIO_DIAGNOSTIC_TEST;
     impl_->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO);
@@ -885,20 +899,17 @@ bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t 
     }
 
     if (impl_->outputEnabled) {
-        gpio_reset_pin(static_cast<gpio_num_t>(impl_->bclkPin));
-        gpio_reset_pin(static_cast<gpio_num_t>(impl_->wsPin));
+        if(impl_->bclkPin<40)gpio_reset_pin(static_cast<gpio_num_t>(impl_->bclkPin));
+        if(impl_->wsPin<40)gpio_reset_pin(static_cast<gpio_num_t>(impl_->wsPin));
         gpio_reset_pin(static_cast<gpio_num_t>(impl_->doutPin));
     }
 
-    impl_->audio.setI2SCommFMT_LSB(false);
-    impl_->audio.setPinout(bclkPin, wsPin, doutPin);
-    impl_->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO);
-    impl_->channelCount = DefaultConfig::AUDIO_FORCE_MONO ? 1 : 2;
-    impl_->applyHardwareVolumePercent(impl_->volume);
     impl_->bclkPin = bclkPin;
     impl_->wsPin = wsPin;
     impl_->doutPin = doutPin;
     impl_->outputEnabled = true;
+    recreateAudioEngine(impl_);
+    impl_->channelCount = DefaultConfig::AUDIO_FORCE_MONO ? 1 : 2;
     DebugLog.printf("[audio] reconfigured target=MAX98357A fmt=std-i2s bclk=%u ws=%u dout=%u requested_rate=%lu lib_volume=%u mono=%s\n",
                   bclkPin,
                   wsPin,
@@ -934,12 +945,15 @@ bool AudioPlayer::disableOutput() {
     releaseStorageLease(impl_);
 
     if (impl_->outputEnabled) {
-        gpio_reset_pin(static_cast<gpio_num_t>(impl_->bclkPin));
-        gpio_reset_pin(static_cast<gpio_num_t>(impl_->wsPin));
+        if(impl_->bclkPin<40)gpio_reset_pin(static_cast<gpio_num_t>(impl_->bclkPin));
+        if(impl_->wsPin<40)gpio_reset_pin(static_cast<gpio_num_t>(impl_->wsPin));
         gpio_reset_pin(static_cast<gpio_num_t>(impl_->doutPin));
     }
 
     impl_->outputEnabled = false;
+#if defined(APP_SPK_BOARD)
+    digitalWrite(46, LOW);
+#endif
     impl_->state = "idle";
     impl_->type = "idle";
     impl_->title = "Idle";

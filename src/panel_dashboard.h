@@ -24,14 +24,18 @@ private:
  lv_disp_draw_buf_t drawBuffer_{};lv_disp_drv_t displayDriver_{};lv_indev_drv_t inputDriver_{};lv_color_t* pixels_=nullptr;
  lv_obj_t *screen_=nullptr,*body_=nullptr,*notice_=nullptr,*keyboard_=nullptr,*menu_=nullptr;
  lv_obj_t *wifi_=nullptr,*mqtt_=nullptr,*extra_=nullptr,*clock_=nullptr,*bars_[4]{};
+ lv_obj_t *speaker_=nullptr,*volumeOverlay_=nullptr,*volumeSlider_=nullptr,*volumeLabel_=nullptr;
  std::map<String,lv_obj_t*> labels_,buttons_;std::map<String,String> drafts_;std::vector<Field> fields_;std::vector<String> tabs_;
- JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_;
+ JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_,countryOptions_="All countries";
  unsigned long tick_=0,refresh_=0,noticeUntil_=0;bool touched_=false,frameReported_=false,updating_=false,refreshNow_=true;
+ bool radioRequested_=false;
+ String lastPlaybackUrl_,resumeUrl_,resumeTitle_;
  void page(const String&);void syncMenu();void statusBar(const AppStateSnapshot&);void update();
  lv_obj_t* label(const String&);void button(const String&,const String&);
  void field(const String&,const String&,const String& kind="text",const String& options="",double minimum=-1e9,double maximum=1e9);
  void section(const String&);void queue(const String&,JsonVariantConst);void submit(int index=-1);
  void settingsFields();void arrays(bool controls);void wiring();String fieldText(const Field&)const;
+ void player();
  static void event(lv_event_t*);static void flush(lv_disp_drv_t*,const lv_area_t*,lv_color_t*);static void touch(lv_indev_drv_t*,lv_indev_data_t*);
 };
 #endif

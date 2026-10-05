@@ -2,12 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createConfigurationSettingsPersistenceModule} from '../web/modules/configuration-settings-persistence.js';
+import {ONBOARD_BOARDS} from '../web/modules/onboard-boards.js';
 
 globalThis.document={activeElement:null};
-test('touchscreen navigation follows the web tab order',()=>{
+test('touchscreen navigation follows the web tab order for supported LCD hardware',()=>{
   const web=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
   const panel=readFileSync(new URL('../src/panel_dashboard.cpp',import.meta.url),'utf8');
-  const webKeys=[...web.matchAll(/<button[^>]*role="tab"[^>]*data-tab="([^"]+)"/g)].map(m=>m[1]);
+  for(const board of Object.values(ONBOARD_BOARDS).filter(board=>board.displayProfile)) {
+    assert.ok(!board.cameraPins && !board.microphone, 'LCD camera/microphone hardware needs corresponding panel pages');
+  }
+  const webKeys=[...web.matchAll(/<button[^>]*role="tab"[^>]*data-tab="([^"]+)"/g)].map(m=>m[1]).filter(key=>!['camera','microphones'].includes(key));
   const table=panel.split('const Tab tabList[]={')[1].split('};')[0];
   const panelKeys=[...table.matchAll(/\{"([^"]+)",/g)].map(m=>m[1]);
   assert.deepEqual(panelKeys,webKeys);

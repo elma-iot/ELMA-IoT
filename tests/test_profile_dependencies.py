@@ -38,6 +38,10 @@ class ProfileDependenciesTests(unittest.TestCase):
                     if section=='env:viewe_uedx24320028e' and 'display' in excluded:continue
                     with self.subTest(profile=section,excluded=excluded):
                         env=Environment(config,section)
+                        if section in ('env:esp32s3_spk_n16r8','env:sunton_2432s028r','env:sunton_2432s028c','env:sunton_3248s035c') and set(excluded)&{'audio','sd'}:
+                            with patch.dict(os.environ,ELMA_EXCLUDED_FEATURES=json.dumps(excluded)),self.assertRaisesRegex(ValueError,'retain onboard audio and SD'):
+                                policy.apply(env)
+                            continue
                         with patch.dict(os.environ,ELMA_EXCLUDED_FEATURES=json.dumps(excluded)),contextlib.redirect_stdout(io.StringIO()):policy.apply(env)
                         disabled=builtin_noaudio or 'audio' in excluded
                         self.assertEqual('ESP32-audioI2S-master' in env.ignored,disabled)

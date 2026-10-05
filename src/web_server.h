@@ -69,6 +69,11 @@ class WebServerManager {
 #endif
 
   private:
+#if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
+    String panelStoragePath_="/", panelStorageListing_, panelStoragePage_;
+    int panelStorageOffset_=0;
+    bool panelStorageDirty_=true, panelStorageMounted_=false;
+#endif
     StatusAppender ledStatusAppender_;
     LogicsGetter logicsGetter_;
     LogicsHandler logicsHandler_;

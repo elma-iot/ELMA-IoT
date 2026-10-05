@@ -26,6 +26,7 @@ inline void sample(JsonObjectConst n,JsonObject root){if(n["binding"]["kind"]!="
    pinMode(p,passive?INPUT_PULLUP:INPUT);
 #endif
    target["state"]=passive?digitalRead(p)==LOW:digitalRead(p)==HIGH;}
- }else if(output(n))target["state"]=state(p);
+ }else if(n["binding"]["group"]=="sensor" && profile=="ldr"){target["value"]=analogRead(p);}
+ else if(output(n))target["state"]=state(p);
 }
 }

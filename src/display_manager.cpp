@@ -2,6 +2,7 @@
 #if !APP_DISABLE_DISPLAY
 
 #include <Wire.h>
+#include "shared_i2c.h"
 #include "device_log.h"
 
 namespace {
@@ -41,6 +42,7 @@ void DisplayManager::begin(const OledSettings& settings) {
 }
 
 void DisplayManager::applySettings(const OledSettings& settings) {
+    SharedI2c::Guard bus; if(!bus)return;
     settings_ = settings;
     ssd1306_.reset();
     sh1106_.reset();
@@ -71,9 +73,9 @@ void DisplayManager::applySettings(const OledSettings& settings) {
         return;
     }
 #endif
-    Wire.begin(settings_.sdaPin, settings_.sclPin);
+    if(!SharedI2c::begin(settings_.sdaPin, settings_.sclPin))return;
     if (settings_.driver == "sh1106") {
-        sh1106_.reset(new Adafruit_SH1106G(settings_.width, settings_.height, &Wire, settings_.resetPin));
+        sh1106_.reset(new Adafruit_SH1106G(settings_.width, settings_.height, &SharedI2c::wire(), settings_.resetPin, 100000, 100000));
         if (!sh1106_->begin(settings_.i2cAddress, true)) {
             sh1106_.reset();
             return;
@@ -82,7 +84,7 @@ void DisplayManager::applySettings(const OledSettings& settings) {
         sh1106_->clearDisplay();
         sh1106_->display();
     } else {
-        ssd1306_.reset(new Adafruit_SSD1306(settings_.width, settings_.height, &Wire, settings_.resetPin));
+        ssd1306_.reset(new Adafruit_SSD1306(settings_.width, settings_.height, &SharedI2c::wire(), settings_.resetPin, 100000, 100000));
         if (!ssd1306_->begin(SSD1306_SWITCHCAPVCC, settings_.i2cAddress)) {
             ssd1306_.reset();
             return;
@@ -113,6 +115,7 @@ void DisplayManager::markActivity() {
 }
 
 void DisplayManager::powerOff() {
+    SharedI2c::Guard bus; if(!bus)return;
 #if APP_HAS_ONBOARD_PANEL
     if (panel_) panel_->brightness(0);
 #endif
@@ -264,6 +267,7 @@ void DisplayManager::drawWrappedLine(Adafruit_GFX& display, const String& text, 
 }
 
 void DisplayManager::loop(const AppStateSnapshot& state) {
+    SharedI2c::Guard bus(0); if(!bus)return;
 #if APP_HAS_ONBOARD_PANEL
     if(dashboard_) {
         const bool temporary=temporaryCenterTextUntilMs_ && static_cast<int32_t>(temporaryCenterTextUntilMs_-millis())>0;

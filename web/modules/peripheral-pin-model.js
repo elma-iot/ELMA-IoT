@@ -134,6 +134,7 @@ export function shouldShowBoardLabel({ targetKey, labelId, usedTargets, savedLab
 export function defaultPeripheralPins(groupKey, profileValue, bindingPins = []) {
   const group = String(groupKey || "");
   const profile = String(profileValue || "none").toLowerCase();
+  if(['viewe-onboard-lcd','viewe-sdmmc','camera-sdmmc','sunton-speaker','spk-ns4168'].includes(profile))return [];
   if (bindingPins.length && !(group === "audio" && (profile.includes("buzzer") || profile.includes("bluetooth")))) {
     const pins = [...bindingPins];
     if (!pins.some(isPositivePowerSignal)) pins.push("VCC");

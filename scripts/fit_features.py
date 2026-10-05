@@ -8,6 +8,11 @@ def apply(env):
     excluded = json.loads(os.environ.get("ELMA_EXCLUDED_FEATURES", "[]"))
     if not isinstance(excluded, list) or any(x not in ("audio", "display", "sd") for x in excluded):
         raise ValueError("Invalid unused-feature build policy")
+    if env['PIOENV'] in ('esp32s3_spk_n16r8','sunton_2432s028r','sunton_2432s028c','sunton_3248s035c'):
+        if set(excluded) & {'audio','sd'}:
+            raise ValueError('This multimedia board must retain onboard audio and SD support')
+    if env['PIOENV'] == 'esp32_cam' and 'sd' in excluded:
+        raise ValueError('ESP32-CAM must retain its onboard SD support')
     flags = env.GetProjectOption("build_flags", [])
     if isinstance(flags, str):
         flags = [flags]

@@ -39,6 +39,19 @@ export function createPlaybackStatusModule({
   }
 
   function updatePlaybackHeroControls() {
+    // LCD, web and remote commands share the same runtime player. Follow a
+    // changed live station without overwriting a user's unplayed selection.
+    const liveUrl = String(state.status?.playback?.url || "");
+    if (liveUrl && liveUrl !== state.lastSyncedRadioUrl) {
+      const index = state.radioStations.findIndex(station => station.url === liveUrl);
+      if (index >= 0 && elements.radioStationSelect) elements.radioStationSelect.value = String(index);
+      const editingSource = [elements.playUrl, elements.playLabel].some(field => field && globalThis.document?.activeElement === field);
+      if (!editingSource) {
+        if (elements.playUrl) elements.playUrl.value = liveUrl;
+        if (elements.playLabel) elements.playLabel.value = state.status?.playback?.title || state.radioStations[index]?.name || "";
+        state.lastSyncedRadioUrl = liveUrl;
+      }
+    }
     const audioEnabled = Boolean(state.status?.firmware?.audioEnabled);
     const playbackActive = isPlaybackActive();
     const busy = Boolean(state.playbackActionInProgress);

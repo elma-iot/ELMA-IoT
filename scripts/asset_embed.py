@@ -68,6 +68,8 @@ def audit_board_assets(source, target, env):
     print("[size-fit] Mainboard SVG audit passed for board " + str(selected_board_id))
 
 default_board_ids = {
+    "esp32s3_spk_n16r8": "4",
+    "sunton_2432s028r":"26", "sunton_2432s028c":"27", "sunton_3248s035c":"28", "esp32_cam":"29",
     "viewe_uedx24320028e": "14",
     "esp32s2_designer_hacs": "24",
     "esp32_notifier": "8", "esp32_notifier_hacs": "8",

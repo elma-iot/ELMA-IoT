@@ -9,6 +9,7 @@ export function adcGpioPins(chip) {
 }
 export function peripheralPinRequirement(group, profile, signal) {
   profile=String(profile).toLowerCase(); signal=String(signal).toUpperCase();
+  if (group === "sensor" && profile === "ldr" && signal === "SIG") return "adc";
   if (signal === "TOUCH" && profile.includes("native-touch")) return "touch";
   if (["ADC","AOUT","VRX","VRY"].includes(signal)
     || (group === "sensor" && profile.includes("voltage-divider") && signal === "SIGNAL")
@@ -35,9 +36,9 @@ export function safePeripheralPins({chip, inputPins, outputPins, exposedPins, bl
     && (requirement !== "touch" || touch.has(pin))
     && (requirement !== "pull-input" || !((chip === "esp32" && pin>=34) || (["esp8266","esp8285"].includes(chip) && pin===16))));
 }
-export function occupiedPinChoices(pins, assignments, ownKey, selected="") {
+export function occupiedPinChoices(pins, assignments, ownKey, selected="", compatible=()=>false) {
   const choices=pins.map(pin=>{
-    const owners=[...new Set(assignments.filter(a=>a.key!==ownKey && a.pin===pin).map(a=>a.label))];
+    const owners=[...new Set(assignments.filter(a=>a.key!==ownKey && a.pin===pin && !compatible(a)).map(a=>a.label))];
     return {value:String(pin),label:owners.length ? `GPIO${pin} (${owners.join(" / ")})` : `GPIO${pin}`,disabled:owners.length>0};
   });
   if (selected!=="" && !choices.some(option=>option.value===String(selected))) choices.unshift({value:String(selected),label:`GPIO${selected} — invalid/reserved for this board (reassign)`,disabled:true});

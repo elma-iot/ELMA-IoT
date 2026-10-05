@@ -105,6 +105,9 @@
     <div class="grid security-blocked">
       <section class="panel panel-wide">
         <div class="tabs" role="tablist" aria-label="ELMA IoT tabs">
+          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-camera" data-tab="camera" title="Camera" data-tooltip="Camera" aria-label="Camera" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
+          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-bno055" data-tab="bno055" title="Orientation sensor" data-tooltip="Orientation sensor" aria-label="Orientation sensor" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m16 8-2 6-6 2 2-6z"/></svg></button>
+          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-microphones" data-tab="microphones" title="Microphones" data-tooltip="Microphones" aria-label="Microphones" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></button>
           <button class="tab-button tab-button-icon tab-gpio" type="button" role="tab" aria-label="Configuration" data-tooltip="Configuration" title="Configuration" aria-selected="true" aria-controls="tab-gpio" data-tab="gpio">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h4v4H6z"></path><path d="M14 6h4v4h-4z"></path><path d="M6 14h4v4H6z"></path><path d="M14 14h4v4h-4z"></path><path d="M10 8h4"></path><path d="M8 10v4"></path><path d="M16 10v4"></path><path d="M10 16h4"></path></svg>
           </button>
@@ -159,6 +162,25 @@
           </button>
         </div>
 
+        <div id="tab-bno055" class="tab-panel" role="tabpanel" aria-label="Orientation sensor">
+          <h2>DFRobot BNO055</h2><canvas width="480" height="300" style="width:100%;max-width:600px" aria-label="Live compass and X Y Z measurements"></canvas>
+          <label><input type="checkbox" data-enabled>Live sampling</label>
+          <label>Fusion mode <select data-mode><option value="ndof">Compass + motion (NDOF)</option><option value="imu">Motion only (IMU)</option></select></label>
+          <button type="button">Reinitialize sensor</button><p data-notice role="status">Waiting for sensor</p>
+          <p>Compass shows magnetic heading. Keep away from magnets and move the sensor through different orientations to calibrate; 3 means fully calibrated. Reinitializing clears current calibration.</p>
+        </div>
+        <div id="tab-microphones" class="tab-panel" role="tabpanel" aria-label="Microphones">
+          <h2>Microphones</h2><label><input type="checkbox" data-mic-enabled> Enabled</label>
+          <label>Gain <select data-mic-gain><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option><option value="5">5×</option><option value="6">6×</option><option value="7">7×</option><option value="8">8×</option></select></label>
+          <p data-mic-status>Open this tab to view microphone levels.</p>
+          <label>Left <meter min="0" max="100" value="0" data-mic-left></meter></label>
+          <label>Right <meter min="0" max="100" value="0" data-mic-right></meter></label>
+        </div>
+        <div id="tab-camera" class="tab-panel" role="tabpanel" aria-label="Camera">
+          <div class="camera-viewport"><img alt="Live camera feed"/><button type="button" data-camera-settings class="camera-settings-overlay" title="Camera settings" aria-label="Camera settings">⚙</button></div>
+          <p data-camera-status>Open the Camera tab to view the feed.</p>
+          <dialog class="camera-controls-dialog"><h3>Camera settings</h3><form data-camera-controls method="dialog"></form><button type="button" data-close>Close</button></dialog>
+        </div>
         <div id="tab-plots" class="tab-panel" role="tabpanel" aria-label="Plots"><p data-plot-status>Waiting for configured plots…</p><div data-plots></div></div>
         <div id="tab-security" class="tab-panel" role="tabpanel" aria-label="Security">
           <h2>Security</h2>
@@ -843,12 +865,16 @@
               <span class="gpio-controls-field-label">Board</span>
               <div class="gpio-controls-field-main gpio-controls-field-main-board">
                 <select id="gpioBoardSelector" aria-label="ESP32 board profile">
-                  <option value="viewe-uedx24320028e-wb-a">VIEWE 2.8-inch 240×320 · UEDX24320028E-WB-A</option>
+                  <option value="esp32-2432s028r">ESP32-2432S028R · 2.8-inch resistive</option>
+<option value="esp32-2432s028c">ESP32-2432S028C · 2.8-inch capacitive</option>
+<option value="esp32-3248s035c">ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive</option>
+<option value="esp32-cam">ESP32-CAM · AI-Thinker / OV2640</option>
+<option value="viewe-uedx24320028e-wb-a">VIEWE 2.8-inch 240×320 · UEDX24320028E-WB-A</option>
                   <option value="viewe-uedx32480035e-wb-a">VIEWE 3.5-inch 320×480 · UEDX32480035E-WB-A</option>
                   <option value="esp32-s3-super-mini" selected>ESP32-S3 Super Mini</option>
                   <option value="esp32-s3-zero">ESP32-S3 Zero</option>
                   <option value="esp32-s3-psram">ESP32-S3-N16R8</option>
-                  <option value="esp32-spk-n16r8">ESP32-SPK-N16R8</option>
+                  <option value="esp32-spk-n16r8">ESP32-S3-SPK N16R8</option>
                   <option value="esp32-s3-devkit-c1">ESP32-S3 DevKit C-1</option>
                   <option value="esp32-s3-cam-module">ESP32-S3-CAM Module</option>
                   <option value="esp32-wrover">ESP32-WROVER</option>

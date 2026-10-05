@@ -18,10 +18,11 @@ test('classic ESP32 permits legacy DAC pins and excludes flash, nonexistent and 
  for(const pin of [6,7,8,9,10,11,20,24,28,34,35,36,39,48]) assert.ok(!pins.includes(pin));
  assert.ok(chipPins('esp32').includes(36));
 });
-test('S3 allows GPIO8/48 and flexible I2S, but not flash or input-only outputs',()=>{
+test('S3 supports GPIO46 output; S2 GPIO46 remains input-only',()=>{
  const pins=chipPins('esp32s3',true,'esp32-s3-super-mini');
- for(const pin of [8,13,14,15,48]) assert.ok(pins.includes(pin));
- for(const pin of [22,25,26,27,32,46]) assert.ok(!pins.includes(pin));
+ for(const pin of [8,13,14,15,46,48]) assert.ok(pins.includes(pin));
+ for(const pin of [22,25,26,27,32]) assert.ok(!pins.includes(pin));
+ assert.ok(!chipPins('esp32s2',true).includes(46));
 });
 test('WROVER and octal S3 PSRAM pins are reserved',()=>{
  assert.ok(!chipPins('esp32',true,'esp32-wrover').includes(16));

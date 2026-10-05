@@ -260,7 +260,11 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
         if(n["type"]=="hardware.gpio" && mode_=="playing")gpio_.sample(n,root["gpio"][n["id"].as<std::string>()].to<JsonObject>());
         if(n["binding"]["kind"]!="peripheral")continue;
         std::string id=n["peripheral"]["id"].as<std::string>();auto target=root["peripherals"][id];
-        if(n["binding"]["group"]=="sensor" && root["battery"]["available"].as<bool>()) {
+        if(n["binding"]["group"]=="sensor" && n["peripheral"]["profile"]=="ldr") {
+            int gpio=n["binding"]["pins"]["SIG"]|-1;
+            target["available"]=gpio>=0;target["error"]=gpio<0;
+            if(gpio>=0)target["value"]=analogRead(gpio);
+        } else if(n["binding"]["group"]=="sensor" && n["peripheral"]["profile"]=="battery-voltage-divider-220k" && root["battery"]["available"].as<bool>()) {
             target["voltage"].set(root["battery"]["voltage"]);target["percentage"].set(root["battery"]["percentage"]);
         } else if(n["binding"]["group"]=="input" && (std::string(n["peripheral"]["profile"]|"").find("joystick")!=std::string::npos || std::string(n["peripheral"]["profile"]|"").find("potentiometer")!=std::string::npos)) {
             auto pins=n["binding"]["pins"];int x=pins["VRX"]|pins["OUT"]|-1,y=pins["VRY"]|-1,sw=pins["SW"]|-1;

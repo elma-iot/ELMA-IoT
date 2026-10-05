@@ -6,6 +6,7 @@
 #include "logic_sleep_service.h"
 #include "logic_audio_dispatch.h"
 #include "led_microphone.h"
+#include "bno055_service.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
 #include <Arduino.h>
@@ -2893,6 +2894,7 @@ void applyRuntimeSettings() {
     wifiManager->applySettings(*settings);
     batteryMonitor->applySettings(settings->battery, settings->battery.adcPin);
     displayManager->applySettings(settings->oled);
+    Bno055::configure(*settings);
     if (!settings->audio.enabled) {
         if (activeAudioOutputEnabled) {
             audioPlayer->disableOutput();
@@ -4691,10 +4693,10 @@ void loop() {
       micProfiles=settings->ui.peripheralProfileSelections;micBindings=settings->ui.peripheralHelperBindings;micPlayback=activeAudioOutputEnabled;
       JsonDocument profiles,bindings;deserializeJson(profiles,micProfiles);deserializeJson(bindings,micBindings);LedMicrophone::Config config;config.playback=micPlayback;
       unsigned index=0;for(JsonVariantConst entry:profiles["audioInProfiles"].as<JsonArrayConst>()){
-        String profile=entry|"none";if(profile=="inmp441-i2s-mic"||profile=="sph0645-ics43434-i2s-mic"||profile=="i2s-microphone-generic"){
+        String profile=entry|"none";if(profile=="spk-dual-mic"||profile=="inmp441-i2s-mic"||profile=="sph0645-ics43434-i2s-mic"||profile=="i2s-microphone-generic"){
           JsonObjectConst pins=bindings["audioIn:"+String(index)];
           auto pin=[&](const char* key){return pins[key].isNull()?-1:pins[key].is<int>()?pins[key].as<int>():String(pins[key].as<const char*>()).toInt();};
-          config.clock=pin("SCK");config.word=pin("WS");config.data=pin("SD");break;
+          config.clock=pin("SCK");config.word=pin("WS");config.data=pin("SD");config.stereo=profile=="spk-dual-mic";break;
         }index++;
       }
       // No capture task or I2S allocation unless a microphone was selected.
@@ -4748,6 +4750,7 @@ void loop() {
         serviceRuntimeAudioAutomation(runtimeStateSnapshot);
         serviceAudioPlaybackGuard(runtimeStateSnapshot);
         displayManager->loop(runtimeStateSnapshot);
+        Bno055::tick();
         handleLowBatterySleepPolicy(runtimeStateSnapshot);
         confirmOtaHealthIfReady();
         publishOtaStateIfNeeded(runtimeStateSnapshot);

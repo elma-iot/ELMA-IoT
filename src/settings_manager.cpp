@@ -1,3 +1,4 @@
+#include "i2c_validation.h"
 #include "settings_manager.h"
 #include "panel_geometry.h"
 #include "generated_project_defaults.h"
@@ -29,7 +30,7 @@ constexpr auto kPinChip = GpioPinPolicy::Chip::Esp32;
 bool safeOutputPin(int pin) {
 #if APP_COMPILED_BOARD_PROFILE_ID == 7
     if (pin == 16 || pin == 17) return false;
-#elif APP_COMPILED_BOARD_PROFILE_ID >= 3 && APP_COMPILED_BOARD_PROFILE_ID <= 6
+#elif APP_COMPILED_BOARD_PROFILE_ID >= 3 && APP_COMPILED_BOARD_PROFILE_ID <= 6 && APP_COMPILED_BOARD_PROFILE_ID != 4
     if (pin >= 33 && pin <= 37) return false;
 #endif
     return GpioPinPolicy::output(kPinChip, pin);
@@ -144,6 +145,7 @@ bool audioUsesPin(const AudioSettings& audio, int pin) {
     if (!audio.enabled || pin < 0) {
         return false;
     }
+    if(audio.bclkPin==255 && audio.wsPin==254)return pin==26;
     return audio.bclkPin == pin || audio.wsPin == pin || audio.doutPin == pin;
 }
 
@@ -158,6 +160,9 @@ bool sdUsesPin(const SdSettings& sd, int pin) {
     if (!sd.enabled || pin < 0) {
         return false;
     }
+#if APP_HAS_CAMERA
+    if (sd.sdmmc) return pin == 14 || pin == 15 || pin == 2;
+#endif
     return sd.csPin == pin || sd.sckPin == pin || sd.mosiPin == pin || sd.misoPin == pin || (sd.sdmmc && (pin == 15 || pin == 18));
 }
 
@@ -315,7 +320,17 @@ bool usesLegacyOtaRepository(const String& owner, const String& repository) {
 }
 
 String defaultOtaAssetTemplate() {
-#if APP_HAS_ONBOARD_PANEL
+#if APP_SUNTON_PANEL == 1
+    return "sunton-2432s028r-${version}.bin";
+#elif APP_SUNTON_PANEL == 2
+    return "sunton-2432s028c-${version}.bin";
+#elif APP_SUNTON_PANEL == 3
+    return "sunton-3248s035c-${version}.bin";
+#elif defined(APP_SPK_BOARD)
+    return "esp32-s3-spk-n16r8-${version}.bin";
+#elif APP_HAS_CAMERA
+    return "esp32-cam-${version}.bin";
+#elif APP_HAS_ONBOARD_PANEL
     #if defined(BOARD_VIEWE_UEDX32480035E_WB_A)
     return "viewe-uedx32480035e-${version}.bin";
     #else
@@ -622,6 +637,16 @@ SettingsBundle SettingsManager::defaults() const {
     settings.audio.doutPin = DefaultConfig::I2S_DOUT_PIN;
     settings.audio.wsPin = DefaultConfig::I2S_WS_PIN;
     settings.audio.bclkPin = DefaultConfig::I2S_BCLK_PIN;
+#if APP_SUNTON_PANEL
+    settings.audio.enabled = false;
+    settings.audio.bclkPin = 255;
+    settings.audio.wsPin = 254;
+    settings.audio.doutPin = 26;
+#elif defined(APP_SPK_BOARD)
+    return "esp32-s3-spk-n16r8-${version}.bin";
+#elif APP_HAS_CAMERA
+    settings.audio.enabled = false;
+#endif
 
     settings.effects.startupFile = "";
     settings.effects.startupVolumePercent = 100;
@@ -659,15 +684,27 @@ SettingsBundle SettingsManager::defaults() const {
     settings.sd.sckPin = 5;
     settings.sd.mosiPin = 6;
     settings.sd.misoPin = 7;
+#if APP_HAS_CAMERA
+    settings.sd.sdmmc = true;
+    settings.sd.csPin = 13;
+    settings.sd.sckPin = 14;
+    settings.sd.mosiPin = 15;
+    settings.sd.misoPin = 2;
+    settings.oled.enabled = false;
+#endif
 #if APP_HAS_ONBOARD_PANEL
     settings.oled.enabled = true;
     settings.oled.displayType = "panel";
     settings.oled.width = kPanelWidth;
     settings.oled.height = kPanelHeight;
+#if APP_SUNTON_PANEL
+    settings.sd.csPin=5;settings.sd.sckPin=18;settings.sd.mosiPin=23;settings.sd.misoPin=19;
+#else
     settings.sd.csPin = 21;
     settings.sd.sckPin = 14;
     settings.sd.mosiPin = 17;
     settings.sd.misoPin = 16;
+#endif
 #endif
 
     settings.device.deviceName = uniqueDeviceName;
@@ -676,6 +713,11 @@ SettingsBundle SettingsManager::defaults() const {
     settings.device.statusLedGreenPin = DefaultConfig::STATUS_LED_PIN;
     settings.device.statusLedBluePin = DefaultConfig::STATUS_LED_PIN;
     settings.device.statusLedType = DefaultConfig::STATUS_LED_TYPE;
+#if APP_SUNTON_PANEL
+    settings.device.statusLedGreenPin = 16;
+    settings.device.statusLedBluePin = 17;
+    settings.device.statusLedType = "rgb";
+#endif
     settings.device.savedVolumePercent = DefaultConfig::DEFAULT_VOLUME_PERCENT;
     settings.device.audioMuted = DefaultConfig::DEFAULT_AUDIO_MUTED;
     settings.device.button1Action = DefaultConfig::BUTTON1_DEFAULT_ACTION;
@@ -702,6 +744,51 @@ SettingsBundle SettingsManager::defaults() const {
 
 SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     SettingsBundle settings = input;
+#if defined(APP_SPK_BOARD) || APP_SUNTON_PANEL
+    // These are physically fitted chips, not optional external peripherals.
+    settings.audio.enabled=true;settings.sd.enabled=true;settings.sd.sdmmc=false;
+    JsonDocument profiles,bindings;
+    deserializeJson(profiles,settings.ui.peripheralProfileSelections);
+    deserializeJson(bindings,settings.ui.peripheralHelperBindings);
+#if defined(APP_SPK_BOARD)
+    settings.audio.bclkPin=10;settings.audio.wsPin=45;settings.audio.doutPin=9;
+    settings.sd.csPin=2;settings.sd.sckPin=11;settings.sd.mosiPin=3;settings.sd.misoPin=12;
+    settings.device.statusLedPin=21;settings.device.statusLedType="neopixel";
+    profiles["audioProfiles"][0]="spk-ns4168";profiles["audioProfile"]="spk-ns4168";
+    profiles["audioInProfiles"][0]="spk-dual-mic";profiles["audioInProfile"]="spk-dual-mic";
+    bindings["audioIn:0"]["SCK"]=39;bindings["audioIn:0"]["WS"]=40;bindings["audioIn:0"]["SD"]=38;
+#else
+    settings.audio.bclkPin=255;settings.audio.wsPin=254;settings.audio.doutPin=26;
+    settings.sd.csPin=5;settings.sd.sckPin=18;settings.sd.mosiPin=23;settings.sd.misoPin=19;
+    profiles["audioProfiles"][0]="sunton-speaker";profiles["audioProfile"]="sunton-speaker";
+    settings.oled.enabled=true;settings.oled.displayType="panel";
+    settings.oled.width=kPanelWidth;settings.oled.height=kPanelHeight;
+    profiles["displayProfiles"][0]="viewe-onboard-lcd";profiles["displayProfile"]="viewe-onboard-lcd";
+    JsonArray sensors=profiles["sensors"].is<JsonArray>() ? profiles["sensors"].as<JsonArray>() : profiles["sensors"].to<JsonArray>();
+    int ldrIndex=-1;
+    for(size_t i=0;i<sensors.size();++i) if(sensors[i].as<String>()=="ldr") {ldrIndex=i;break;}
+    if(ldrIndex<0){
+      if(sensors.size() && sensors[0].as<String>()=="none") {sensors[0]="ldr";ldrIndex=0;}
+      else {ldrIndex=sensors.size();sensors.add("ldr");}
+    }
+    bindings[String("sensor:")+ldrIndex]["SIG"]=34;
+
+#endif
+    profiles["storage"][0]="microsd-spi";
+    bindings["storage:0"]["CS"]=settings.sd.csPin;bindings["storage:0"]["SCK"]=settings.sd.sckPin;
+    bindings["storage:0"]["MOSI"]=settings.sd.mosiPin;bindings["storage:0"]["MISO"]=settings.sd.misoPin;
+    settings.ui.peripheralProfileSelections="";serializeJson(profiles,settings.ui.peripheralProfileSelections);
+    settings.ui.peripheralHelperBindings="";serializeJson(bindings,settings.ui.peripheralHelperBindings);
+#endif
+
+#if APP_HAS_CAMERA && !defined(APP_SPK_BOARD)
+    settings.sd.enabled=true;settings.sd.sdmmc=true;
+    settings.sd.csPin=13;settings.sd.sckPin=14;settings.sd.mosiPin=15;settings.sd.misoPin=2;
+    JsonDocument cameraProfiles;
+    deserializeJson(cameraProfiles,settings.ui.peripheralProfileSelections);
+    cameraProfiles["storage"][0]="camera-sdmmc";
+    settings.ui.peripheralProfileSelections="";serializeJson(cameraProfiles,settings.ui.peripheralProfileSelections);
+#endif
     settings.wifi.staTxPowerDbm = WifiPowerPolicy::normalize(settings.wifi.staTxPowerDbm);
     settings.wifi.apTxPowerDbm = WifiPowerPolicy::normalize(settings.wifi.apTxPowerDbm);
     settings.wifi.ssid.trim();
@@ -815,6 +902,12 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     const float dividerRatio = 1.0f + static_cast<float>(settings.battery.dividerR1Ohms) / settings.battery.dividerR2Ohms;
     settings.battery.calibrationMultiplier = clampValue<float>(settings.battery.calibrationMultiplier, 0.1f, dividerRatio > 10.0f ? dividerRatio : 10.0f);
     settings.battery.measuredVoltage = clampValue<float>(settings.battery.measuredVoltage, 0.0f, 20.0f);
+#if APP_SUNTON_PANEL
+    const bool onboardDac=settings.audio.bclkPin==255 && settings.audio.wsPin==254 && settings.audio.doutPin==26;
+#else
+    const bool onboardDac=false;
+#endif
+    if(!onboardDac){
     if (!isValidI2sPin(settings.audio.bclkPin)) {
         settings.audio.bclkPin = DefaultConfig::I2S_BCLK_PIN;
     }
@@ -828,6 +921,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
         settings.audio.bclkPin = DefaultConfig::I2S_BCLK_PIN;
         settings.audio.wsPin = DefaultConfig::I2S_WS_PIN;
         settings.audio.doutPin = DefaultConfig::I2S_DOUT_PIN;
+    }
     }
     if (!settings.audio.rememberLastPlayed) {
         settings.audio.lastPlayback.resumeAfterBoot = false;
@@ -843,7 +937,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
         settings.audio.lastPlayback.source = "";
         settings.audio.lastPlayback.resumeAfterBoot = false;
     }
-#if !APP_HAS_ONBOARD_PANEL
+#if !APP_HAS_ONBOARD_PANEL && !APP_HAS_CAMERA
     settings.sd.sdmmc = false;
 #endif
     if (!isValidSdPin(settings.sd.csPin) || !isValidSdPin(settings.sd.sckPin) || !isValidSdPin(settings.sd.mosiPin) ||
@@ -1659,6 +1753,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     }
 
     settings = sanitize(settings);
+    if(!validateI2cConfiguration(settings,error))return false;
     return true;
 }
 

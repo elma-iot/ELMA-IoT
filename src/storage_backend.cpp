@@ -4,7 +4,7 @@
 
 #include <LittleFS.h>
 #include <SD.h>
-#if APP_HAS_ONBOARD_PANEL
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
 #include <SD_MMC.h>
 #endif
 #include <SPI.h>
@@ -27,7 +27,7 @@ unsigned long nextSdMountAttemptAt = 0;
 SdSettings activeSdSettings;
 // Both bus implementations expose the Arduino filesystem API used below.
 template <typename Operation> auto onSd(Operation operation) {
-#if APP_HAS_ONBOARD_PANEL
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
     if (activeSdSettings.sdmmc) return operation(SD_MMC);
 #endif
     return operation(SD);
@@ -50,6 +50,8 @@ SPIClass sdSpi(HSPI); // LCD owns SPI2/FSPI on this board.
 #else
 SPIClass sdSpi(FSPI);
 #endif
+#elif APP_SUNTON_PANEL
+SPIClass sdSpi(VSPI); // LCD uses HSPI; resistive touch uses software SPI.
 #else
 SPIClass sdSpi(HSPI);
 #endif
@@ -67,6 +69,9 @@ bool sdSettingsUsePin(const SdSettings& settings, uint8_t pin) {
     if (!settings.enabled) {
         return false;
     }
+#if APP_HAS_CAMERA
+    if (settings.sdmmc) return pin == 14 || pin == 15 || pin == 2;
+#endif
     return settings.csPin == pin || settings.sckPin == pin || settings.mosiPin == pin || settings.misoPin == pin || (settings.sdmmc && (pin == 15 || pin == 18));
 }
 
@@ -263,10 +268,14 @@ bool mountSdStorage(const SdSettings& settings) {
         return true;
     }
 
-#if APP_HAS_ONBOARD_PANEL
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
     if (settings.sdmmc) {
+#if APP_HAS_CAMERA
+        sdMounted = SD_MMC.begin("/sd", true, false, 20000, 5);
+#else
         SD_MMC.setPins(14, 17, 16, 18, 15, 21);
         sdMounted = SD_MMC.begin("/sd", false, false, 20000, 5);
+#endif
         if (sdMounted) {
             resetSdMountRetryState();
             refreshSdSummaryCache();

@@ -2,6 +2,7 @@
 #include "settings_manager.h"
 #include <RTClib.h>
 #include <Wire.h>
+#include "shared_i2c.h"
 #include <soc/soc_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -9,7 +10,7 @@
 
 namespace {
 SemaphoreHandle_t mutex=nullptr;
-TwoWire rtcWire(SOC_I2C_NUM>1?1:0);
+TwoWire& rtcWire=SharedI2c::wire();
 RTC_DS3231 rtc;
 bool configured=false,wireReady=false,begun=false;
 int sda=-1,scl=-1;
@@ -27,15 +28,20 @@ void configureAlarmClock(const SettingsBundle& settings) {
  int index=-1,count=0;size_t i=0;for(JsonVariantConst profile:profiles["sensors"].as<JsonArrayConst>()){if(profile=="ds3231-rtc"){index=int(i);++count;}++i;}
  int nextSda=-1,nextScl=-1;if(index>=0){const std::string slot="sensor:"+std::to_string(index);nextSda=helperPin(bindings[slot]["SDA"]);nextScl=helperPin(bindings[slot]["SCL"]);}
  bool blocked=count>1;
-#if SOC_I2C_NUM < 2
- blocked=blocked||(settings.oled.enabled&&settings.oled.displayType!="wape");
-#endif
+ const bool oled=settings.oled.enabled&&settings.oled.displayType!="wape"&&settings.oled.displayType!="panel";
+ blocked=blocked||(oled&&(nextSda!=settings.oled.sdaPin||nextScl!=settings.oled.sclPin||settings.oled.i2cAddress==0x68));
+ size_t sensorIndex=0;for(JsonVariantConst profile:profiles["sensors"].as<JsonArrayConst>()){
+  if(profile=="bno055") {auto pins=bindings["sensor:"+std::to_string(sensorIndex)];blocked=blocked||helperPin(pins["SDA"])!=nextSda||helperPin(pins["SCL"])!=nextScl;}
+  ++sensorIndex;
+ }
+
  if(configured==(index>=0)&&sda==nextSda&&scl==nextScl&&wireReady&&!blocked)return;
- if(wireReady)rtcWire.end();wireReady=false;begun=false;rtcEpoch=0;configured=index>=0;sda=nextSda;scl=nextScl;problem.clear();
+ wireReady=false;begun=false;rtcEpoch=0;configured=index>=0;sda=nextSda;scl=nextScl;problem.clear();
  if(!configured)return;
- if(blocked){problem="RTC requires one module and an available I2C controller";return;}
+ if(blocked){problem="RTC requires one module, distinct addresses and the same SDA/SCL pair as other external I2C devices";return;}
  if(sda<0||scl<0||sda==scl||sda>48||scl>48||!isSafeOutputPinForBoard(uint8_t(sda))||!isSafeOutputPinForBoard(uint8_t(scl))){problem="Configure two valid RTC GPIOs";return;}
- wireReady=rtcWire.begin(sda,scl,100000);rtcWire.setTimeOut(20);lastPoll=millis()-1000;
+ SharedI2c::Guard bus;if(!bus){problem="I2C bus busy";return;}
+ wireReady=SharedI2c::begin(sda,scl);rtcWire.setTimeOut(20);lastPoll=millis()-1000;
  if(!wireReady)problem="RTC I2C initialization failed";
 }
 void pollAlarmClock(uint32_t now) {
@@ -43,6 +49,7 @@ void pollAlarmClock(uint32_t now) {
  now=millis(); // Set clock may have run since the main loop captured its timestamp.
  if(manualEpoch)manualElapsed+=uint32_t(now-lastManual);lastManual=now;
  if(!wireReady||uint32_t(now-lastPoll)<1000)return;lastPoll=now;rtcEpoch=0;
+ SharedI2c::Guard bus(0);if(!bus)return;
  if(!probe()){problem="DS3231 not responding";return;}
  if(!begun)begun=rtc.begin(&rtcWire);
  if(!begun||rtc.lostPower()){problem="RTC time invalid; use Set clock";return;}
@@ -61,6 +68,7 @@ bool setAlarmClock(const char* source,int64_t epoch,std::string& error) {
  if(!mutex||xSemaphoreTake(mutex,pdMS_TO_TICKS(20))!=pdTRUE){error="Clock busy";return false;}Unlock unlock;
  if(std::string(source)=="manual"){manualEpoch=epoch;manualElapsed=0;lastManual=millis();return true;}
  if(std::string(source)!="rtc"){error="UTC clock is managed by NTP; select Manual or DS3231 RTC";return false;}
+ SharedI2c::Guard bus;if(!bus){error="I2C bus busy";return false;}
  if(!wireReady||!probe()){error="Configure and connect a DS3231 RTC first";return false;}
  if(!begun)begun=rtc.begin(&rtcWire);
  if(!begun){error="DS3231 initialization failed";return false;}

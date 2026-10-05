@@ -25,9 +25,9 @@ export function chipPins(chip, output = false, board = "") {
   if (chip === "esp32c2") pins = [...Array.from({length:11}, (_,i)=>i),18,19,20];
   if (chip === "esp32c6") pins = [...Array.from({length:24}, (_,i)=>i)];
   if (chip === "esp8266" || chip === "esp8285") pins = [0,1,2,3,4,5,12,13,14,15,16];
-  return pins.filter(pin => !(output && ((chip === "esp32" && pin >= 34) || (["esp32s3","esp32s2"].includes(chip) && pin === 46))))
+  return pins.filter(pin => !(output && ((chip === "esp32" && pin >= 34) || (chip === "esp32s2" && pin === 46))))
     .filter(pin => !(board === "esp32-wrover" && [16,17].includes(pin)))
-    .filter(pin => !(["viewe-uedx24320028e-wb-a","viewe-uedx32480035e-wb-a","esp32-s3-psram","esp32-spk-n16r8","esp32-s3-devkit-c1","esp32-s3-cam-module"].includes(board) && [33,34,35,36,37].includes(pin)));
+    .filter(pin => !(["viewe-uedx24320028e-wb-a","viewe-uedx32480035e-wb-a","esp32-s3-psram","esp32-s3-devkit-c1","esp32-s3-cam-module"].includes(board) && [33,34,35,36,37].includes(pin)));
 }
 export function pinChoices(pins, selected, blocked = new Set()) {
   const value = String(selected ?? "");

@@ -1,9 +1,12 @@
+#include "camera_service.h"
 #include "plot_telemetry.h"
 #include "plot_storage.h"
 #include "storage_download.h"
 #include "storage_memory.h"
 #include <sys/time.h>
 #include "web_server.h"
+#include "bno055_service.h"
+#include "microphone_service.h"
 #include "device_log.h"
 
 #ifdef APP_DISABLE_WEB_UI
@@ -1085,6 +1088,22 @@ void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocume
 }
 
 void WebServerManager::registerApiRoutes() {
+    server_.on("/api/bno055",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        JsonDocument doc;Bno055::snapshot(doc.to<JsonObject>());sendJson(request,doc);
+    });
+    auto* bnoHandler=new AsyncCallbackJsonWebHandler("/api/bno055",[this](AsyncWebServerRequest* request,JsonVariant& json){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        String error;JsonDocument result;bool ok=Bno055::command(json,error);result["queued"]=ok;if(!ok)result["error"]=error;
+        String data;serializeJson(result,data);request->send(ok?202:400,"application/json",data);
+    });bnoHandler->setMaxContentLength(512);bnoHandler->setMethod(HTTP_POST);server_.addHandler(bnoHandler);
+#if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO)
+    registerMicrophoneRoutes(server_,[this](AsyncWebServerRequest* request){return !redirectCaptivePortalIfNeeded(request)&&ensureAuthorized(request);});
+#endif
+#if APP_HAS_CAMERA
+    beginCameraService();
+    registerCameraRoutes(server_,[this](AsyncWebServerRequest* request){return !redirectCaptivePortalIfNeeded(request)&&ensureAuthorized(request);});
+#endif
     server_.on("/api/logs", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;
         JsonDocument doc;
@@ -1120,6 +1139,12 @@ void WebServerManager::registerApiRoutes() {
 #endif
         JsonObject firmware = doc["firmware"].to<JsonObject>();
         firmware["version"] = APP_VERSION;
+#if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO)
+        firmware["microphones"] = true;
+#endif
+#if APP_HAS_CAMERA
+        firmware["camera"] = true;
+#endif
 #if APP_HAS_ONBOARD_PANEL
         firmware["touchscreen"] = true;
 #endif

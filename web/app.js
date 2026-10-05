@@ -1,3 +1,8 @@
+import {createBno055Tab} from "./modules/bno055-tab.js";
+import {I2C_PROFILES,i2cAddresses,i2cCompatible,i2cIssues} from "./modules/i2c-policy.js";
+import {ONBOARD_BOARDS} from "./modules/onboard-boards.js";
+import {createCameraTab} from "./modules/camera-tab.js";
+import {createMicrophonesTab} from "./modules/microphones-tab.js";
 import {arrayOptions,arraySvg,arrayDefaults} from './modules/led-array.js';
 import {animateArray} from './modules/led-effects.js';
 const liveLedArrays = new Map();
@@ -236,6 +241,8 @@ const MAX_PERIPHERAL_POWERS = 3;
 const MAX_PERIPHERAL_CONTROLS = 16;
 const MAX_PERIPHERAL_EXPANSIONS = 4;
 const PERIPHERAL_AUDIO_PROFILE_OPTIONS = [
+  {value:"spk-ns4168",label:"Onboard NS4168 I2S speaker"},
+{"value": "sunton-speaker", "label": "Onboard speaker amplifier \u00b7 DAC GPIO26"},
   { value: "none", label: "None" },
   { value: "max98357a-i2s-amp", label: "MAX98357A I2S Amp" },
   { value: "pcm5102-i2s-dac", label: "PCM5102 I2S DAC" },
@@ -255,6 +262,7 @@ const PERIPHERAL_AUDIO_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_AUDIO_IN_PROFILE_OPTIONS = [
+  {value:"spk-dual-mic",label:"Onboard dual MEMS microphones"},
   { value: "none", label: "None" },
   { value: "i2s-microphone-generic", label: "I2S Microphone Generic" },
   { value: "inmp441-i2s-mic", label: "INMP441 I2S Mic" },
@@ -273,7 +281,7 @@ const PERIPHERAL_AUDIO_IN_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_DISPLAY_PROFILE_OPTIONS = [
-  { value: "viewe-onboard-lcd", label: "Onboard LCD + CHSC6540" },
+  { value: "viewe-onboard-lcd", label: "Onboard LCD + touch" },
   { value: "none", label: "None" },
   { value: "i2c-oled", label: "I2C OLED" },
   { value: "spi-tft", label: "SPI TFT" },
@@ -281,9 +289,10 @@ const PERIPHERAL_DISPLAY_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_SENSOR_PROFILE_OPTIONS = [
+  { value: "ldr", label: "Onboard light sensor" },
   { value: "none", label: "None" },
   { value: "ds3231-rtc", label: "DS3231 RTC" },
-  { value: "bno055", label: "BNO055" },
+  { value: "bno055", label: "DFRobot BNO055" },
   { value: "bno085-bno080", label: "BNO085 / BNO080" },
   { value: "mpu6050", label: "MPU6050" },
   { value: "ds18b20", label: "DS18B20" },
@@ -314,6 +323,8 @@ const PERIPHERAL_INPUT_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_STORAGE_PROFILE_OPTIONS = [
+  {value:"viewe-sdmmc",label:"Onboard microSD Р вЂ™Р’В· 4-bit SDMMC"},
+{"value": "camera-sdmmc", "label": "Onboard microSD \u00b7 1-bit SDMMC"},
   { value: "none", label: "None" },
   { value: "microsd-spi", label: "MicroSD SPI" },
   { value: "microsd-sdmmc", label: "MicroSD SDMMC" },
@@ -430,7 +441,7 @@ const EFFECT_SELECT_CONFIG = [
 ];
 const STORAGE_PREVIEW_EMBEDDED_SCAN_MAX_BYTES = 256 * 1024;
 const GPIO_BOARD_PRESENTATION = {
-  "viewe-uedx24320028e-wb-a": { rotation: "none", rank: "Touch display board", recommendation: "VIEWE 240×320 LCD with CHSC6540 touch.", tone: "featured" },
+  "viewe-uedx24320028e-wb-a": { rotation: "none", rank: "Touch display board", recommendation: "VIEWE 240Р вЂњРІР‚вЂќ320 LCD with CHSC6540 touch.", tone: "featured" },
   "esp32-s3-super-mini": {
     rotation: "rotate(-90deg)",
     rank: "Current board",
@@ -535,6 +546,11 @@ const GPIO_BOARD_PRESENTATION = {
   "viewe-uedx32480035e-wb-a": {"rotation":"none","rank":"Touch display board","recommendation":"VIEWE 3.5-inch 320x480 LCD with CHSC6540 touch.","tone":"featured"},
 };
 const GPIO_BOARD_ASSETS = {
+"esp32-2432s028r":{"src": "/esp32-2432s028r.svg", "alt": "ESP32-2432S028R \u00b7 2.8-inch resistive"},
+"esp32-2432s028c":{"src": "/esp32-2432s028c.svg", "alt": "ESP32-2432S028C \u00b7 2.8-inch capacitive"},
+"esp32-3248s035c":{"src": "/esp32-3248s035c.svg", "alt": "ESP32-48S035 / ESP32-3248S035C \u00b7 3.5-inch capacitive"},
+"esp32-cam":{"src": "/esp32-cam.svg", "alt": "ESP32-CAM \u00b7 AI-Thinker / OV2640"},
+
   "viewe-uedx24320028e-wb-a": { src: "/viewe-uedx24320028e-wb-a.svg", alt: "VIEWE UEDX24320028E-WB-A V1.1" },
   "esp32-s3-super-mini": {
     src: "/esp32-s3-supermini-breadboard.svg",
@@ -550,7 +566,7 @@ const GPIO_BOARD_ASSETS = {
   },
   "esp32-spk-n16r8": {
     src: "/esp32-spk-n16r8-breadboard.svg",
-    alt: "ESP32-SPK-N16R8 board",
+    alt: "ESP32-S3-SPK N16R8 board",
   },
   "esp32-s3-devkit-c1": {
     src: "/esp32-s3-devkit-c1-n8r8-v1-breadboard.svg",
@@ -598,7 +614,7 @@ const GPIO_BOARD_ASSETS = {
   "esp8266-esp12f": { src: "/esp8266-esp12f-breadboard.svg", alt: "ESP8266 ESP-12F development board" },
   "esp8285-generic": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8285 family module" },
   "custom-board": { src: "/esp32-38pinwide-breadboard.svg", alt: "Generic custom ESP board" },
-  "viewe-uedx32480035e-wb-a": {"src":"/viewe-uedx32480035e-wb-a.svg","alt":"VIEWE 3.5-inch 320x480 · UEDX32480035E-WB-A"},
+  "viewe-uedx32480035e-wb-a": {"src":"/viewe-uedx32480035e-wb-a.svg","alt":"VIEWE 3.5-inch 320x480 Р вЂ™Р’В· UEDX32480035E-WB-A"},
 };
 const OLED_PREVIEW_SCROLL_INTERVAL_MS = 300;
 const DEFAULT_ESP32S3_AUDIO_PINS = {
@@ -618,6 +634,11 @@ const DEFAULT_SD_GPIO_PINS = {
 };
 const DOCUMENTED_BUZZER_PIN = 7;
 const GPIO_BOARD_LAYOUTS = {
+"esp32-2432s028r":{"left": [{"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 22, "label": "GPIO22"}, {"pin": 21, "label": "GPIO21"}, {"pin": 27, "label": "GPIO27"}, {"pin": null, "label": "3V3"}], "right": [{"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}]},
+"esp32-2432s028c":{"left": [{"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 22, "label": "GPIO22"}, {"pin": 21, "label": "GPIO21"}, {"pin": 27, "label": "GPIO27"}, {"pin": null, "label": "3V3"}], "right": [{"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}]},
+"esp32-3248s035c":{"left": [{"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 22, "label": "GPIO22"}, {"pin": 21, "label": "GPIO21"}, {"pin": null, "label": "3V3"}], "right": [{"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}]},
+"esp32-cam":{"left": [{"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}, {"pin": 12, "label": "GPIO12"}, {"pin": 13, "label": "GPIO13"}, {"pin": 15, "label": "GPIO15"}, {"pin": 14, "label": "GPIO14"}, {"pin": 2, "label": "GPIO2"}, {"pin": 4, "label": "GPIO4"}], "right": [{"pin": null, "label": "GND"}, {"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "VCC"}, {"pin": null, "label": "GND"}, {"pin": 0, "label": "GPIO0"}, {"pin": 16, "label": "GPIO16"}, {"pin": null, "label": "3V3"}]},
+
   "viewe-uedx24320028e-wb-a": {
     left: [...[5,6,7,8,9,10,11,12,2,4,14,15,16,17,18,21,43,44].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"},{pin:null,label:"GND"}],
     right: [...[0,1,3,13,19,20,38,39,40,41,42,45,47,48].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"5V"},{pin:null,label:"GND"}],
@@ -670,35 +691,7 @@ const GPIO_BOARD_LAYOUTS = {
       { pin: null, label: "5V IN" },
     ],
   },
-  "esp32-spk-n16r8": {
-    left: [
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "3.3V" },
-      { pin: null, label: "GND" },
-      ...[20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    ],
-    right: [
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "3.3V" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "NC" },
-      { pin: null, label: "NC" },
-      { pin: 21, label: "GPIO21" },
-      { pin: 38, label: "GPIO38" },
-      { pin: 39, label: "GPIO39" },
-      { pin: 40, label: "GPIO40" },
-      { pin: 43, label: "GPIO43" },
-      { pin: 44, label: "GPIO44" },
-      { pin: 46, label: "GPIO46" },
-      { pin: 0, label: "GPIO0" },
-      { pin: 2, label: "GPIO2" },
-      { pin: null, label: "EN" },
-      { pin: 1, label: "GPIO1" },
-      { pin: 3, label: "GPIO3" },
-    ],
-  },
+  "esp32-spk-n16r8": {"left": [{"pin": 6, "label": "GPIO6"}, {"pin": 7, "label": "GPIO7"}, {"pin": 8, "label": "GPIO8"}, {"pin": 9, "label": "GPIO9"}, {"pin": 10, "label": "GPIO10"}, {"pin": 11, "label": "GPIO11"}, {"pin": 12, "label": "GPIO12"}, {"pin": 13, "label": "GPIO13"}, {"pin": 14, "label": "GPIO14"}, {"pin": 15, "label": "GPIO15"}, {"pin": 16, "label": "GPIO16"}, {"pin": 17, "label": "GPIO17"}, {"pin": 18, "label": "GPIO18"}, {"pin": 19, "label": "GPIO19"}, {"pin": 20, "label": "GPIO20"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "3V3"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "5V"}], "right": [{"pin": 3, "label": "GPIO3"}, {"pin": 1, "label": "GPIO1"}, {"pin": null, "label": "EN"}, {"pin": 2, "label": "GPIO2"}, {"pin": 0, "label": "GPIO0"}, {"pin": 46, "label": "GPIO46"}, {"pin": 45, "label": "GPIO45"}, {"pin": 44, "label": "GPIO44"}, {"pin": 43, "label": "GPIO43"}, {"pin": 40, "label": "GPIO40"}, {"pin": 39, "label": "GPIO39"}, {"pin": 38, "label": "GPIO38"}, {"pin": 21, "label": "GPIO21"}, {"pin": null, "label": "NC"}, {"pin": null, "label": "NC"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "3V3"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "5V"}]},
   "esp32-s3-devkit-c1": {
     left: [
       { pin: null, label: "3V3" },
@@ -831,7 +824,7 @@ const GPIO_BOARD_LAYOUTS = {
     right: [39,40,37,38,35,36,33,34,18,21,16,17].map(pin=>({pin,label:`GPIO${pin}`})).concat([{pin:null,label:"GND"},{pin:null,label:"GND"},{pin:null,label:"VBUS"},{pin:15,label:"GPIO15"}]),
   },
   "esp32-c6": {
-    // The source artwork has USB at the top and is displayed rotated 180°.
+    // The source artwork has USB at the top and is displayed rotated 180Р вЂ™Р’В°.
     left: [...[8,9,14,15,18,19,20].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3.3V"},{pin:null,label:"GND"},{pin:null,label:"5V"}],
     right: [7,6,5,4,3,2,1,0,{pin:17,label:"RX / GPIO17"},{pin:16,label:"TX / GPIO16"}].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
   },
@@ -840,7 +833,7 @@ const GPIO_BOARD_LAYOUTS = {
     right: [9,8,7,6,5,4,20,19,18,17,16,15,14,13,12,11].map(pin=>({pin,label:pin===20?"TX / GPIO20":pin===19?"RX / GPIO19":`GPIO${pin}`})),
   },
   "esp32-c3": {
-    // The source artwork has USB at the top and is displayed rotated 180°.
+    // The source artwork has USB at the top and is displayed rotated 180Р вЂ™Р’В°.
     left: [0,1,2,3,4].map(pin=>({pin,label:`GPIO${pin}`})).concat([{pin:null,label:"3.3V"},{pin:null,label:"GND"},{pin:null,label:"5V"}]),
     right: [21,20,10,9,8,7,6,5].map(pin=>({pin,label:`GPIO${pin}`})),
   },
@@ -856,6 +849,11 @@ const GPIO_BOARD_LAYOUTS = {
   "viewe-uedx32480035e-wb-a": {"left":[{"pin":5,"label":"GPIO5"},{"pin":6,"label":"GPIO6"},{"pin":7,"label":"GPIO7"},{"pin":8,"label":"GPIO8"},{"pin":9,"label":"GPIO9"},{"pin":10,"label":"GPIO10"},{"pin":11,"label":"GPIO11"},{"pin":12,"label":"GPIO12"},{"pin":2,"label":"GPIO2"},{"pin":4,"label":"GPIO4"},{"pin":14,"label":"GPIO14"},{"pin":15,"label":"GPIO15"},{"pin":16,"label":"GPIO16"},{"pin":17,"label":"GPIO17"},{"pin":18,"label":"GPIO18"},{"pin":21,"label":"GPIO21"},{"pin":43,"label":"GPIO43"},{"pin":44,"label":"GPIO44"},{"pin":null,"label":"3V3"},{"pin":null,"label":"GND"}],"right":[{"pin":0,"label":"GPIO0"},{"pin":1,"label":"GPIO1"},{"pin":3,"label":"GPIO3"},{"pin":13,"label":"GPIO13"},{"pin":19,"label":"GPIO19"},{"pin":20,"label":"GPIO20"},{"pin":38,"label":"GPIO38"},{"pin":39,"label":"GPIO39"},{"pin":40,"label":"GPIO40"},{"pin":41,"label":"GPIO41"},{"pin":42,"label":"GPIO42"},{"pin":45,"label":"GPIO45"},{"pin":47,"label":"GPIO47"},{"pin":48,"label":"GPIO48"},{"pin":null,"label":"5V"},{"pin":null,"label":"GND"}]},
 };
 const GPIO_BOARD_EXTRA_LAYOUTS = {
+"esp32-2432s028r":{"left": [], "right": []},
+"esp32-2432s028c":{"left": [], "right": []},
+"esp32-3248s035c":{"left": [], "right": []},
+"esp32-cam":{"left": [], "right": []},
+
   "wemos-d1-mini-esp32": {
     left: [{pin:null,label:"GND"},{pin:null,label:"NC"},39,35,33,34,14,{pin:null,label:"NC"},9,11].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
     right: [{pin:null,label:"GND"},27,25,32,12,4,0,2,8,6].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
@@ -874,6 +872,11 @@ const GPIO_BOARD_EXTRA_LAYOUTS = {
   },
 };
 const GPIO_BOARD_RESERVED_PINS = {
+"esp32-2432s028r":{"2": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "12": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "13": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "14": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "15": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "21": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "25": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "32": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "33": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "36": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "39": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "4": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "16": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "17": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "26": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "34": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "1": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}},
+"esp32-2432s028c":{"2": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "12": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "13": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "14": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "15": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "21": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "25": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "32": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "33": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "4": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "16": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "17": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "26": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "34": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "1": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}},
+"esp32-3248s035c":{"2": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "12": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "13": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "14": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "15": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "27": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "21": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "25": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "32": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "33": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "4": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "16": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "17": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "26": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "34": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "1": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}},
+"esp32-cam":{"0": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "5": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "18": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "19": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "21": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "22": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "23": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "25": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "26": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "27": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "32": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "34": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "35": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "36": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "39": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "16": {"kind": "psram", "label": "PSRAM", "warning": "Connected to camera PSRAM."}, "17": {"kind": "psram", "label": "PSRAM", "warning": "Connected to camera PSRAM."}, "1": {"kind": "serial", "label": "UART", "warning": "Serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Serial flashing/logging."}, "4": {"kind": "onboard", "label": "Flash LED", "warning": "High-brightness camera illuminator."}},
+
   "viewe-uedx24320028e-wb-a": Object.fromEntries([1,3,13,38,39,40,41,42,45,47,48].map(pin=>[pin,{label:"Onboard hardware",warning:"Reserved for the VIEWE LCD, touch or buzzer.",kind:"onboard"}])),
   "wemos-d1-mini-esp32": {
     0:{label:"BOOT",warning:"GPIO0 is a boot strap pin.",kind:"strap"},
@@ -953,20 +956,7 @@ const GPIO_BOARD_RESERVED_PINS = {
     46: { label: "LOG", warning: "Reserved strap pin: GPIO46 is used for LOG/strap behavior.", kind: "strap" },
     48: { label: "WS2812", warning: "Reserved onboard LED pin: GPIO48 drives the built-in WS2812 status LED.", kind: "onboard" },
   },
-  "esp32-spk-n16r8": {
-    0: { label: "BOOT", warning: "Reserved strap pin: GPIO0 is tied to BOOT mode behavior on this speaker board.", kind: "strap" },
-    1: { label: "U0TXD", warning: "Board-tied serial pin: GPIO1 is routed to the primary UART on this board.", kind: "serial" },
-    2: { label: "STRAP", warning: "Reserved strap pin: GPIO2 participates in boot strapping on this speaker board.", kind: "strap" },
-    3: { label: "U0RXD", warning: "Board-tied serial pin: GPIO3 is routed to the primary UART on this board.", kind: "serial" },
-    19: { label: "USB D+", warning: "Board-tied USB pin: GPIO19 is used for USB D+ on this ESP32-SPK-N16R8 board.", kind: "usb" },
-    20: { label: "USB D-", warning: "Board-tied USB pin: GPIO20 is used for USB D- on this ESP32-SPK-N16R8 board.", kind: "usb" },
-    38: { label: "CAM/SD", warning: "Reserved board pin: GPIO38 is committed to onboard camera or storage routing on this board.", kind: "camera" },
-    39: { label: "CAM/SD", warning: "Reserved board pin: GPIO39 is committed to onboard camera or storage routing on this board.", kind: "camera" },
-    40: { label: "CAM/SD", warning: "Reserved board pin: GPIO40 is committed to onboard camera or storage routing on this board.", kind: "camera" },
-    43: { label: "U0TXD / LED TX", warning: "Board-tied serial pin: GPIO43 is routed to U0TXD and board serial activity.", kind: "serial" },
-    44: { label: "U0RXD / LED RX", warning: "Board-tied serial pin: GPIO44 is routed to U0RXD and board serial activity.", kind: "serial" },
-    46: { label: "LOG", warning: "Reserved strap pin: GPIO46 is tied to strap/log behavior on this board.", kind: "strap" },
-  },
+  "esp32-spk-n16r8": {"0": {"label": "Boot strapping", "warning": "GPIO0: Boot strapping; shared onboard wiring.", "kind": "strap"}, "3": {"label": "Boot strapping", "warning": "GPIO3: Boot strapping; shared onboard wiring.", "kind": "strap"}, "45": {"label": "Boot strapping", "warning": "GPIO45: Boot strapping; shared onboard wiring.", "kind": "strap"}, "46": {"label": "Boot strapping", "warning": "GPIO46 drives NS4168 amplifier CTRL after boot; boot strapping still applies.", "kind": "strap"}, "19": {"label": "Native USB D-/D+", "warning": "GPIO19: Native USB D-/D+; shared onboard wiring.", "kind": "usb"}, "20": {"label": "Native USB D-/D+", "warning": "GPIO20: Native USB D-/D+; shared onboard wiring.", "kind": "usb"}, "43": {"label": "CH340 UART0 TX/RX", "warning": "GPIO43: CH340 UART0 TX/RX; shared onboard wiring.", "kind": "serial"}, "44": {"label": "CH340 UART0 TX/RX", "warning": "GPIO44: CH340 UART0 TX/RX; shared onboard wiring.", "kind": "serial"}, "21": {"label": "SK6812 status LED", "warning": "GPIO21: SK6812 status LED; shared onboard wiring.", "kind": "onboard"}, "6": {"label": "Onboard camera", "warning": "GPIO6: Onboard camera; shared onboard wiring.", "kind": "camera"}, "7": {"label": "Onboard camera", "warning": "GPIO7: Onboard camera; shared onboard wiring.", "kind": "camera"}, "8": {"label": "Onboard camera", "warning": "GPIO8: Onboard camera; shared onboard wiring.", "kind": "camera"}, "9": {"label": "NS4168 speaker I2S", "warning": "GPIO9: NS4168 speaker I2S; shared onboard wiring.", "kind": "onboard"}, "10": {"label": "NS4168 speaker I2S", "warning": "GPIO10: NS4168 speaker I2S; shared onboard wiring.", "kind": "onboard"}, "38": {"label": "Dual microphone I2S", "warning": "GPIO38: Dual microphone I2S; shared onboard wiring.", "kind": "onboard"}, "39": {"label": "Dual microphone I2S", "warning": "GPIO39: Dual microphone I2S; shared onboard wiring.", "kind": "onboard"}, "40": {"label": "Dual microphone I2S", "warning": "GPIO40: Dual microphone I2S; shared onboard wiring.", "kind": "onboard"}, "15": {"label": "Onboard buttons", "warning": "GPIO15: Onboard buttons; shared onboard wiring.", "kind": "onboard"}, "16": {"label": "Onboard buttons", "warning": "GPIO16: Onboard buttons; shared onboard wiring.", "kind": "onboard"}},
   "viewe-uedx32480035e-wb-a": {"1":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"3":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"13":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"38":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"39":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"40":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"41":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"42":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"45":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"47":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"48":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"}},
 };
 const GPIO_ROLE_OPTIONS = [
@@ -2071,6 +2061,8 @@ function hasConfiguredProfile(profiles) {
 }
 
 function hasConfiguredAudioOutput() {
+  const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
+  if (ONBOARD_BOARDS[board]?.builtinProfiles?.audio) return true;
   return hasConfiguredProfile(normalizedPeripheralAudioProfiles());
 }
 
@@ -2079,6 +2071,8 @@ function hasConfiguredDisplayPeripheral() {
 }
 
 function hasConfiguredExternalStoragePeripheral() {
+  const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
+  if (ONBOARD_BOARDS[board]?.builtinProfiles?.storage) return true;
   return hasConfiguredProfile(normalizedPeripheralStorageProfiles());
 }
 
@@ -2252,6 +2246,9 @@ function normalizedPeripheralExpansionProfiles() {
 }
 
 function appendPeripheralOptions(select, options, selectedValue) {
+  const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
+  options=options.filter(o=>!['spk-ns4168','spk-dual-mic'].includes(o.value)||ONBOARD_BOARDS[board]?.audioProfile==='spk-ns4168').filter(o=>o.value!=='sunton-speaker'||ONBOARD_BOARDS[board]?.audioProfile==='sunton-speaker').filter(o=>o.value!=='camera-sdmmc'||!!(ONBOARD_BOARDS[board]?.cameraPins&&ONBOARD_BOARDS[board]?.sdmmcPins)).filter(o=>o.value!=='viewe-sdmmc'||board.startsWith('viewe-')).filter(o=>o.value!=='viewe-onboard-lcd'||!!ONBOARD_BOARDS[board]?.displayProfile);
+  options=options.filter(o=>o.value!=="ldr"||ONBOARD_BOARDS[board]?.builtinProfiles?.sensor==="ldr");
   for (const optionConfig of options) {
     const option = document.createElement("option");
     option.value = optionConfig.value;
@@ -2410,15 +2407,16 @@ function peripheralHelperBindingValue(groupKey, index, signalLabel) {
 }
 
 function helperBindingDisplayLabel(groupKey, signalLabel) {
+  if(signalLabel==="I2C_ADDRESS")return "I²C address";
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
   if (groupKey === "sensor" && normalizedSignal === "SIGNAL") {
     return "ADC Output";
   }
   if (groupKey === "communication" && normalizedSignal === "TX") {
-    return "TX → RX (ESP)";
+    return "TX Р Р†РІР‚В РІР‚в„ў RX (ESP)";
   }
   if (groupKey === "communication" && normalizedSignal === "RX") {
-    return "RX ← TX (ESP)";
+    return "RX Р Р†РІР‚В РЎвЂ™ TX (ESP)";
   }
   if (groupKey === "input" && normalizedSignal === "SIG") {
     return "GPIO";
@@ -2485,6 +2483,9 @@ function powerHelperDefaultValue(profileValue, signalLabel, inputVoltage = "") {
 
 function helperBindingDefaultValue(groupKey, index, signalLabel) {
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
+  const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
+  const fixed=board?.bindings?.[groupKey+':'+peripheralHelperProfileValue(groupKey,index,state.settings||{})]?.[normalizedSignal];
+  if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return String(fixed);
   if (groupKey === "power") {
     const profileValue = peripheralHelperProfileValue(groupKey, index, state.settings || {});
     const inputVoltage = peripheralHelperBindingValue(groupKey, index, "INPUT_VOLTAGE") || powerHelperDefaultValue(profileValue, "INPUT_VOLTAGE");
@@ -2736,12 +2737,29 @@ function peripheralGpioAssignments() {
   if(charge>0) assignments.push({key:"battery.chargingSensePin",pin:charge,label:"Charging sense"});
   return assignments;
 }
+function i2cRole(key) {
+  if(key==='oled.sdaPin'||key==='oled.sclPin')return {group:'display',index:0,signal:key==='oled.sdaPin'?'SDA':'SCL',profile:peripheralHelperProfileValue('display',0,state.settings||{})};
+  const parts=key.split('.');
+  if(parts[0]!=='ui'||!['sda','scl'].includes(parts[3]))return null;
+  return {group:parts[1],index:Number(parts[2]),signal:parts[3].toUpperCase(),profile:peripheralHelperProfileValue(parts[1],Number(parts[2]),state.settings||{})};
+}
+function i2cRoleAddresses(item) {
+  if(!item)return null;
+  const value=item.group==='display'&&item.index===0&&item.profile==='i2c-oled'
+    ? (elements.oledI2cAddress?.value||state.settings?.oled?.i2cAddress||60)
+    : state.peripheralHelperBindings?.[`${item.group}:${item.index}`]?.I2C_ADDRESS;
+  return i2cAddresses(item.group+':'+item.profile,value);
+}
+function shareI2cRoles(a,b) {
+  const first=i2cRole(a),second=i2cRole(b);
+  return first&&second&&first.signal===second.signal&&i2cCompatible(i2cRoleAddresses(first),i2cRoleAddresses(second),first.group+':'+first.profile,second.group+':'+second.profile);
+}
 function peripheralGpioOptions(group, profile, signal, ownKey, selected="") {
   if(group === "input" && ["SIG","TOUCH","COM"].includes(signal)) ownKey=`ui.input.${ownKey.split(".")[2]}.pin`;
   const layout=GPIO_BOARD_LAYOUTS[activeGpioBoardProfile()] || {};
   const exposedPins=new Set([...(layout.left || []),...(layout.right || [])].filter(entry=>entry.pin!==null && entry.pin!==undefined).map(entry=>Number(entry.pin)));
   const pins=safePeripheralPins({chip:activeChipFamily(),inputPins:validBoardPins(false),outputPins:validBoardPins(true),exposedPins,blocked:motorUnsafePins(),touchPins:touchCapablePins(),requirement:peripheralPinRequirement(group,profile,signal),override:Boolean(elements.gpioSafetyOverride?.checked) && !assigningPeripheralDefaults});
-  return occupiedPinChoices(pins,peripheralGpioAssignments(),ownKey,selected);
+  return occupiedPinChoices(pins,peripheralGpioAssignments(),ownKey,selected,a=>shareI2cRoles(ownKey,a.key));
 }
 
 // Update choices without rebuilding rows or changing saved GPIO assignments.
@@ -2760,7 +2778,7 @@ function refreshPeripheralGpioChoices(select) {
     choices=peripheralGpioOptions(group,profile,signal,roleKey,Number(selected)<0?'':selected);
   }else{
     const group=select.dataset.peripheralHelperGroup,index=Number(select.dataset.peripheralHelperIndex||0),signal=select.dataset.peripheralHelperSignal;
-    if(!group||['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE'].includes(signal))return;
+    if(!group||['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE','I2C_ADDRESS'].includes(signal))return;
     selected=peripheralHelperBindingValue(group,index,signal);
     choices=helperBindingSignalOptionsFor(group,index,signal);
   }
@@ -2785,6 +2803,14 @@ document.addEventListener('change',event=>{
 function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
   const profileValue = peripheralHelperProfileValue(groupKey, index, state.settings || {});
+  if(normalizedSignal==='I2C_ADDRESS') {
+    const options=I2C_PROFILES[groupKey+':'+profileValue]||[];
+    return [{value:'',label:'Auto / hardware address not specified'},...(options.length?options:Array.from({length:112},(_,i)=>i+8)).filter(a=>a<120&&!(profileValue==='pca9685'&&a===112)).map(a=>({value:String(a),label:'0x'+a.toString(16).toUpperCase().padStart(2,'0')}))];
+  }
+
+  const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
+  const fixed=board?.bindings?.[groupKey+':'+profileValue]?.[normalizedSignal];
+  if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return [{value:String(fixed),label:`GPIO${fixed} Р’В· onboard`}];
 
   if (groupKey === "power") {
     if (normalizedSignal === "INPUT_VOLTAGE") {
@@ -3167,7 +3193,7 @@ function appendHelperPeripheralBindingControl(container, groupKey, index, signal
   }
   select.disabled = noPinsAvailable;
   if (selectedValue && ![...select.options].some(option => option.value === selectedValue)) {
-    const invalid = new Option(`GPIO${selectedValue} — invalid/reserved for this board (reassign)`, selectedValue);
+    const invalid = new Option(`GPIO${selectedValue} Р Р†Р вЂљРІР‚Сњ invalid/reserved for this board (reassign)`, selectedValue);
     invalid.disabled = true;
     select.prepend(invalid);
   }
@@ -3207,18 +3233,21 @@ function assignPeripheralDefaults(groupKey, profileValue, index, realDefinitions
       if((previous===undefined||state.settingsLoading)&&current!==''&&Number(current)>=0){occupied.add(Number(current));continue;}
       const output=definition.key!=='sd.misoPin';
       const signal=definition.key === "battery.adcPin" ? "SIGNAL" : definition.key.split(".").pop().replace(/Pin$/, "").toUpperCase();
-      const value=selectPin(peripheralGpioOptions(groupKey,profileValue,signal,definition.key).map(option=>option.value),current);
+      const options=peripheralGpioOptions(groupKey,profileValue,signal,definition.key).filter(o=>!o.disabled);
+      const shared=peripheralGpioAssignments().find(a=>a.pin>=0&&shareI2cRoles(definition.key,a.key)&&options.some(o=>Number(o.value)===a.pin));
+      const value=shared?String(shared.pin):selectPin(options.map(option=>option.value),current);
       if(value===''){
         if(![...field.options].some(option=>option.value==='-1'))field.prepend(new Option('No supported free GPIOs','-1'));
         field.value='-1';
       }else{field.value=value;occupied.add(Number(value));}
     }
     for(const signal of helperSignals){
-      if(['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE'].includes(signal))continue;
+      if(['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE','I2C_ADDRESS'].includes(signal))continue;
       const current=peripheralHelperBindingValue(groupKey,index,signal);
       if(current!==''&&(previous===undefined||state.settingsLoading)){occupied.add(Number(current));continue;}
       const options=helperBindingSignalOptionsFor(groupKey,index,signal);
-      const value=selectPin(options.map(option=>option.value),current);
+      const shared=peripheralGpioAssignments().find(a=>a.pin>=0&&shareI2cRoles(`ui.${groupKey}.${index}.${signal.toLowerCase()}`,a.key)&&options.some(o=>!o.disabled&&Number(o.value)===a.pin));
+      const value=shared?String(shared.pin):selectPin(options.filter(o=>!o.disabled).map(option=>option.value),current);
       if(value!==''){
         if(groupKey==='sensor'&&profileValue===BATTERY_DIVIDER_SENSOR_PROFILE)elements.batteryAdcPin.value=value;
         else setPeripheralHelperBindingValue(groupKey,index,signal,value);
@@ -3226,6 +3255,16 @@ function assignPeripheralDefaults(groupKey, profileValue, index, realDefinitions
       }
     }
   }finally{assigningPeripheralDefaults=false;}
+}
+
+function isBuiltinPeripheral(group, profileValue, index = 0) {
+  const onboard = ONBOARD_BOARDS[activeGpioBoardProfile()];
+  if (onboard?.builtinProfiles?.[group] !== profileValue) return false;
+  if (group === 'sensor') return normalizedPeripheralSensorProfiles().indexOf(profileValue) === index;
+  return index === 0;
+}
+function isBuiltinStorage(profileValue, index = 0) {
+  return isBuiltinPeripheral('storage', profileValue, index);
 }
 
 function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue, index = 0) {
@@ -3250,6 +3289,11 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
     ? []
     : helperSignalLabels(groupKey, profileValue).filter((signalLabel) => !realDefinitions.some((definition) => definition.label.replace(/^OLED\s+/i, "").replace(/^I2S\s+/i, "") === signalLabel));
   assignPeripheralDefaults(groupKey,profileValue,index,realDefinitions,helperSignalsForProfile);
+  if (isBuiltinPeripheral(groupKey, profileValue, index)) {
+    container.hidden = false;
+    container.textContent = 'Built into the board — no external wiring required.';
+    return;
+  }
 
   container.hidden = realDefinitions.length === 0 && helperSignalsForProfile.length === 0;
   if (container.hidden) {
@@ -3262,6 +3306,9 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
   for (const signalLabel of helperSignalsForProfile) {
     appendHelperPeripheralBindingControl(container, groupKey, index, signalLabel);
   }
+  if(I2C_PROFILES[groupKey+':'+profileValue] && !(groupKey==='display'&&index===0&&profileValue==='i2c-oled'))
+    appendHelperPeripheralBindingControl(container,groupKey,index,'I2C_ADDRESS');
+
 }
 
 function buildPeripheralSelectionBindingGroup(groupKey, profileValue, index = 0) {
@@ -3286,6 +3333,11 @@ function updatePrimaryPeripheralIndexLabel(element, baseLabel, total) {
 
 function buildPeripheralProfileComposite(groupKey, selectedValue, index, select, rowLabel = "") {
   select.dataset.peripheralDefaultsGroup=groupKey;select.dataset.peripheralDefaultsIndex=String(index);
+  if (isBuiltinPeripheral(groupKey, selectedValue, index)) {
+    select.disabled = true;
+    const option = select.options[select.selectedIndex];
+    if (option) option.textContent = ONBOARD_BOARDS[activeGpioBoardProfile()]?.builtinLabels?.[groupKey] || (groupKey === 'storage' ? 'Onboard MicroSD card slot' : option.textContent);
+  }
   const stack = document.createElement("div");
   stack.className = "peripheral-profile-stack";
   ensureDynamicFieldIdentity(
@@ -3945,7 +3997,7 @@ function peripheralDiagramNodeMarkup(node) {
     return `
       <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
         <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
-        <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">↻</button>
+        <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button>
         <div class="peripheral-diagram-node-visual"${visualStyle}>
           ${ledSvg ? `<div data-led-array-index="${node.index}" style="width:${ledWidth}px;max-height:220px;display:flex;align-items:center">${ledSvg}</div>` : `<img src="${escapeHtml(node.src)}" alt="${escapeHtml(node.title || node.label)} module" draggable="false" />`}
         </div>
@@ -3957,7 +4009,7 @@ function peripheralDiagramNodeMarkup(node) {
   return `
     <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
       <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
-      <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">↻</button>
+      <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button>
       <div class="peripheral-diagram-node-visual"${visualStyle}>
         ${peripheralDiagramPlaceholderMarkup(node)}
       </div>
@@ -4155,7 +4207,7 @@ function handlePeripheralDiagramAssetError(event) {
   if (nodeElement) {
     const rotation = peripheralDiagramRotation(node.id);
     const visualStyle = rotation ? ` style="transform:rotate(${rotation}deg);"` : "";
-    nodeElement.innerHTML = `<button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">↻</button><div class="peripheral-diagram-node-visual"${visualStyle}>${peripheralDiagramPlaceholderMarkup(node)}</div><div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>`;
+    nodeElement.innerHTML = `<button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button><div class="peripheral-diagram-node-visual"${visualStyle}>${peripheralDiagramPlaceholderMarkup(node)}</div><div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>`;
   }
   renderPeripheralDiagramWiring();
 }
@@ -4492,7 +4544,7 @@ function renderPeripheralDiagramNow() {
 
   audioProfiles.slice(0, MAX_PERIPHERAL_AUDIO_OUTPUTS).forEach((profile, index) => {
     const normalizedProfile = String(profile || "none");
-    if (normalizedProfile === "none") {
+    if (normalizedProfile === "none" || isBuiltinPeripheral("audio", normalizedProfile, index)) {
       return;
     }
     const audioAsset = PERIPHERAL_DIAGRAM_ASSET_MAP.audio[normalizedProfile];
@@ -4518,7 +4570,7 @@ function renderPeripheralDiagramNow() {
 
   audioInProfiles.slice(0, MAX_PERIPHERAL_AUDIO_INPUTS).forEach((profile, index) => {
     const normalizedProfile = String(profile || "none");
-    if (normalizedProfile === "none") {
+    if (normalizedProfile === "none" || isBuiltinPeripheral("audioIn", normalizedProfile, index)) {
       return;
     }
     const audioInAsset = PERIPHERAL_DIAGRAM_ASSET_MAP.audioIn[normalizedProfile];
@@ -4570,7 +4622,7 @@ function renderPeripheralDiagramNow() {
 
   storageProfiles.slice(0, 3).forEach((profile, index) => {
     const normalizedProfile = String(profile || "none");
-    if (normalizedProfile === "none") {
+    if (normalizedProfile === "none" || isBuiltinStorage(normalizedProfile, index)) {
       return;
     }
     const storageAsset = PERIPHERAL_DIAGRAM_ASSET_MAP.storage[normalizedProfile];
@@ -4635,7 +4687,7 @@ function renderPeripheralDiagramNow() {
 
   sensorProfiles.slice(0, 4).forEach((profile, index) => {
     const normalizedProfile = String(profile || "none");
-    if (normalizedProfile === "none") {
+    if (normalizedProfile === "none" || isBuiltinPeripheral("sensor", normalizedProfile, index)) {
       return;
     }
     nodes.push({
@@ -4890,7 +4942,7 @@ function boardPinAssignmentIssues(settings = state.settings) {
   const outputs = new Set(validBoardPins(true));
   const issues = [];
   for (const [pin, roles] of gpioRoleMap(settings, state.status)) {
-    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} — invalid or reserved on the selected board`);
+    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} Р Р†Р вЂљРІР‚Сњ invalid or reserved on the selected board`);
   }
   const roleState = gpioConfigRoleState(settings);
   for (const definition of roleState.definitions) {
@@ -4910,7 +4962,7 @@ function renderBoardPinWarnings() {
 }
 
 function validateBoardPinAssignments(settings = currentSettingsSnapshot()) {
-  const issues = boardPinAssignmentIssues(settings);
+  const issues = [...boardPinAssignmentIssues(settings),...i2cIssues(settings)];
   if (issues.length) throw new Error(issues.join("; "));
 }
 
@@ -5605,7 +5657,7 @@ function firmwareReleaseNote(release) {
     return "HACS build: best choice for Home Assistant MQTT Media Player integration and media-player style control.";
   }
 
-  return "Standard build: general notifier firmware with the local web UI and the project’s default MQTT control model.";
+  return "Standard build: general notifier firmware with the local web UI and the projectР Р†Р вЂљРІвЂћСћs default MQTT control model.";
 }
 
 function beginFirmwareReconnectReload(initialDelayMs = 12000) {
@@ -5618,7 +5670,7 @@ function beginFirmwareReconnectReload(initialDelayMs = 12000) {
     state.firmwareReloadTimer = null;
   }
   state.rebootOverlayArmed = true;
-  showRebootOverlay("Firmware installed — rebooting device...", 30);
+  showRebootOverlay("Firmware installed Р Р†Р вЂљРІР‚Сњ rebooting device...", 30);
   // A GitHub OTA may acknowledge completion several seconds before the
   // scheduled reboot. Do not mistake the still-running old firmware for the
   // restarted device, while still allowing an observed disconnect to reconnect
@@ -6134,9 +6186,9 @@ function storageBadgeLabel(entry) {
 
 function storageItemSubtitle(entry) {
   if (entry?.isDirectory) {
-    return `Folder • ${entry.path || ""}`;
+    return `Folder Р Р†Р вЂљРЎС› ${entry.path || ""}`;
   }
-  return `${formatBytes(entry?.sizeBytes || 0)} • ${entry?.path || ""}`;
+  return `${formatBytes(entry?.sizeBytes || 0)} Р Р†Р вЂљРЎС› ${entry?.path || ""}`;
 }
 
 function updateStorageToolbar(storage = state.storageInfoByTarget[state.activeStorageTarget] || {}) {
@@ -6315,7 +6367,7 @@ function updateStoragePreviewProgressUi() {
   const position = fileManagerActive ? Math.min(duration, Math.max(0, Number(state.status?.playback?.positionSeconds || 0))) : 0;
   const trackName = currentStoragePlayingEntry()?.name || selectedStoragePlaybackEntry()?.name || state.storagePreviewItem?.name || "Select a song";
   const clockLabel = `${formatPlaybackClock(position)} / ${formatPlaybackClock(duration)}`;
-  const label = `${trackName} · ${clockLabel}`;
+  const label = `${trackName} Р вЂ™Р’В· ${clockLabel}`;
   const progressPercent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
   for (const slider of [elements.storageInlineSeekSlider, elements.storagePreviewSeekSlider]) {
     if (!slider) continue;
@@ -6711,7 +6763,7 @@ function setStoragePreviewSummary({ title, artist, album, fileName, sizeBytes, p
     elements.storagePreviewTitle.textContent = resolvedTitle;
   }
   if (elements.storagePreviewMeta) {
-    elements.storagePreviewMeta.textContent = `${resolvedArtist} • ${resolvedAlbum} • ${formatBytes(sizeBytes || 0)}`;
+    elements.storagePreviewMeta.textContent = `${resolvedArtist} Р Р†Р вЂљРЎС› ${resolvedAlbum} Р Р†Р вЂљРЎС› ${formatBytes(sizeBytes || 0)}`;
   }
   updateStoragePreviewPath(path || resolvedFileName);
   if (elements.storagePreviewAlbum) {
@@ -7332,7 +7384,7 @@ async function openStoragePreview(entry) {
     elements.storagePreviewTitle.textContent = entry.name || "Track Preview";
   }
   if (elements.storagePreviewMeta) {
-    elements.storagePreviewMeta.textContent = `${formatBytes(entry.sizeBytes || 0)} • ${storageBadgeLabel(entry)}`;
+    elements.storagePreviewMeta.textContent = `${formatBytes(entry.sizeBytes || 0)} Р Р†Р вЂљРЎС› ${storageBadgeLabel(entry)}`;
   }
   updateStoragePreviewPath(entry.path);
   if (elements.storagePreviewAlbum) {
@@ -7383,15 +7435,15 @@ function renderStorageManager(payload) {
     const loadedCount = entries.length;
     const progressSummary = formatLoadProgress(loadedCount, meta.totalEntries || loadedCount);
     const progressLabel = meta.loadingMore || meta.hasMore
-      ? ` • showing ${progressSummary}${meta.loadingMore ? ", loading more..." : ""}`
+      ? ` Р Р†Р вЂљРЎС› showing ${progressSummary}${meta.loadingMore ? ", loading more..." : ""}`
       : "";
     const cardLabel = target === "sd" && Number(storage.cardSizeBytes || 0) > 0
-      ? ` • card ${formatBytes(storage.cardSizeBytes || 0)}`
+      ? ` Р Р†Р вЂљРЎС› card ${formatBytes(storage.cardSizeBytes || 0)}`
       : "";
     elements.storageSummary.textContent = storage.mounted
-      ? `${formatBytes(storage.usedBytes || 0)} used of ${formatBytes(storage.totalBytes || 0)} filesystem • ${formatBytes(storage.freeBytes || 0)} free${cardLabel} • ${currentPath}${progressLabel}`
+      ? `${formatBytes(storage.usedBytes || 0)} used of ${formatBytes(storage.totalBytes || 0)} filesystem Р Р†Р вЂљРЎС› ${formatBytes(storage.freeBytes || 0)} free${cardLabel} Р Р†Р вЂљРЎС› ${currentPath}${progressLabel}`
       : (target === "sd"
-        ? "SD card is not mounted or not wired."
+        ? "SD card unavailable. Insert a card and try mounting it again."
         : "Flash filesystem is not mounted.");
   }
   if (elements.storageLimit) {
@@ -7410,7 +7462,7 @@ function renderStorageManager(payload) {
   if (!storage.mounted) {
     clearStorageSelection(target);
     updateStorageToolbar(storage);
-    elements.storageFileList.innerHTML = `<div class="storage-empty-note">${label} is not mounted, so melody storage is unavailable.</div>`;
+    elements.storageFileList.innerHTML = `<div class="storage-empty-note">${label} is not mounted. File operations are unavailable until storage is mounted.</div>`;
     return;
   }
 
@@ -7493,7 +7545,7 @@ async function refreshStorageManager(target = state.activeStorageTarget, directo
   } else {
     setStorageMeta({ loadingMore: false, requestId }, resolvedTarget);
     rerenderStorageManager(resolvedTarget);
-    setStorageStatus(`Ready • ${formatLoadProgress(activeStorageEntries(resolvedTarget).length, Number(payload?.totalEntries || activeStorageEntries(resolvedTarget).length))}`);
+    setStorageStatus(`Ready Р Р†Р вЂљРЎС› ${formatLoadProgress(activeStorageEntries(resolvedTarget).length, Number(payload?.totalEntries || activeStorageEntries(resolvedTarget).length))}`);
   }
   queueMicrotask(() => ensureStorageListFilled(resolvedTarget).catch((error) => console.error(error)));
   return payload;
@@ -8081,7 +8133,7 @@ function gpioRoleMap(settings = state.settings, status = state.status) {
     }
     const profileLabel = peripheralHelperProfileLabel(groupKey, profileValue, index);
     for (const [signalLabel, pinValue] of Object.entries(slotBindings)) {
-      if (String(signalLabel).startsWith("LED_") || ["CONTACT", "MAIN_CONTROL", "SOURCE", "INPUT_VOLTAGE", "OUTPUT_VOLTAGE"].includes(String(signalLabel || "").trim().toUpperCase())) {
+      if (String(signalLabel).startsWith("LED_") || ["CONTACT", "MAIN_CONTROL", "SOURCE", "INPUT_VOLTAGE", "OUTPUT_VOLTAGE", "I2C_ADDRESS"].includes(String(signalLabel || "").trim().toUpperCase())) {
         continue;
       }
       const numericPin = Number(pinValue);
@@ -9186,12 +9238,19 @@ function updatePlaybackActionButton() {
   updatePlaybackHeroControls();
 }
 
+let cameraTab,microphonesTab,bno055Tab;
 function setupTabs() {
+  cameraTab ||= createCameraTab({request});
+  microphonesTab ||= createMicrophonesTab({request});
+  bno055Tab ||= createBno055Tab({request});
   logsTab ||= createLogsTab({ request });
   plotsTab ||= createPlotsTab({ request });
   tabNavigation = initTabNavigation({
     storageKey: ACTIVE_TAB_STORAGE_KEY,
     onActivate(resolvedTabName) {
+      cameraTab?.setActive(resolvedTabName === "camera");
+      microphonesTab?.setActive(resolvedTabName === "microphones");
+      bno055Tab?.setActive(resolvedTabName === "bno055");
       logsTab.setActive(resolvedTabName === "logs");
       plotsTab.setActive(resolvedTabName === "plots");
       if (resolvedTabName === "gpio") {
@@ -9239,6 +9298,9 @@ async function loadStatus() {
   try {
     const status = await request(`/api/status?ts=${Date.now()}`);
     renderStatus(status);
+    cameraTab?.update(status);
+    microphonesTab?.update(status);
+    bno055Tab?.update(state.settings,status?.system?.webUiLocked);
     if (status.firmware?.touchscreen && !status.system?.webUiLocked && !document.hidden) {
       // A transient settings read must not discard an otherwise valid status update.
       try { await configurationSettingsPersistenceModule?.refreshExternalSettings(); } catch (_) { /* Retry on the next status poll. */ }
@@ -9855,7 +9917,7 @@ window.elmaRefreshFlashSettings = async () => {
   if (!desktopFlashView) return;
   try {
     await loadSettings();
-    elements.localBuilderProgressLabel.textContent = "Designer configuration synchronized — ready to compile and flash";
+    elements.localBuilderProgressLabel.textContent = "Designer configuration synchronized Р Р†Р вЂљРІР‚Сњ ready to compile and flash";
   } finally {
     elements.localBuilderCompileFlash.disabled = false;
   }

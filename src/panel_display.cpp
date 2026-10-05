@@ -4,11 +4,16 @@
 
 bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
     if (!getBuffer()) return false;
+#if APP_SUNTON_PANEL
+    board_.reset(new SuntonPanel());
+    if(!board_->start(touchEnabled)){board_.reset();return false;}
+#else
     esp_panel::board::Board defaults;
     auto config = defaults.getConfig();
     if (!touchEnabled) config.touch.reset();
     board_.reset(new esp_panel::board::Board(config));
     if (!board_->init() || !board_->begin()) { board_.reset(); return false; }
+#endif
     setRotation(rotation);
     brightness(percent);
     fillScreen(0);
@@ -17,13 +22,17 @@ bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
     setCursor(12, height()/2-8);
     print("ELMA-IoT");
     flush();
-    DebugLog.printf("[display] VIEWE %dx%d ready; PSRAM=%u; touch=%s\n",
-                    kPanelWidth, kPanelHeight, ESP.getPsramSize(), touchEnabled ? "CHSC6540 polling" : "disabled");
+    DebugLog.printf("[display] Panel %dx%d ready; PSRAM=%u; touch=%s\n",
+                    kPanelWidth, kPanelHeight, ESP.getPsramSize(), touchEnabled ? kPanelTouchName : "disabled");
     return true;
 }
 
 void PanelDisplay::brightness(uint8_t percent) {
+#if APP_SUNTON_PANEL
+    if(board_)board_->setBrightness(min<uint8_t>(percent,100)*255/100);
+#else
     if (board_ && board_->getBacklight()) board_->getBacklight()->setBrightness(min<uint8_t>(percent, 100));
+#endif
 }
 
 void PanelDisplay::flush() {
@@ -41,7 +50,14 @@ void PanelDisplay::flush() {
 }
 
 bool PanelDisplay::drawColor(int x,int y,int width,int height,uint8_t* colors) {
+#if APP_SUNTON_PANEL
+    if(!board_)return false;
+    // LV_COLOR_16_SWAP=1 already stores wire-order RGB565, as in LovyanGFX's LVGL port.
+    board_->pushImage(x,y,width,height,reinterpret_cast<lgfx::swap565_t*>(colors));
+    const bool ok=true;
+#else
     const bool ok = board_ && board_->getLCD()->drawBitmap(x,y,width,height,colors,-1);
+#endif
     if (!transferReported_ || (!ok && !transferFailed_)) {
         DebugLog.printf("[display] LCD transfer %s (%dx%d at %d,%d)\n",
                         ok ? "completed" : "FAILED", width, height, x, y);
@@ -52,12 +68,16 @@ bool PanelDisplay::drawColor(int x,int y,int width,int height,uint8_t* colors) {
 }
 
 bool PanelDisplay::readRawTouch(int16_t &x, int16_t &y) {
+#if APP_SUNTON_PANEL
+    return board_ && board_->point(x,y);
+#else
     if (!board_ || !board_->getTouch()) return false;
     esp_panel::drivers::TouchPoint point;
     if (board_->getTouch()->readPoints(&point, 1, 0) <= 0) return false;
     const int16_t px = point.x, py = point.y;
     if (px < 0 || px >= kPanelWidth || py < 0 || py >= kPanelHeight) return false;
     x=px;y=py;return true;
+#endif
 }
 
 bool PanelDisplay::readTouch(int16_t &x,int16_t &y) {

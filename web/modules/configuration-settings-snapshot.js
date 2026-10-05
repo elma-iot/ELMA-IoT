@@ -1,3 +1,4 @@
+import {ONBOARD_BOARDS} from './onboard-boards.js';
 export function createConfigurationSettingsSnapshotModule({
   state,
   elements,
@@ -42,6 +43,8 @@ export function createConfigurationSettingsSnapshotModule({
 
     const audioProfile = String(audioProfiles[0] || "none").trim().toLowerCase();
     snapshot.audio.enabled = audioProfile !== "none" && !audioProfile.includes("bluetooth") && !audioProfile.includes("buzzer");
+    const board=ONBOARD_BOARDS[snapshot.ui?.gpioBoardSelection||state.settings?.ui?.gpioBoardSelection];
+    if(board?.audioProfile===audioProfile){const a=board.defaults.audio;Object.assign(snapshot.audio,{bclkPin:a.bclkPin,wsPin:a.wsPin,doutPin:a.doutPin});}
 
     const displayProfiles = normalizedPeripheralDisplayProfiles();
     const displayProfile = String(displayProfiles[0] || "none").trim().toLowerCase();
@@ -59,6 +62,11 @@ export function createConfigurationSettingsSnapshotModule({
 
     const storageProfiles = normalizedPeripheralStorageProfiles();
     snapshot.sd.enabled = String(storageProfiles[0] || "none").trim().toLowerCase() !== "none";
+    snapshot.sd.sdmmc=['viewe-sdmmc','camera-sdmmc'].includes(storageProfiles[0]);
+    if(board?.defaults?.sd&&snapshot.sd.enabled){
+      const fixed=board.bindings?.['storage:'+storageProfiles[0]];
+      if(fixed)Object.assign(snapshot.sd,{csPin:fixed.CS??board.defaults.sd.csPin,sckPin:fixed.SCK??board.defaults.sd.sckPin,mosiPin:fixed.MOSI??board.defaults.sd.mosiPin,misoPin:fixed.MISO??board.defaults.sd.misoPin});
+    }
   }
 
   function currentSettingsSnapshot() {
@@ -95,6 +103,12 @@ export function createConfigurationSettingsSnapshotModule({
         power: [...normalizedPeripheralPowerProfiles()],
       },
     });
+    const board=ONBOARD_BOARDS[snapshot.ui.gpioBoardSelection];
+    // Preserve fixed onboard wiring even after editing the profile in the browser.
+    for(const [group,profiles] of [['audio',audioProfiles],['audioIn',audioInProfiles],['storage',normalizedPeripheralStorageProfiles()]]){
+      const fixed=board?.bindings?.[group+':'+profiles[0]];
+      if(fixed)snapshot.ui.peripheralHelperBindings[group+':0']={...(snapshot.ui.peripheralHelperBindings[group+':0']||{}),...fixed};
+    }
     return snapshot;
   }
 

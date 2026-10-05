@@ -13,6 +13,6 @@ constexpr bool input(Chip chip, int pin) {
            (pin >= 32 && pin <= 36) || pin == 39;
 }
 constexpr bool output(Chip chip, int pin) {
-    return input(chip, pin) && !(chip == Chip::Esp32 && pin >= 34) && !((chip == Chip::S2 || chip == Chip::S3) && pin == 46);
+    return input(chip, pin) && !(chip == Chip::Esp32 && pin >= 34) && !((chip == Chip::S2) && pin == 46);
 }
 }

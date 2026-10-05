@@ -28,7 +28,15 @@ bool tickHookRegistered[portNUM_PROCESSORS] = {false};
 #endif
 
 const char* compiledBoardProfile() {
-#if APP_COMPILED_BOARD_PROFILE_ID == 25
+#if APP_COMPILED_BOARD_PROFILE_ID == 26
+    return "esp32-2432s028r";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 27
+    return "esp32-2432s028c";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 28
+    return "esp32-3248s035c";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 29
+    return "esp32-cam";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 25
     return "viewe-uedx32480035e-wb-a";
 #elif APP_COMPILED_BOARD_PROFILE_ID == 14
     return "viewe-uedx24320028e-wb-a";
