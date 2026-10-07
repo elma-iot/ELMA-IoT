@@ -643,7 +643,9 @@ SettingsBundle SettingsManager::defaults() const {
     settings.audio.wsPin = 254;
     settings.audio.doutPin = 26;
 #elif defined(APP_SPK_BOARD)
-    return "esp32-s3-spk-n16r8-${version}.bin";
+    settings.audio.bclkPin = 10;
+    settings.audio.wsPin = 45;
+    settings.audio.doutPin = 9;
 #elif APP_HAS_CAMERA
     settings.audio.enabled = false;
 #endif
