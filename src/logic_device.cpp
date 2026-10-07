@@ -184,11 +184,20 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     mutex_=xSemaphoreCreateMutex();
     if(!mutex_)return false;
     source_=2166136261u;for(const char* p=program;*p;++p)source_=(source_^uint8_t(*p))*16777619u;
-    JsonDocument compiled;deserializeJson(compiled,program);devices_.set(compiled["devices"]);
+    JsonDocument compiled;
+    if(deserializeJson(compiled,program)) {
+        state.setLastError("Cannot load compiled Logics: invalid JSON or insufficient memory");
+        return false;
+    }
+    devices_.set(compiled["devices"]);
+    if(devices_.overflowed()) {
+        state.setLastError("Insufficient memory for Logics device bindings");
+        return false;
+    }
     configureStatusLed(device);
     mode_=compiled["mode"]|"playing";
     if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
-    std::string restored=program;
+    {
     JsonDocument data;
     if(loadLogicRecord(data)) {
         if(data["source"]==source_) {
@@ -198,21 +207,24 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
                 const char* mode=savedGroup["mode"]|"playing";
                 if(std::string(mode)=="playing"||std::string(mode)=="paused"||std::string(mode)=="stopped")group["mode"]=mode;
             }
-            restored.clear();serializeJson(compiled,restored);mode_=data["mode"]|"playing";
+            mode_=data["mode"]|"playing";
             if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
 #else
             JsonDocument accepted;std::string message;
             if(ElmaLogic::validateEditable(data["graph"],devices_.as<JsonArrayConst>(),accepted,message)) {
-                restored.clear();serializeJson(accepted,restored);mode_=data["mode"]|"playing";
+                compiled=std::move(accepted);mode_=data["mode"]|"playing";
                 if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
             }
 #endif
         }
     }
-    JsonDocument guarded;deserializeJson(guarded,restored);loadRecoveryState(guarded);restored.clear();serializeJson(guarded,restored);
+    }
+    // Keep one graph document: serializing and reparsing several copies here
+    // exhausted internal RAM on LCD boards without PSRAM before setup finished.
+    loadRecoveryState(compiled);
     state_=&state;status_=std::move(status);actions_=std::move(actions);std::string error;
     LedArrays::reset();
-    bool ok=runtime_.begin(restored.c_str(),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},error);
+    bool ok=runtime_.begin(std::move(compiled),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},error);
     if(ok)runtime_.setLedBinding(ledBinding_.as<JsonObjectConst>());
     if (!ok) {state_->setLastError(error.c_str());DebugLog.printf("[logics] %s\n",error.c_str());}
     if(ok && mode_=="paused")runtime_.pause(millis());
