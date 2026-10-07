@@ -1,4 +1,10 @@
-# Display and camera integration — work in progress
+# Display and camera integration
+
+## Current build audit — 2026-10-07
+
+All 29 Windows board selections now have passing compile-only builds, including the three Sunton/Guition LCD variants, both VIEWE sizes, ESP32-CAM and ESP32-SPK. The audit corrected ESP8266-library selection on ESP32, the S3 audio constructor, SPK default initialization, and an oversized Wemos SVG/build optimizer path. Per-board image sizes and build evidence are recorded in the Windows repository's `BUILD-VALIDATION.md` and `BOARD-BUILD-RESULTS.json`.
+
+The October 5 records below describe the earlier integration stage. Current source changes are included in the Windows 0.1.80 testing candidate. This compile audit did not flash devices or verify physical touch, camera, audio, microphone or SD operation; those remain hardware test steps. Android still requires its own implementation and APK verification.
 
 ## ESP32-S3-SPK N16R8 — 2026-10-05
 
