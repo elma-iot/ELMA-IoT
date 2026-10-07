@@ -13,6 +13,7 @@ enum class StorageTarget {
 struct StorageBackendSummary {
     bool available = false;
     bool mounted = false;
+    bool needsFormat = false; // Card responds, but FAT reports no usable filesystem.
     uint64_t cardSizeBytes = 0;
     uint64_t totalBytes = 0;
     uint64_t usedBytes = 0;
@@ -22,6 +23,13 @@ struct StorageBackendSummary {
 void beginStorageBackends(const SettingsBundle& settings);
 void applyStorageSettings(const SettingsBundle& settings);
 void pollStorageBackends();
+bool requestSdFormat(bool confirmed, String& error);
+enum class SdFormatState { Idle, Pending, Formatting, Complete, Failed };
+SdFormatState sdFormatState();
+bool sdFormatPromptNeeded();
+void dismissSdFormatPrompt();
+bool requestSdMount(bool mount, String& error);
+bool sdStorageEjected();
 bool remountActiveStorageBackend(StorageTarget target);
 bool remountStorageBackend(StorageTarget target, const SettingsBundle& settings);
 StorageTarget parseStorageTarget(const String& rawTarget);

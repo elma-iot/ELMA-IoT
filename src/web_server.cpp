@@ -1012,6 +1012,7 @@ void WebServerManager::begin(
     factoryResetHandler_ = factoryResetHandler;
 
     security_.begin();
+    DebugLog.printf("[web] registering routes heap=%u largest=%u\n",ESP.getFreeHeap(),ESP.getMaxAllocHeap());
     // The route-level checks also cover streaming upload callbacks, which run
     // before middleware. Middleware protects future API handlers by default.
     server_.addMiddleware([this](AsyncWebServerRequest* request,ArMiddlewareNext next){
@@ -1022,6 +1023,7 @@ void WebServerManager::begin(
     registerApiRoutes();
     registerWebRoutes();
     server_.begin();
+    DebugLog.printf("[web] ready heap=%u largest=%u\n",ESP.getFreeHeap(),ESP.getMaxAllocHeap());
 }
 
 bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
@@ -1137,6 +1139,10 @@ void WebServerManager::registerApiRoutes() {
 #else
         root["system"]["deviceName"] = settingsGetter_().device.friendlyName;
 #endif
+        root["sdFormat"]["prompt"]=sdFormatPromptNeeded();
+        root["sdFormat"]["state"]=static_cast<int>(sdFormatState());
+        root["sdFormat"]["mounted"]=storageMounted(StorageTarget::Sd);
+        root["sdFormat"]["ejected"]=sdStorageEjected();
         JsonObject firmware = doc["firmware"].to<JsonObject>();
         firmware["version"] = APP_VERSION;
 #if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO)
@@ -2009,11 +2015,11 @@ void WebServerManager::registerApiRoutes() {
             }
 
             const String directoryPath = storageDirectoryFromRequest(request);
-            const bool mounted = remountStorageBackend(target, settingsGetter_());
+            String mountError;const bool mounted = requestSdMount(true,mountError);
 
             JsonDocument response;
             response["ok"] = mounted;
-            response["message"] = mounted ? "SD card remounted. Reloading files..." : "SD card remount failed.";
+            response["message"] = mounted ? "Mount requested. Refresh files shortly." : mountError;
             appendStorageDirectoryJson(target, directoryPath, response);
             sendJson(request, response, mounted ? 200 : 503);
         });
@@ -2032,6 +2038,23 @@ void WebServerManager::registerApiRoutes() {
         sendJson(request, response);
     });
 
+    server_.on("/api/storage/eject",HTTP_POST,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        String error;JsonDocument response;bool ok=requestSdMount(false,error);
+        response["ok"]=ok;if(!ok)response["error"]=error;
+        sendJson(request,response,ok?200:409);
+    });
+    server_.on("/api/storage/format",HTTP_POST,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        String action=request->hasParam("action")?request->getParam("action")->value():String();
+        JsonDocument result;String error;
+        if(action=="cancel"){dismissSdFormatPrompt();result["ok"]=true;}
+        else if(action=="confirm" && request->hasParam("erase") && request->getParam("erase")->value()=="yes"){
+            if(!requestSdFormat(true,error)){result["error"]=error;sendJson(request,result,409);return;}
+            result["ok"]=true;
+        }else{result["error"]="Explicit erase confirmation required";sendJson(request,result,400);return;}
+        sendJson(request,result);
+    });
     server_.on("/api/storage", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;

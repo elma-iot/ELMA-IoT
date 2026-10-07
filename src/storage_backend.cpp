@@ -4,8 +4,15 @@
 
 #include <LittleFS.h>
 #include <SD.h>
+#include <sd_diskio.h>
+#include <ff.h>
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
 #include <SD_MMC.h>
+#include <driver/sdmmc_host.h>
+#include <sdmmc_cmd.h>
+#include <diskio_impl.h>
+#include <diskio_sdmmc.h>
+#include <diskio.h>
 #endif
 #include <SPI.h>
 #include <esp_partition.h>
@@ -41,6 +48,10 @@ uint8_t sdConsecutiveMountFailures = 0;
 bool sdSummaryDirty = false;
 bool sdMaintenance = false;
 bool sdSettingsPending = false;
+bool sdFormatPending = false;
+SdFormatState formatState=SdFormatState::Idle;
+bool formatPromptDismissed=false;
+bool sdEjected=false;int sdMountRequest=0;
 SdSettings pendingSdSettings;
 TaskHandle_t summaryTask = nullptr;
 
@@ -100,6 +111,17 @@ bool sdFilesystemHealthy() {
         return false;
     }
 
+    // A cached FAT root may still open after physical removal. SPI cards must
+    // answer a real sector read before we declare the mount healthy.
+    if(!activeSdSettings.sdmmc){uint8_t sector[512];if(!SD.readRAW(sector,0))return false;}
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
+    else {
+        // Arduino 2 SD_MMC uses volume 0 for its own totalBytes/usedBytes API.
+        FATFS* filesystem=nullptr;DWORD freeClusters;
+        if(f_getfree("0:",&freeClusters,&filesystem)!=FR_OK || !filesystem)return false;
+        uint8_t sector[512];if(disk_read(filesystem->pdrv,sector,0,1)!=RES_OK)return false;
+    }
+#endif
     File root = onSd([](auto& card) { return card.open("/"); });
     const bool healthy = root && root.isDirectory();
     if (root) {
@@ -251,7 +273,52 @@ void unmountSdStorage() {
     cacheSdSummary(summary);
 }
 
-bool mountSdStorage(const SdSettings& settings) {
+// Read-only FAT probe distinguishes an absent/I/O-failing card from a responding
+// card with no supported filesystem. Never infer permission to erase from failure.
+bool spiCardNeedsFormat(const SdSettings& settings) {
+    uint8_t drive=sdcard_init(settings.csPin,&sdSpi,1000000);
+    if(drive==0xff)return false;
+    FATFS filesystem{};char name[]={char('0'+drive),':',0};
+    FRESULT result=f_mount(&filesystem,name,1);
+    f_mount(nullptr,name,0);sdcard_uninit(drive);
+    return result==FR_NO_FILESYSTEM;
+}
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
+bool mmcCardNeedsFormat(bool format=false) {
+    sdmmc_host_t host=SDMMC_HOST_DEFAULT();
+    sdmmc_slot_config_t slot=SDMMC_SLOT_CONFIG_DEFAULT();
+    host.slot=SDMMC_HOST_SLOT_1;host.max_freq_khz=SDMMC_FREQ_DEFAULT;
+#if APP_HAS_CAMERA
+    host.flags=SDMMC_HOST_FLAG_1BIT;slot.width=1;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    // Camera boards using SPI never enter this path. Do not guess SDMMC pins.
+    return false;
+#endif
+#else
+    host.flags=SDMMC_HOST_FLAG_4BIT;slot.width=4;
+    slot.clk=GPIO_NUM_14;slot.cmd=GPIO_NUM_17;slot.d0=GPIO_NUM_16;
+    slot.d1=GPIO_NUM_18;slot.d2=GPIO_NUM_15;slot.d3=GPIO_NUM_21;
+#endif
+    if(sdmmc_host_init()!=ESP_OK)return false;
+    sdmmc_card_t card{};bool needsFormat=false;
+    if(sdmmc_host_init_slot(host.slot,&slot)==ESP_OK && sdmmc_card_init(&host,&card)==ESP_OK){
+        BYTE drive;
+        if(ff_diskio_get_drive(&drive)==ESP_OK){
+            ff_diskio_register_sdmmc(drive,&card);
+            FATFS filesystem{};char name[]={char('0'+drive),':',0};
+            needsFormat=f_mount(&filesystem,name,1)==FR_NO_FILESYSTEM;
+            // Formatting is permitted only for this positively identified FAT
+            // result, not a timeout, bad wiring, or general mount error.
+            if(needsFormat && format){BYTE work[FF_MAX_SS];f_mkfs(name,FM_ANY,0,work,sizeof(work));}
+            f_mount(nullptr,name,0);ff_diskio_unregister(drive);
+        }
+    }
+    sdmmc_host_deinit();return needsFormat;
+}
+#endif
+
+bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
     portENTER_CRITICAL(&storageStateMux);
     const bool busy=sdMaintenance || sdWriteDepth || sdReadDepth;
     if(!busy)sdMaintenance=true;
@@ -270,6 +337,7 @@ bool mountSdStorage(const SdSettings& settings) {
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && APP_HAS_ONBOARD_PANEL || APP_HAS_CAMERA
     if (settings.sdmmc) {
+        if(allowFormat)mmcCardNeedsFormat(true);
 #if APP_HAS_CAMERA
         sdMounted = SD_MMC.begin("/sd", true, false, 20000, 5);
 #else
@@ -285,6 +353,7 @@ bool mountSdStorage(const SdSettings& settings) {
             nextSdMountAttemptAt = millis() + sdRetryDelayForFailureCount(sdConsecutiveMountFailures);
             StorageBackendSummary summary;
             summary.available = true;
+            summary.needsFormat = mmcCardNeedsFormat();
             cacheSdSummary(summary);
             DebugLog.println("[storage] SDMMC mount failed");
         }
@@ -296,8 +365,15 @@ bool mountSdStorage(const SdSettings& settings) {
     sdSpi.begin(settings.sckPin, settings.misoPin, settings.mosiPin, settings.csPin);
     sdSpiStarted = true;
 
-    for (const uint32_t frequencyHz : kSdFrequenciesHz) {
-        if (!SD.begin(settings.csPin, sdSpi, frequencyHz, "/sd", 5, false)) {
+    // Re-check at execution time. SD.begin(true) only formats FR_NO_FILESYSTEM;
+    // an already valid filesystem is never reformatted.
+    if(allowFormat && !spiCardNeedsFormat(settings))allowFormat=false;
+
+    for (uint32_t frequencyHz : kSdFrequenciesHz) {
+        if(allowFormat)frequencyHz=1000000; // Conservative clock for destructive writes.
+        bool began=SD.begin(settings.csPin, sdSpi, frequencyHz, "/sd", 5, allowFormat);
+        allowFormat=false; // A confirmation authorizes one format attempt only.
+        if (!began) {
             DebugLog.printf("[storage] SD begin failed cs=%u sck=%u mosi=%u miso=%u freq=%lu\n",
                           static_cast<unsigned>(settings.csPin),
                           static_cast<unsigned>(settings.sckPin),
@@ -350,6 +426,7 @@ bool mountSdStorage(const SdSettings& settings) {
                       static_cast<unsigned>(sdConsecutiveMountFailures));
         StorageBackendSummary summary;
         summary.available = settings.enabled;
+        summary.needsFormat = spiCardNeedsFormat(settings);
         cacheSdSummary(summary);
     }
     return sdMounted;
@@ -359,7 +436,7 @@ bool mountSdStorage(const SdSettings& settings) {
 void beginStorageBackends(const SettingsBundle& settings) {
     mountFlashStorage();
     mountSdStorage(effectiveSdSettings(settings.sd));
-    if(!summaryTask)xTaskCreate(summaryWorker,"storage-summary",3072,nullptr,1,&summaryTask);
+    if(!summaryTask)xTaskCreate(summaryWorker,"storage-summary",4096,nullptr,1,&summaryTask);
 }
 
 void applyStorageSettings(const SettingsBundle& settings) {
@@ -381,7 +458,7 @@ bool remountActiveStorageBackend(StorageTarget target) {
         return flashMounted;
     }
 
-    if (sdWriteInProgress() || sdReadInProgress()) {
+    if (sdStorageEjected() || sdWriteInProgress() || sdReadInProgress()) {
         return false;
     }
 
@@ -398,7 +475,7 @@ bool remountStorageBackend(StorageTarget target, const SettingsBundle& settings)
         return flashMounted;
     }
 
-    if (sdWriteInProgress() || sdReadInProgress()) {
+    if (sdStorageEjected() || sdWriteInProgress() || sdReadInProgress()) {
         return false;
     }
 
@@ -408,16 +485,44 @@ bool remountStorageBackend(StorageTarget target, const SettingsBundle& settings)
 void pollStorageBackends() {
     // Retry task allocation without falling back to synchronous card probing.
     static uint32_t lastAttempt=0;
-    if(!summaryTask&&uint32_t(millis()-lastAttempt)>=30000){lastAttempt=millis();if(xTaskCreate(summaryWorker,"storage-summary",3072,nullptr,1,&summaryTask)!=pdPASS)DebugLog.println("[storage] Maintenance task memory unavailable");}
+    if(!summaryTask&&uint32_t(millis()-lastAttempt)>=30000){lastAttempt=millis();if(xTaskCreate(summaryWorker,"storage-summary",4096,nullptr,1,&summaryTask)!=pdPASS)DebugLog.println("[storage] Maintenance task memory unavailable");}
+}
+bool requestSdFormat(bool confirmed,String& error) {
+    portENTER_CRITICAL(&storageStateMux);
+    bool permitted=confirmed && !formatPromptDismissed && formatState!=SdFormatState::Formatting && sdSummaryCache.needsFormat && !sdMounted &&
+        !sdMaintenance && !sdReadDepth && !sdWriteDepth && !sdSettingsPending && !sdFormatPending && !sdMountRequest && !sdEjected && summaryTask;
+    if(permitted){sdFormatPending=true;formatState=SdFormatState::Pending;formatPromptDismissed=true;}
+    portEXIT_CRITICAL(&storageStateMux);
+    if(!permitted)error="Formatting unavailable: confirm an unreadable card, or wait for storage to become idle";
+    return permitted;
+}
+SdFormatState sdFormatState(){portENTER_CRITICAL(&storageStateMux);auto state=formatState;portEXIT_CRITICAL(&storageStateMux);return state;}
+bool sdFormatPromptNeeded(){portENTER_CRITICAL(&storageStateMux);bool show=sdSummaryCache.needsFormat&&!sdMounted&&!formatPromptDismissed;portEXIT_CRITICAL(&storageStateMux);return show;}
+void dismissSdFormatPrompt(){portENTER_CRITICAL(&storageStateMux);formatPromptDismissed=true;portEXIT_CRITICAL(&storageStateMux);}
+bool sdStorageEjected(){portENTER_CRITICAL(&storageStateMux);bool value=sdEjected;portEXIT_CRITICAL(&storageStateMux);return value;}
+bool requestSdMount(bool mount,String& error){
+    portENTER_CRITICAL(&storageStateMux);
+    bool ok=activeSdSettings.enabled && summaryTask && formatState!=SdFormatState::Formatting && !sdMaintenance && !sdReadDepth && !sdWriteDepth && !sdFormatPending && !sdSettingsPending && !sdMountRequest;
+    if(ok)sdMountRequest=mount?1:-1;
+    portEXIT_CRITICAL(&storageStateMux);
+    if(!ok)error="SD card busy or unavailable. Stop playback and transfers first.";
+    return ok;
 }
 void serviceStorageBackends() {
     portENTER_CRITICAL(&storageStateMux);
-    bool apply=sdSettingsPending&&!sdMaintenance&&!sdReadDepth&&!sdWriteDepth;
+    int mountRequest=(!sdMaintenance&&!sdReadDepth&&!sdWriteDepth)?sdMountRequest:0;
+    if(mountRequest){sdMountRequest=0;sdEjected=mountRequest<0;if(mountRequest<0)sdMaintenance=true;}
+    bool format=!mountRequest&&sdFormatPending&&!sdMaintenance&&!sdReadDepth&&!sdWriteDepth;
+    if(format){sdFormatPending=false;formatState=SdFormatState::Formatting;}
+    bool apply=!mountRequest&&!format&&sdSettingsPending&&!sdMaintenance&&!sdReadDepth&&!sdWriteDepth;
     SdSettings requested=pendingSdSettings;
     if(apply)sdSettingsPending=false;
     portEXIT_CRITICAL(&storageStateMux);
+    if(mountRequest<0){unmountSdStorage();portENTER_CRITICAL(&storageStateMux);sdMaintenance=false;formatPromptDismissed=true;portEXIT_CRITICAL(&storageStateMux);return;}
+    if(mountRequest>0){mountSdStorage(activeSdSettings);return;}
+    if(format){bool ok=mountSdStorage(activeSdSettings,true);portENTER_CRITICAL(&storageStateMux);formatState=ok?SdFormatState::Complete:SdFormatState::Failed;portEXIT_CRITICAL(&storageStateMux);return;}
     if(apply&&!sameSdSettings(activeSdSettings,requested))mountSdStorage(requested);
-    if (!activeSdSettings.enabled) {
+    if (!activeSdSettings.enabled || sdStorageEjected()) {
         return;
     }
 
@@ -540,7 +645,7 @@ fs::FS* getStorageFs(StorageTarget target) {
 
 bool storageMounted(StorageTarget target) {
     if (target == StorageTarget::Sd) {
-        portENTER_CRITICAL(&storageStateMux);bool ready=sdMounted&&!sdMaintenance;portEXIT_CRITICAL(&storageStateMux);return ready;
+        portENTER_CRITICAL(&storageStateMux);bool ready=sdMounted&&!sdMaintenance&&!sdEjected;portEXIT_CRITICAL(&storageStateMux);return ready;
     }
     return LittleFS.totalBytes() > 0;
 }

@@ -16,6 +16,12 @@ bool mountFlash() {
 void beginStorageBackends(const SettingsBundle&) { mountFlash(); }
 void applyStorageSettings(const SettingsBundle&) {}
 void pollStorageBackends() {}
+bool requestSdFormat(bool, String& error) { error="SD storage is unavailable";return false; }
+SdFormatState sdFormatState(){return SdFormatState::Idle;}
+bool sdFormatPromptNeeded(){return false;}
+void dismissSdFormatPrompt(){}
+bool requestSdMount(bool,String& error){error="SD storage unavailable";return false;}
+bool sdStorageEjected(){return false;}
 bool remountActiveStorageBackend(StorageTarget target) { return target == StorageTarget::Flash && mountFlash(); }
 bool remountStorageBackend(StorageTarget target, const SettingsBundle&) { return remountActiveStorageBackend(target); }
 StorageTarget parseStorageTarget(const String& raw) { String value = raw; value.trim(); value.toLowerCase(); return value == "sd" ? StorageTarget::Sd : StorageTarget::Flash; }

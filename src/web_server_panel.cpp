@@ -17,6 +17,7 @@ bool selected(JsonVariantConst values,const char* fragment=nullptr){
 void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  root["version"]=APP_VERSION;security_.status(root["security"].to<JsonObject>());
  if(security_.locked())return;
+ root["sdNeedsFormat"]=sdFormatPromptNeeded();
  SettingsBundle settings=settingsGetter_();settingsManager_->toJson(settings,root["settings"].to<JsonObject>());
  auto config=root["settings"];config["wifi"].remove("password");config["wifi"].remove("apPassword");config["mqtt"].remove("password");config["webAuth"].remove("password");
  JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
@@ -78,6 +79,10 @@ bool WebServerManager::panelCommand(const String& action,JsonVariantConst args,S
  if(action=="logics"){JsonDocument result;return logicsHandler_&&logicsHandler_(args,result,error);}
  if(action=="bno055")return Bno055::command(args,error);
  if(action=="radio")return PanelRadio::request(args,error);
+ if(action=="formatSd")return requestSdFormat(args["confirmed"]|false,error);
+ if(action=="dismissSdFormat"){dismissSdFormatPrompt();return true;}
+ if(action=="mountSd")return requestSdMount(true,error);
+ if(action=="ejectSd")return requestSdMount(false,error);
  if(action=="browse"){
   String path=args["path"]|"/";
   if(!path.startsWith("/")||path.indexOf("..")>=0||path.length()>240){error="Invalid folder path";return false;}

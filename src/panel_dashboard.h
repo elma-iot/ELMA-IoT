@@ -29,6 +29,9 @@ private:
  JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_,countryOptions_="All countries";
  unsigned long tick_=0,refresh_=0,noticeUntil_=0;bool touched_=false,frameReported_=false,updating_=false,refreshNow_=true;
  bool radioRequested_=false;
+ bool sdFormatPromptShown_=false;lv_obj_t* sdFormatPrompt_=nullptr;
+ lv_obj_t *sdFormatProgress_=nullptr,*sdFormatBar_=nullptr;
+ static void sdFormatEvent(lv_event_t*);
  String lastPlaybackUrl_,resumeUrl_,resumeTitle_;
  void page(const String&);void syncMenu();void statusBar(const AppStateSnapshot&);void update();
  lv_obj_t* label(const String&);void button(const String&,const String&);

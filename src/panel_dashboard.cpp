@@ -4,6 +4,7 @@
 #include "panel_settings.h"
 #include "panel_forms.h"
 #include "device_log.h"
+#include "storage_backend.h"
 #include <ctime>
 #include <cmath>
 namespace {
@@ -21,8 +22,9 @@ String itemAt(const String& options,int index){int start=0;while(index-->0){int 
 PanelDashboard::~PanelDashboard(){if(input_)lv_indev_delete(input_);if(display_)lv_disp_remove(display_);if(pixels_)heap_caps_free(pixels_);}
 bool PanelDashboard::begin(uint8_t rotation){
  static bool initialized=false;if(!initialized){lv_init();initialized=true;}
- pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*20*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));if(!pixels_)return false;
- lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*20);lv_disp_drv_init(&displayDriver_);
+ const size_t rows=psramFound()?20:8;
+ pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*rows*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));if(!pixels_)return false;
+ lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*rows);lv_disp_drv_init(&displayDriver_);
  displayDriver_.hor_res=kPanelWidth;displayDriver_.ver_res=kPanelHeight;displayDriver_.draw_buf=&drawBuffer_;displayDriver_.flush_cb=flush;displayDriver_.user_data=this;displayDriver_.sw_rotate=1;
  display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
  lv_indev_drv_init(&inputDriver_);inputDriver_.type=LV_INDEV_TYPE_POINTER;inputDriver_.read_cb=touch;inputDriver_.user_data=this;inputDriver_.disp=display_;input_=lv_indev_drv_register(&inputDriver_);
@@ -147,6 +149,7 @@ void PanelDashboard::page(const String& key){
  if(key=="oled")label(String(kPanelWidth)+" x "+String(kPanelHeight)+" / "+kPanelTouchName);
  if(key=="hardware")labels_["hardware"]=label("");
  if(key.startsWith("storage-")){
+  if(key=="storage-external"){button("Mount SD card","mountSd");button("Eject SD card","ejectSd");}
   player();labels_["storage"]=label("");String path=state_["storage"]["path"]|"/";section(path);
   button("Refresh files","folder:refresh");button("Root folder","folder:/");
   if(path!="/"){String parent=path.substring(0,path.lastIndexOf('/'));button(LV_SYMBOL_UP " Parent folder","folder:"+(parent.length()?parent:String("/")));}
@@ -279,6 +282,13 @@ void PanelDashboard::update(){
  }
  updating_=false;
 }
+void PanelDashboard::sdFormatEvent(lv_event_t* event){
+ auto* self=static_cast<PanelDashboard*>(lv_event_get_user_data(event));
+ const char* choice=lv_msgbox_get_active_btn_text(self->sdFormatPrompt_);
+ if(choice && strcmp(choice,"Erase and format")==0){JsonDocument args;args["confirmed"]=true;self->queue("formatSd",args);}
+ else {JsonDocument args;self->queue("dismissSdFormat",args);}
+ lv_msgbox_close(self->sdFormatPrompt_);self->sdFormatPrompt_=nullptr;
+}
 void PanelDashboard::loop(const AppStateSnapshot& app,Snapshot snapshot,Command command,const String& overlay){
  auto now=millis();lv_tick_inc(now-tick_);tick_=now;
  if(refreshNow_||now-refresh_>=1000){bool rebuild=refreshNow_;refreshNow_=false;refresh_=now;state_.clear();if(snapshot)snapshot(page_,state_.to<JsonObject>());
@@ -297,6 +307,28 @@ void PanelDashboard::loop(const AppStateSnapshot& app,Snapshot snapshot,Command 
   if(structure!=structure_&&!editing){structure_=structure;rebuild=true;}
   statusBar(app);syncMenu();if(rebuild){page(page_);refreshNow_=false;}update();
   if(overlay.length())lv_label_set_text(notice_,overlay.c_str());else if(int32_t(now-noticeUntil_)>=0)lv_label_set_text(notice_,"");
+ }
+ if(sdFormatPrompt_ && !sdFormatPromptNeeded()){lv_msgbox_close(sdFormatPrompt_);sdFormatPrompt_=nullptr;}
+ if(!sdFormatPromptShown_ && sdFormatPromptNeeded() && !(state_["security"]["locked"]|false)){
+  sdFormatPromptShown_=true;
+  touched_=true;
+  static const char* choices[]={"Cancel","Erase and format",""};
+  sdFormatPrompt_=lv_msgbox_create(nullptr,"SD card", "Card detected, but no supported filesystem. Formatting erases all files. Back up the card first. Format now?",choices,false);
+  lv_obj_set_width(sdFormatPrompt_,lv_disp_get_hor_res(display_)-16);lv_obj_center(sdFormatPrompt_);
+  lv_obj_add_event_cb(sdFormatPrompt_,sdFormatEvent,LV_EVENT_VALUE_CHANGED,this);
+ }
+ auto formatting=sdFormatState();
+ if(formatting==SdFormatState::Pending || formatting==SdFormatState::Formatting){
+  touched_=true;
+  if(!sdFormatProgress_){
+   sdFormatProgress_=lv_obj_create(lv_layer_top());lv_obj_set_size(sdFormatProgress_,lv_disp_get_hor_res(display_),lv_disp_get_ver_res(display_));lv_obj_center(sdFormatProgress_);
+   auto* text=lv_label_create(sdFormatProgress_);lv_label_set_text(text,"Formatting SD card...\nKeep power connected.");lv_obj_set_width(text,lv_pct(100));lv_obj_align(text,LV_ALIGN_CENTER,0,-35);
+   sdFormatBar_=lv_bar_create(sdFormatProgress_);lv_obj_set_width(sdFormatBar_,lv_pct(90));lv_obj_align(sdFormatBar_,LV_ALIGN_CENTER,0,25);lv_bar_set_mode(sdFormatBar_,LV_BAR_MODE_RANGE);
+  }
+  int phase=(now/25)%80;lv_bar_set_start_value(sdFormatBar_,phase,LV_ANIM_OFF);lv_bar_set_value(sdFormatBar_,phase+20,LV_ANIM_OFF);
+ }else if(sdFormatProgress_){
+  lv_obj_del(sdFormatProgress_);sdFormatProgress_=nullptr;sdFormatBar_=nullptr;
+  lv_label_set_text(notice_,formatting==SdFormatState::Complete?"SD card ready":"Formatting failed. Check card on a computer.");noticeUntil_=now+8000;refreshNow_=true;
  }
  lv_timer_handler();
  if(!commands_.empty()){String encoded=commands_.front();commands_.pop_front();JsonDocument request;deserializeJson(request,encoded);String error;bool ok=command&&command(request["action"].as<String>(),request["args"],error);lv_label_set_text(notice_,ok?"Applied":error.c_str());noticeUntil_=now+4000;

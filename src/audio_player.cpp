@@ -156,14 +156,14 @@ class AudioPlayer::Impl {
     };
 
     Audio audio;
-    ElmaAudio::PitchShift pitchShift;
+    ElmaAudio::PitchShift* pitchShift = nullptr; // Allocate only for non-unity pitch correction.
     float playbackSpeed = 1;
     uint32_t clockRate = 0;
     int8_t defaultLowDb = 0, defaultPresenceDb = 0, defaultHighDb = 0;
     bool sourceOverride = false;
     bool startingSource = false;
-    ElmaAudio::SpeechSynth speech;
-    ElmaAudio::PianoSynth piano;
+    ElmaAudio::SpeechSynth* speech = nullptr;
+    ElmaAudio::PianoSynth* piano = nullptr;
     bool renderingPiano=false;
     File speechFile;
     StorageTarget speechTarget = StorageTarget::Flash;
@@ -479,7 +479,7 @@ void audio_eof_stream(const char* info) {
 }
 
 void audio_process_i2s(uint32_t* sample, bool* continueI2S) {
-    if (g_impl != nullptr && sample != nullptr) *sample = g_impl->pitchShift.process(*sample);
+    if (g_impl != nullptr && sample != nullptr && g_impl->pitchShift != nullptr) *sample = g_impl->pitchShift->process(*sample);
     if (g_impl != nullptr && sample != nullptr && g_impl->overlay.active && g_impl->overlay.samples != nullptr) {
         const uint32_t frameIndex = g_impl->overlay.phaseQ16 >> 16;
         if (frameIndex >= g_impl->overlay.frameCount) {
@@ -555,6 +555,9 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
         DebugLog.println("[audio] failed to allocate player implementation");
         return;
     }
+    DebugLog.printf("[audio] optional DSP deferred: %u bytes; heap=%u largest=%u\n",
+        static_cast<unsigned>(sizeof(ElmaAudio::PitchShift)+sizeof(ElmaAudio::SpeechSynth)+sizeof(ElmaAudio::PianoSynth)-3*sizeof(void*)),
+        ESP.getFreeHeap(),ESP.getMaxAllocHeap());
     impl_->appState = &appState;
     g_impl = impl_;
     impl_->bclkPin = bclkPin;
@@ -601,7 +604,7 @@ void AudioPlayer::loop() {
         return;
     }
     if (impl_->speechRendering) {
-        int16_t pcm[512];const size_t count = (impl_->renderingPiano?impl_->piano.render(pcm,512):impl_->speech.render(pcm,512));
+        int16_t pcm[512];const size_t count = (impl_->renderingPiano?impl_->piano->render(pcm,512):impl_->speech->render(pcm,512));
         if (count) {
             const size_t bytes=count*sizeof(int16_t);
             if (impl_->speechFile.write(reinterpret_cast<uint8_t*>(pcm),bytes)!=bytes) {stop();if (impl_->appState) impl_->appState->setLastError("Offline speech storage write failed");return;}
@@ -667,7 +670,7 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
         if (impl_->speechRendering) {impl_->speechFile.close();endStorageWrite(impl_->speechTarget);impl_->speechRendering=false;}
         if (!impl_->speechPath.isEmpty()) {impl_->audio.stopSong();releaseStorageLease(impl_);fs::FS* scratchFs=getStorageFs(impl_->speechTarget);if(scratchFs){beginStorageWrite(impl_->speechTarget);scratchFs->remove(impl_->speechPath);endStorageWrite(impl_->speechTarget);}impl_->speechPath="";}
         if (impl_->sourceOverride) {impl_->audio.setTone(impl_->defaultLowDb,impl_->defaultPresenceDb,impl_->defaultHighDb);impl_->sourceOverride=false;}
-        impl_->playbackSpeed=1;impl_->pitchShift.reset(1);impl_->clockRate=0;
+        impl_->playbackSpeed=1;if (impl_->pitchShift) impl_->pitchShift->reset(1);impl_->clockRate=0;
         impl_->volume=impl_->defaultVolume;
     }
     requestAudioPerformanceClock();
@@ -738,7 +741,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
         if (impl_->speechRendering) {impl_->speechFile.close();endStorageWrite(impl_->speechTarget);impl_->speechRendering=false;}
         if (!impl_->speechPath.isEmpty()) {impl_->audio.stopSong();releaseStorageLease(impl_);fs::FS* scratchFs=getStorageFs(impl_->speechTarget);if(scratchFs){beginStorageWrite(impl_->speechTarget);scratchFs->remove(impl_->speechPath);endStorageWrite(impl_->speechTarget);}impl_->speechPath="";}
         if (impl_->sourceOverride) {impl_->audio.setTone(impl_->defaultLowDb,impl_->defaultPresenceDb,impl_->defaultHighDb);impl_->sourceOverride=false;}
-        impl_->playbackSpeed=1;impl_->pitchShift.reset(1);impl_->clockRate=0;
+        impl_->playbackSpeed=1;if (impl_->pitchShift) impl_->pitchShift->reset(1);impl_->clockRate=0;
         impl_->volume=impl_->defaultVolume;
     }
     requestAudioPerformanceClock();
@@ -869,7 +872,7 @@ void AudioPlayer::stop() {
     clearOverlay(impl_);
     releaseStorageLease(impl_);
     if (!impl_->speechPath.isEmpty()) {fs::FS* fs=getStorageFs(impl_->speechTarget);if(fs){beginStorageWrite(impl_->speechTarget);fs->remove(impl_->speechPath);endStorageWrite(impl_->speechTarget);}impl_->speechPath="";}
-    impl_->playbackSpeed=1;impl_->pitchShift.reset(1);impl_->clockRate=0;impl_->sourceOverride=false;impl_->volume=impl_->defaultVolume;impl_->audio.setTone(impl_->defaultLowDb,impl_->defaultPresenceDb,impl_->defaultHighDb);
+    impl_->playbackSpeed=1;if (impl_->pitchShift) impl_->pitchShift->reset(1);impl_->clockRate=0;impl_->sourceOverride=false;impl_->volume=impl_->defaultVolume;impl_->audio.setTone(impl_->defaultLowDb,impl_->defaultPresenceDb,impl_->defaultHighDb);
     DebugLog.println("[audio] playback stopped");
     impl_->state = "idle";
     impl_->type = "idle";
@@ -1145,17 +1148,34 @@ bool AudioPlayer::validateSource(JsonVariantConst source, String& error) {
 bool AudioPlayer::playSource(JsonVariantConst source, String& error) {
     if(!impl_ || !impl_->outputEnabled) {error="Audio output is disabled";return false;}
     if(!validateSource(source,error)) return false;
+    const float pitchRatio = std::pow(2.f, (source["pitch"] | 0.f) / 12.f) / (source["speed"] | 1.f);
+    // Never allocate inside the PCM callback. Keep the buffer for subsequent sources.
+    if (std::fabs(pitchRatio - 1.f) >= .0001f && !impl_->pitchShift) {
+        void* memory = allocateStorageBuffer(sizeof(ElmaAudio::PitchShift), sizeof(ElmaAudio::PitchShift));
+        if (!memory) {error="Insufficient memory for pitch correction";return false;}
+        impl_->pitchShift = new (memory) ElmaAudio::PitchShift();
+    }
     auto applyOptions=[&](){
-    impl_->sourceOverride=true;impl_->playbackSpeed=source["speed"] | 1.f;float pitch=source["pitch"] | 0.f;impl_->pitchShift.reset(std::pow(2.f,pitch/12)/impl_->playbackSpeed);impl_->clockRate=0;
+    impl_->sourceOverride=true;impl_->playbackSpeed=source["speed"] | 1.f;if (impl_->pitchShift) impl_->pitchShift->reset(pitchRatio);impl_->clockRate=0;
     impl_->volume=source["volume"] | impl_->defaultVolume;impl_->applyHardwareVolumePercent(impl_->volume);
     impl_->audio.setTone(source["equalizer"]["lowDb"] | impl_->defaultLowDb,source["equalizer"]["presenceDb"] | impl_->defaultPresenceDb,source["equalizer"]["highDb"] | impl_->defaultHighDb);
     };
     const String text=source["text"] | "";
     const bool melody=!source["melody"].isNull();
     if(!text.isEmpty() || melody) {
+        // These synthesizers are unused by radio and ordinary SD playback.
+        if (melody && !impl_->piano) {
+            void* memory=allocateStorageBuffer(sizeof(ElmaAudio::PianoSynth));
+            if(!memory){error="Insufficient memory for melody synthesis";return false;}
+            impl_->piano=new(memory) ElmaAudio::PianoSynth();
+        } else if (!melody && !impl_->speech) {
+            void* memory=allocateStorageBuffer(sizeof(ElmaAudio::SpeechSynth));
+            if(!memory){error="Insufficient memory for speech synthesis";return false;}
+            impl_->speech=new(memory) ElmaAudio::SpeechSynth();
+        }
         uint32_t frames=0;
-        if(melody){ElmaAudio::PianoNote events[128];size_t count=0;for(JsonVariantConst n:source["melody"]["notes"].as<JsonArrayConst>()){auto& event=events[count++];event.note=n["note"];event.start=n["start"];event.duration=n["duration"];event.velocity=n["velocity"];}impl_->piano.begin(source["melody"]["instrument"],events,count);frames=impl_->piano.maximumFrames();}
-        else{impl_->speech.begin(text.c_str(),source["speechRate"]|.85f,source["voicePitch"]|125.f,source["intonation"]|.65f);frames=impl_->speech.maximumFrames();}
+        if(melody){ElmaAudio::PianoNote events[128];size_t count=0;for(JsonVariantConst n:source["melody"]["notes"].as<JsonArrayConst>()){auto& event=events[count++];event.note=n["note"];event.start=n["start"];event.duration=n["duration"];event.velocity=n["velocity"];}impl_->piano->begin(source["melody"]["instrument"],events,count);frames=impl_->piano->maximumFrames();}
+        else{impl_->speech->begin(text.c_str(),source["speechRate"]|.85f,source["voicePitch"]|125.f,source["intonation"]|.65f);frames=impl_->speech->maximumFrames();}
         StorageTarget target=storageMounted(StorageTarget::Sd)?StorageTarget::Sd:StorageTarget::Flash;
         const StorageBackendSummary summary=getStorageSummary(target);
         if(!summary.mounted || summary.freeBytes < frames*2ULL+65536) {error="Insufficient scratch storage for offline speech";return false;}

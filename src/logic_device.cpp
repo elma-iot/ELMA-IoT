@@ -15,6 +15,14 @@
 #include <cstring>
 
 namespace {
+bool releaseEditorCatalog(JsonDocument& graph) {
+    graph.remove("devices");
+    // ArduinoJson remove/shrinkToFit keeps freed slots in its pool. Copy the
+    // small executable graph to return the catalog's pools to the system heap.
+    JsonDocument compact(graph.allocator());
+    if(!compact.set(graph) || compact.overflowed())return false;
+    graph=std::move(compact);return true;
+}
 constexpr uint32_t kLogicActivityMagic = 0x454c4d41u;
 constexpr uint32_t kLogicActionStableMs = 30000u;
 constexpr uint8_t kLogicMaxAutoRetries = ElmaLogic::MaxAutoRetries;
@@ -181,6 +189,7 @@ void LogicDevice::configureStatusLed(const DeviceSettings& device) {
 }
 
 bool LogicDevice::begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const DeviceSettings& device) {
+    state_=&state;status_=std::move(status);actions_=std::move(actions);mode_="stopped";
     mutex_=xSemaphoreCreateMutex();
     if(!mutex_)return false;
     source_=2166136261u;for(const char* p=program;*p;++p)source_=(source_^uint8_t(*p))*16777619u;
@@ -191,9 +200,13 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     }
     devices_.set(compiled["devices"]);
     if(devices_.overflowed()) {
+        devices_.clear();
         state.setLastError("Insufficient memory for Logics device bindings");
         return false;
     }
+    // The device owns the editor catalog; the scheduler only needs graph nodes.
+    // Keeping both copies exhausts classic ESP32 heap before web registration.
+    if(!releaseEditorCatalog(compiled)){state.setLastError("Insufficient memory for Logics graph");return false;}
     configureStatusLed(device);
     mode_=compiled["mode"]|"playing";
     if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
@@ -222,8 +235,9 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     // Keep one graph document: serializing and reparsing several copies here
     // exhausted internal RAM on LCD boards without PSRAM before setup finished.
     loadRecoveryState(compiled);
-    state_=&state;status_=std::move(status);actions_=std::move(actions);std::string error;
+    std::string error;
     LedArrays::reset();
+    if(!compiled["devices"].isNull() && !releaseEditorCatalog(compiled)){state.setLastError("Insufficient memory for saved Logics graph");return false;}
     bool ok=runtime_.begin(std::move(compiled),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},error);
     if(ok)runtime_.setLedBinding(ledBinding_.as<JsonObjectConst>());
     if (!ok) {state_->setLastError(error.c_str());DebugLog.printf("[logics] %s\n",error.c_str());}
@@ -377,7 +391,7 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
 #else
     response["audioEnabled"]=true;
 #endif
-    if(graph)response["graph"].set(runtime_.graph());
+    if(graph){response["graph"].set(runtime_.graph());response["graph"]["devices"].set(devices_);}
     if(recoveryConfirmationRequired_ || recoveryRetries_){response["recovery"]["confirmationRequired"]=recoveryConfirmationRequired_;response["recovery"]["retryAttempt"]=recoveryRetries_;response["recovery"]["retryLimit"]=kLogicMaxAutoRetries;response["recovery"]["groupId"]=quarantinedGroup_;response["recovery"]["nodeId"]=quarantinedNode_;response["recovery"]["warning"]=recoveryWarning_;}
     xSemaphoreGive(mutex_);
 }
@@ -424,10 +438,10 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         if(!persist(accepted.as<JsonVariantConst>(),mode,error))return false;
         if(audioOwned_)for(JsonObjectConst n:runtime_.nodes())if(n["id"]==audioOwner_){JsonDocument stop;stop["action"]="stop";stop["all"]=true;std::string ignored;actions_(n,stop.as<JsonVariantConst>(),ignored);break;}
         audioOwned_=false;
-        std::string payload;serializeJson(accepted,payload);
+        if(!releaseEditorCatalog(accepted)){error="Insufficient memory for Logics graph";return false;}
         gpio_.reset();
         LedArrays::reset();
-        if(!runtime_.begin(payload.c_str(),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
+        if(!runtime_.begin(std::move(accepted),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
         mode_="stopped";applyMode(mode);polled_=false;
 #endif
     } else if(mode!=mode_) {

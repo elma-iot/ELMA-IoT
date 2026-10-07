@@ -56,6 +56,8 @@ import { defaultPeripheralPins, normalizeBoardRails } from "./modules/peripheral
 import { createRadioBrowserModule } from "./modules/radio-browser.js";
 import { createStatusRenderModule } from "./modules/status-render.js";
 import { createStorageTab } from "./modules/storage-tab.js";
+import { createSdFormatDialog } from "./modules/sd-format.js";
+const sdFormatDialog = createSdFormatDialog({request:(...args)=>request(...args)});
 import { initTabNavigation } from "./modules/tab-navigation.js";
 import { createUiHistoryModule } from "./modules/ui-history.js";
 import { createWifiTab } from "./modules/wifi-tab.js";
@@ -1331,6 +1333,7 @@ const elements = {
   storageBreadcrumbs: document.getElementById("storageBreadcrumbs"),
   storageNewFolderButton: document.getElementById("storageNewFolderButton"),
   storageRemountButton: document.getElementById("storageRemountButton"),
+  storageEjectButton: document.getElementById("storageEjectButton"),
   storageReindexButton: document.getElementById("storageReindexButton"),
   storageSelectModeButton: document.getElementById("storageSelectModeButton"),
   storageSelectAllButton: document.getElementById("storageSelectAllButton"),
@@ -6242,6 +6245,7 @@ function updateStorageToolbar(storage = state.storageInfoByTarget[state.activeSt
     elements.storageNewFolderButton.disabled = !storage.mounted;
   }
   if (elements.storageRemountButton) {
+    if(elements.storageEjectButton)elements.storageEjectButton.hidden=state.activeStorageTarget!=="sd";
     const isSdTarget = state.activeStorageTarget === "sd";
     elements.storageRemountButton.hidden = !isSdTarget;
     elements.storageRemountButton.disabled = !isSdTarget;
@@ -9299,6 +9303,7 @@ async function loadStatus() {
     const status = await request(`/api/status?ts=${Date.now()}`);
     renderStatus(status);
     cameraTab?.update(status);
+    sdFormatDialog.update(status);
     microphonesTab?.update(status);
     bno055Tab?.update(state.settings,status?.system?.webUiLocked);
     if (status.firmware?.touchscreen && !status.system?.webUiLocked && !document.hidden) {
