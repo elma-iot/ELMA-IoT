@@ -176,6 +176,11 @@ def npx_command() -> list[str]:
 
 def tool_command(name: str) -> list[str]:
     node = os.environ.get("ELMA_NODE_EXECUTABLE")
+    # Copied Unix node_modules can contain dereferenced .bin symlinks. SVGO's
+    # relative imports then resolve from the wrong directory. Invoke its real
+    # entry point directly; this also avoids starting npm for every SVG.
+    if not node and name == "svgo":
+        node = shutil.which("node")
     if node:
         cli = {"esbuild": "esbuild/bin/esbuild", "svgo": "svgo/bin/svgo"}[name]
         return [node, str(ROOT / "node_modules" / cli)]
