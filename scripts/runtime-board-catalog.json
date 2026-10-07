@@ -4137,7 +4137,7 @@
       46
     ],
     "defaults": {
-      "statusLedPin": 0,
+      "statusLedPin": -1,
       "statusLedType": "neopixel",
       "statusLedActiveLow": false,
       "statusLedGreenPin": -1,
@@ -4473,7 +4473,7 @@
       "alt": "VIEWE 3.5-inch 320x480 В· UEDX32480035E-WB-A board"
     },
     "defaults": {
-      "statusLedPin": 0,
+      "statusLedPin": -1,
       "statusLedType": "neopixel",
       "statusLedActiveLow": false,
       "statusLedGreenPin": -1,
@@ -4742,7 +4742,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028r.svg",
-      "alt": "ESP32-2432S028R В· 2.8-inch resistive"
+      "alt": "ESP32-2432S028R · 2.8-inch resistive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4814,7 +4814,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028c.svg",
-      "alt": "ESP32-2432S028C В· 2.8-inch capacitive"
+      "alt": "ESP32-2432S028C · 2.8-inch capacitive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4886,7 +4886,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-3248s035c.svg",
-      "alt": "ESP32-48S035 / ESP32-3248S035C В· 3.5-inch capacitive"
+      "alt": "ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4947,7 +4947,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-cam.svg",
-      "alt": "ESP32-CAM В· AI-Thinker / OV2640"
+      "alt": "ESP32-CAM · AI-Thinker / OV2640"
     },
     "defaults": {
       "statusLedPin": 33,
