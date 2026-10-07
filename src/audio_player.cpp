@@ -252,13 +252,25 @@ void clearOverlay(AudioPlayer::Impl* impl) {
     }
 }
 
+void reconstructAudioOutput(Audio& audio, uint8_t bclkPin, uint8_t wsPin) {
+    audio.~Audio();
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    new (&audio) Audio(bclkPin == 255 && wsPin == 254, I2S_DAC_CHANNEL_LEFT_EN);
+#else
+    // Only classic ESP32 has the internal DAC used by the Sunton LCD boards.
+    // ESP32-S3 (including SPK) uses the external I2S output.
+    (void)bclkPin;
+    (void)wsPin;
+    new (&audio) Audio();
+#endif
+}
+
 void recreateAudioEngine(AudioPlayer::Impl* impl) {
     if (impl == nullptr) return;
 #if defined(APP_SPK_BOARD)
     digitalWrite(46, LOW);
 #endif
-    impl->audio.~Audio();
-    new (&impl->audio) Audio(impl->bclkPin==255 && impl->wsPin==254, I2S_DAC_CHANNEL_LEFT_EN);
+    reconstructAudioOutput(impl->audio, impl->bclkPin, impl->wsPin);
     impl->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
     impl->audio.setI2SCommFMT_LSB(false);
     if (impl->outputEnabled && impl->bclkPin!=255) {
@@ -552,8 +564,7 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
 #if defined(APP_SPK_BOARD)
     digitalWrite(46, LOW);pinMode(46, OUTPUT);
 #endif
-    impl_->audio.~Audio();
-    new (&impl_->audio) Audio(bclkPin==255 && wsPin==254, I2S_DAC_CHANNEL_LEFT_EN);
+    reconstructAudioOutput(impl_->audio, bclkPin, wsPin);
     impl_->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
     impl_->audio.setI2SCommFMT_LSB(false);
     if (outputEnabled && bclkPin!=255) {
