@@ -73,12 +73,14 @@ class WebServerManager {
     String panelStoragePath_="/", panelStorageListing_, panelStoragePage_;
     int panelStorageOffset_=0;
     bool panelStorageDirty_=true, panelStorageMounted_=false;
+    void* panelBrowseJob_=nullptr;
 #endif
     StatusAppender ledStatusAppender_;
     LogicsGetter logicsGetter_;
     LogicsHandler logicsHandler_;
 #ifndef APP_DISABLE_WEB_UI
     AsyncWebServer server_;
+    bool listenerStartPending_=false;uint32_t listenerRetryAt_=0;
     AppState* appState_ = nullptr;
     WiFiManager* wifiManager_ = nullptr;
     SettingsManager* settingsManager_ = nullptr;

@@ -2,6 +2,7 @@
 #if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
 #include "panel_settings.h"
 #include "storage_memory.h"
+#include "panel_memory.h"
 #include "system_metrics.h"
 #include "device_log.h"
 #include "plot_telemetry.h"
@@ -9,12 +10,31 @@
 #include "panel_radio.h"
 #include "bno055_service.h"
 namespace {
+portMUX_TYPE browseMux=portMUX_INITIALIZER_UNLOCKED;
+struct PanelBrowseJob{StorageTarget target;String path,result;int offset;bool done=false;};
+void browseStorage(void* context){
+ auto* job=static_cast<PanelBrowseJob*>(context);JsonDocument listing;auto files=listing["files"].to<JsonArray>();
+ beginStorageRead(job->target);File dir=storageOpen(job->target,job->path);
+ if(!dir||!dir.isDirectory())listing["error"]="Folder unavailable. Insert a card or return to root.";
+ else for(int i=0;dir;i++){
+  File file=dir.openNextFile();if(!file)break;
+  if(i<job->offset){file.close();continue;}
+  if(files.size()>=12){listing["more"]=true;file.close();break;}
+  String name=file.name();name=name.substring(name.lastIndexOf('/')+1);auto item=files.add<JsonObject>();item["name"]=name;item["path"]=(job->path=="/"?String("/"):job->path+"/")+name;item["directory"]=file.isDirectory();item["size"]=file.size();file.close();
+  taskYIELD();
+ }
+ dir.close();endStorageRead(job->target);
+ if(listing.overflowed()){listing.clear();listing["error"]="Not enough memory for folder listing";}
+ serializeJson(listing,job->result);portENTER_CRITICAL(&browseMux);job->done=true;portEXIT_CRITICAL(&browseMux);
+}
 bool selected(JsonVariantConst values,const char* fragment=nullptr){
  if(values.is<const char*>()){String s=values.as<String>();return s.length()&&s!="none"&&(!fragment||s.indexOf(fragment)>=0);}
  for(JsonVariantConst v:values.as<JsonArrayConst>())if(selected(v,fragment))return true;return false;
 }
 }
 void WebServerManager::panelSnapshot(const String& page,JsonObject root){
+ if(panelBrowseJob_&&!page.startsWith("storage-")){auto* job=static_cast<PanelBrowseJob*>(panelBrowseJob_);portENTER_CRITICAL(&browseMux);bool done=job->done;portEXIT_CRITICAL(&browseMux);if(done){delete job;panelBrowseJob_=nullptr;panelStorageDirty_=true;}}
+
  if(page=="info"){root["build"]=__DATE__ " " __TIME__;root["mac"]=WiFi.macAddress();}
  root["version"]=APP_VERSION;security_.status(root["security"].to<JsonObject>());
  if(security_.locked())return;
@@ -25,7 +45,7 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  if(page=="gpio"||page=="wled"||page=="motor")settingsManager_->toJson(settings,config,"ui",false);
  // Passwords stay on the unlocked local panel; other pages never carry them.
  if(page!="mqtt")config["mqtt"].remove("password");config["webAuth"].remove("password");
- JsonDocument profileDoc(storageJsonAllocator());JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
+ JsonDocument profileDoc(panelJsonAllocator());JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
  if(profiles.isNull()){deserializeJson(profileDoc,settings.ui.peripheralProfileSelections);profiles=profileDoc.as<JsonVariantConst>();}
  if(page=="wifi"){
   root["wifiLive"]["ssid"]=wifiManager_->currentSsid();
@@ -43,7 +63,7 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  caps["storage-external"]=settings.sd.enabled||selected(profiles["storage"]);caps["migration"]=false;
  static bool hasPlots=false;static uint32_t graphAt=0;
  if(page=="logics"||page=="plots"||millis()-graphAt>5000){
-  JsonDocument graph(storageJsonAllocator());if(logicsGetter_)logicsGetter_(graph,page=="logics");
+  JsonDocument graph(panelJsonAllocator());if(logicsGetter_)logicsGetter_(graph,page=="logics");
   if(page=="logics"||page=="plots")root["logics"].set(graph);
   hasPlots=graph["hasPlots"]|false;
   if(!graph["graph"].isNull()){hasPlots=false;for(JsonObjectConst n:graph["graph"]["nodes"].as<JsonArrayConst>())if(n["type"]=="mainboard.plot")hasPlots=true;}
@@ -53,26 +73,22 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  if(page=="motor"&&motorStatusAppender_)motorStatusAppender_(root);
  if(page=="hardware"||page=="info"||page=="gpio")appendSystemMetricsJson(root);
  if(page=="firmware")otaManager_->appendStatusJson(root);
- if(page=="logs"){JsonDocument log(storageJsonAllocator());DebugLog.snapshot(log.to<JsonObject>(),"");String text=log["text"]|"";root["logText"]=text.substring(text.length()>3000?text.length()-3000:0);}
- if(page=="plots"){JsonDocument samples(storageJsonAllocator());plotSamplesSince(0,0,samples);root["plots"].set(samples);}
+ if(page=="logs"){JsonDocument log(panelJsonAllocator());DebugLog.snapshot(log.to<JsonObject>(),"");String text=log["text"]|"";root["logText"]=text.substring(text.length()>3000?text.length()-3000:0);}
+ if(page=="plots"){JsonDocument samples(panelJsonAllocator());plotSamplesSince(0,0,samples);root["plots"].set(samples);}
  if(page=="playback")PanelRadio::snapshot(root["radio"].to<JsonObject>());
  if(page=="storage-internal"||page=="storage-external"){
   StorageTarget target=page=="storage-external"?StorageTarget::Sd:StorageTarget::Flash;auto status=getStorageSummary(target);root["storage"]["mounted"]=status.mounted;root["storage"]["total"]=status.totalBytes;root["storage"]["free"]=status.freeBytes;
   if(panelStoragePage_!=page){panelStoragePage_=page;panelStoragePath_="/";panelStorageOffset_=0;panelStorageDirty_=true;}
   if(panelStorageMounted_!=status.mounted){panelStorageMounted_=status.mounted;panelStorageDirty_=true;}
-  if(panelStorageDirty_){
-   JsonDocument listing(storageJsonAllocator());auto files=listing["files"].to<JsonArray>();
-   beginStorageRead(target);File dir=storageOpen(target,panelStoragePath_);
-   if(!dir||!dir.isDirectory())listing["error"]="Folder unavailable. Insert a card or return to the root folder.";
-   else for(int i=0;dir;i++){
-    File f=dir.openNextFile();if(!f)break;
-    if(i<panelStorageOffset_){f.close();continue;}
-    if(files.size()>=12){listing["more"]=true;f.close();break;}
-    String name=f.name();name=name.substring(name.lastIndexOf('/')+1);
-    auto item=files.add<JsonObject>();item["name"]=name;item["path"]=(panelStoragePath_=="/"?String("/"):panelStoragePath_+"/")+name;item["directory"]=f.isDirectory();item["size"]=f.size();f.close();
-   }dir.close();endStorageRead(target);panelStorageListing_="";serializeJson(listing,panelStorageListing_);panelStorageDirty_=false;
+  if(panelBrowseJob_){auto* job=static_cast<PanelBrowseJob*>(panelBrowseJob_);portENTER_CRITICAL(&browseMux);bool done=job->done;portEXIT_CRITICAL(&browseMux);
+   if(done){if(job->target==target&&job->path==panelStoragePath_&&job->offset==panelStorageOffset_&&!panelStorageDirty_)panelStorageListing_=job->result;delete job;panelBrowseJob_=nullptr;}
   }
-  JsonDocument listing(storageJsonAllocator());deserializeJson(listing,panelStorageListing_);
+  if(panelStorageDirty_&&!panelBrowseJob_){
+   auto* job=new(std::nothrow) PanelBrowseJob{target,panelStoragePath_,"",panelStorageOffset_,false};
+   if(job&&requestStorageBackgroundJob(browseStorage,job)){panelBrowseJob_=job;panelStorageDirty_=false;panelStorageListing_="";}else delete job;
+  }
+  root["storage"]["busy"]=panelBrowseJob_!=nullptr;
+  JsonDocument listing(panelJsonAllocator());deserializeJson(listing,panelStorageListing_);
   root["files"].set(listing["files"]);root["storage"]["error"]=listing["error"]|"";root["storage"]["more"]=listing["more"]|false;
   root["storage"]["path"]=panelStoragePath_;root["storage"]["offset"]=panelStorageOffset_;
  }
@@ -83,12 +99,13 @@ bool WebServerManager::panelCommand(const String& action,JsonVariantConst args,S
  {JsonDocument activity,result;activity["action"]="activity";security_.command(activity,result.to<JsonObject>());}
  if(action=="patch"){
   // Resolve against current settings here, not the older screen snapshot.
-  JsonDocument latest(storageJsonAllocator()),patch(storageJsonAllocator());settingsManager_->toJson(settingsGetter_(),latest.to<JsonObject>());
+  JsonDocument latest(panelJsonAllocator()),patch(panelJsonAllocator());auto current=settingsGetter_();auto latestRoot=latest.to<JsonObject>();
   for(JsonObjectConst change:args["changes"].as<JsonArrayConst>()){
    std::string path=change["path"]|"";size_t split=path.find('/');if(split==std::string::npos){error="Invalid setting";return false;}
-   const std::string section=path.substr(0,split);if(patch[section].isNull())patch[section].set(latest[section]);
+   const std::string section=path.substr(0,split);if(patch[section].isNull()){settingsManager_->toJson(current,latestRoot,section.c_str());if(latest.overflowed()){error="Not enough memory to apply settings";return false;}patch[section].set(latest[section]);}
    if(!PanelSettings::set(patch.as<JsonVariant>(),path,change["value"])){error="Invalid setting";return false;}
   }
+  if(patch.overflowed()){error="Not enough memory to apply settings";return false;}
   return settingsSaver_(patch,error);
  }
  if(action=="logics"){JsonDocument result;return logicsHandler_&&logicsHandler_(args,result,error);}

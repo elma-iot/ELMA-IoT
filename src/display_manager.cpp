@@ -43,12 +43,15 @@ void DisplayManager::begin(const OledSettings& settings) {
 
 void DisplayManager::applySettings(const OledSettings& settings) {
     SharedI2c::Guard bus; if(!bus)return;
+#if APP_HAS_ONBOARD_PANEL
+    const bool keepPanel=panel_&&settings.enabled&&settings.displayType=="panel"&&settings.touchEnabled==settings_.touchEnabled;
+#endif
     settings_ = settings;
     ssd1306_.reset();
     sh1106_.reset();
 #if APP_HAS_ONBOARD_PANEL
     dashboard_.reset();
-    panel_.reset();
+    if(!keepPanel)panel_.reset();
 #endif
     dimmed_ = false;
     scrollOffset_ = 0;
@@ -59,14 +62,18 @@ void DisplayManager::applySettings(const OledSettings& settings) {
 
 #if APP_HAS_ONBOARD_PANEL
     if (settings_.displayType == "panel") {
-        panel_.reset(new PanelDisplay());
-        if (!panel_->begin(settings_.touchEnabled, rotationIndex(), settings_.brightness)) {
+        if(!panel_)panel_.reset(new PanelDisplay());
+        if (!keepPanel && !panel_->begin(settings_.touchEnabled, rotationIndex(), settings_.brightness)) {
             panel_.reset();
             DebugLog.println("[display] VIEWE initialization failed");
         }
-        if(panel_ && settings_.interfaceMode=="lvgl") {
+        if(panel_){panel_->setRotation(rotationIndex());panel_->brightness(settings_.brightness);if(settings_.interfaceMode!="lvgl")panel_->ensureTextBuffer();}
+        // Keep the early boot splash small. Build LVGL only after the network
+        // service has allocated its task and the real snapshot provider exists.
+        if(panel_ && settings_.interfaceMode=="lvgl" && panelSnapshot_) {
+            panel_->releaseTextBuffer();
             dashboard_.reset(new PanelDashboard(*panel_));
-            if(!dashboard_->begin(rotationIndex())) { dashboard_.reset(); DebugLog.println("[display] LVGL allocation failed; using text interface"); }
+            if(!dashboard_->begin(rotationIndex())) { dashboard_.reset(); panel_->ensureTextBuffer(); DebugLog.println("[display] LVGL allocation failed; using text interface"); }
         }
         lastSignature_ = "";
         lastCenterText_ = "";

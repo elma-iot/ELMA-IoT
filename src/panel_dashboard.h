@@ -9,12 +9,13 @@
 #include <deque>
 #include "app_state.h"
 #include "storage_memory.h"
+#include "panel_memory.h"
 class PanelDisplay;
 class PanelDashboard {
 public:
  using Snapshot=std::function<void(const String&,JsonObject)>;
  using Command=std::function<bool(const String&,JsonVariantConst,String&)>;
- explicit PanelDashboard(PanelDisplay& panel):panel_(panel),state_(storageJsonAllocator()){}
+ explicit PanelDashboard(PanelDisplay& panel):panel_(panel),state_(panelJsonAllocator()){}
  ~PanelDashboard();bool begin(uint8_t rotation);
  void loop(const AppStateSnapshot&,const Snapshot&,const Command&,const String&);
  bool touched(){bool v=touched_;touched_=false;return v;}
@@ -28,7 +29,9 @@ private:
  std::map<String,lv_obj_t*> labels_,buttons_,meters_;std::map<String,String> drafts_;std::vector<Field> fields_;std::vector<String> tabs_;
  JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_,countryOptions_="All countries";
  unsigned long tick_=0,refresh_=0,noticeUntil_=0;bool touched_=false,frameReported_=false,updating_=false,refreshNow_=true;
- bool radioRequested_=false,keyboardBindingsDirty_=true;
+ bool radioRequested_=false,keyboardBindingsDirty_=true,snapshotReady_=false,bodySuspended_=false,metricsLogged_=false;
+ unsigned formPage_=0,wifiResultOffset_=0;
+ void suspendBody();void centerSpinner();
  lv_obj_t *wifiOverlay_=nullptr,*wifiContent_=nullptr,*wifiMessage_=nullptr,*wifiProgress_=nullptr,*wifiSsid_=nullptr,*wifiPassword_=nullptr;
  enum class WifiStep { Closed, Scanning, Networks, Credentials, Connecting, Success };
  WifiStep wifiStep_=WifiStep::Closed;unsigned long wifiStepAt_=0;String wifiTarget_;

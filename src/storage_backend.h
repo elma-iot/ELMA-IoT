@@ -23,6 +23,7 @@ struct StorageBackendSummary {
 void beginStorageBackends(const SettingsBundle& settings);
 void applyStorageSettings(const SettingsBundle& settings);
 void pollStorageBackends();
+bool requestStorageBackgroundJob(void (*work)(void*),void* context);
 bool requestSdFormat(bool confirmed, String& error);
 enum class SdFormatState { Idle, Pending, Formatting, Complete, Failed };
 SdFormatState sdFormatState();

@@ -420,6 +420,7 @@ bool WiFiManager::isConfiguredNetworkVisible() {
 
     WiFi.enableSTA(true);
     const int networkCount = WiFi.scanNetworks(false, true);
+    if(networkCount==WIFI_SCAN_RUNNING)return false;
     if (networkCount <= 0) {
         WiFi.scanDelete();
         return false;
@@ -450,6 +451,7 @@ WiFiManager::PreferredAccessPoint WiFiManager::findPreferredAccessPoint() {
 
     WiFi.enableSTA(true);
     const int networkCount = WiFi.scanNetworks(false, true);
+    if(networkCount==WIFI_SCAN_RUNNING)return preferred;
     if (networkCount <= 0) {
         WiFi.scanDelete();
         return preferred;
@@ -623,6 +625,7 @@ void WiFiManager::appendScanResultsJson(JsonArray networks) {
         for(JsonObjectConst item:cached.as<JsonArrayConst>())networks.add(item);
         return;
     }
+    if(networkCount==WIFI_SCAN_RUNNING)return;
     if (networkCount <= 0) {
         lastScanCompleted_ = networkCount == 0;
         if(networkCount==0)lastScanResults_="[]";
@@ -631,21 +634,17 @@ void WiFiManager::appendScanResultsJson(JsonArray networks) {
         return;
     }
 
-    lastScanCompleted_ = true;
-
+    // Cache from an independent document, never from a potentially truncated
+    // consumer (the small LCD can reject allocations under memory pressure).
+    JsonDocument complete;auto results=complete.to<JsonArray>();
     for (int index = 0; index < networkCount; ++index) {
-        const String ssid = WiFi.SSID(index);
-        if (ssid.isEmpty()) {
-            continue;
-        }
-
-        JsonObject network = networks.add<JsonObject>();
-        network["ssid"] = ssid;
-        network["rssi"] = WiFi.RSSI(index);
-        network["encrypted"] = WiFi.encryptionType(index) != WIFI_AUTH_OPEN;
+        const String ssid=WiFi.SSID(index);if(ssid.isEmpty())continue;
+        auto item=results.add<JsonObject>();item["ssid"]=ssid;item["rssi"]=WiFi.RSSI(index);item["encrypted"]=WiFi.encryptionType(index)!=WIFI_AUTH_OPEN;
     }
-
-    lastScanResults_="";serializeJson(networks,lastScanResults_);
+    if(complete.overflowed())return; // Keep SDK results available for a retry.
+    String encoded;serializeJson(complete,encoded);if(encoded.length()!=measureJson(complete))return;
+    lastScanResults_=encoded;lastScanCompleted_=true;
+    for(JsonObjectConst item:results)networks.add(item);
     WiFi.scanDelete();
     finishUserScan();
 }

@@ -1023,7 +1023,8 @@ void WebServerManager::begin(
     registerApiRoutes();
     registerWebRoutes();
     server_.begin();
-    DebugLog.printf("[web] ready heap=%u largest=%u\n",ESP.getFreeHeap(),ESP.getMaxAllocHeap());
+    listenerStartPending_=server_.state()!=LISTEN;listenerRetryAt_=millis();
+    DebugLog.printf("[web] %s heap=%u largest=%u\n",server_.state()==LISTEN?"ready":"listener failed to start",ESP.getFreeHeap(),ESP.getMaxAllocHeap());
 }
 
 bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
@@ -1049,7 +1050,13 @@ bool WebServerManager::rejectIfWebUiLocked(AsyncWebServerRequest* request) {
     if(!security_.locked())return false;
     JsonDocument doc;doc["error"]="Interface locked";doc["locked"]=true;sendJson(request,doc,423);return true;
 }
-void WebServerManager::securityTick(){security_.tick();}
+void WebServerManager::securityTick(){
+    security_.tick();
+    if(listenerStartPending_&&millis()-listenerRetryAt_>=5000&&ESP.getFreeHeap()>24000){
+        listenerRetryAt_=millis();server_.begin();listenerStartPending_=server_.state()!=LISTEN;
+        if(!listenerStartPending_)DebugLog.println("[web] listener recovered");
+    }
+}
 void WebServerManager::setWebUiLocked(bool locked){security_.externalLock(locked);}
 bool WebServerManager::webUiLocked() const {return security_.locked();}
 

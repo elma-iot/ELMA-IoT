@@ -26,7 +26,7 @@ bool PanelDashboard::begin(uint8_t rotation){
  pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*rows*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));if(!pixels_)return false;
  lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*rows);lv_disp_drv_init(&displayDriver_);
  displayDriver_.hor_res=kPanelWidth;displayDriver_.ver_res=kPanelHeight;displayDriver_.draw_buf=&drawBuffer_;displayDriver_.flush_cb=flush;displayDriver_.user_data=this;displayDriver_.sw_rotate=1;
- display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
+ display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_theme(display_,lv_theme_basic_init(display_));lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
  lv_indev_drv_init(&inputDriver_);inputDriver_.type=LV_INDEV_TYPE_POINTER;inputDriver_.read_cb=touch;inputDriver_.user_data=this;inputDriver_.disp=display_;inputDriver_.scroll_limit=8;inputDriver_.scroll_throw=12;input_=lv_indev_drv_register(&inputDriver_);
  screen_=lv_disp_get_scr_act(display_);lv_obj_set_style_bg_color(screen_,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(screen_,lv_color_hex(0xf3f4f6),0);lv_obj_set_style_pad_all(screen_,6,0);lv_obj_set_style_pad_row(screen_,5,0);lv_obj_set_flex_flow(screen_,LV_FLEX_FLOW_COLUMN);lv_obj_clear_flag(screen_,LV_OBJ_FLAG_SCROLLABLE);
  auto* bar=lv_obj_create(screen_);lv_obj_set_style_text_color(bar,lv_color_hex(0xf3f4f6),0);lv_obj_set_size(bar,LV_PCT(100),28);lv_obj_set_style_pad_all(bar,0,0);lv_obj_set_style_border_width(bar,0,0);lv_obj_set_style_bg_opa(bar,LV_OPA_TRANSP,0);lv_obj_clear_flag(bar,LV_OBJ_FLAG_SCROLLABLE);
@@ -38,7 +38,7 @@ bool PanelDashboard::begin(uint8_t rotation){
  lv_obj_add_event_cb(speaker_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));if(s->state_["security"]["locked"]==true)return;
   if(lv_obj_has_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN))lv_obj_clear_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);
  },LV_EVENT_CLICKED,this);
- menu_=lv_dropdown_create(screen_);lv_obj_set_size(menu_,LV_PCT(100),44);lv_obj_add_event_cb(menu_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));auto i=lv_dropdown_get_selected(s->menu_);if(i<s->tabs_.size())s->page(s->tabs_[i]);},LV_EVENT_VALUE_CHANGED,this);
+ menu_=lv_dropdown_create(screen_);lv_obj_set_style_text_color(menu_,lv_color_hex(0x111827),0);lv_obj_set_size(menu_,LV_PCT(100),44);lv_obj_add_event_cb(menu_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));auto i=lv_dropdown_get_selected(s->menu_);if(i<s->tabs_.size())s->page(s->tabs_[i]);},LV_EVENT_VALUE_CHANGED,this);
  body_=lv_obj_create(screen_);lv_obj_set_scroll_dir(body_,LV_DIR_VER);lv_obj_add_flag(body_,LV_OBJ_FLAG_SCROLL_MOMENTUM);lv_obj_clear_flag(body_,LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_set_width(body_,LV_PCT(100));lv_obj_set_flex_grow(body_,1);lv_obj_set_flex_flow(body_,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(body_,8,0);lv_obj_set_style_pad_row(body_,9,0);lv_obj_set_style_bg_color(body_,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(body_,lv_color_hex(0xf3f4f6),0);
  notice_=lv_label_create(screen_);lv_obj_set_width(notice_,LV_PCT(100));lv_label_set_long_mode(notice_,LV_LABEL_LONG_WRAP);lv_label_set_text(notice_,"");
  keyboard_=lv_keyboard_create(lv_disp_get_layer_top(display_));lv_obj_set_height(keyboard_,LV_PCT(48));lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);
@@ -74,13 +74,25 @@ void PanelDashboard::bindKeyboardDismiss(lv_obj_t* root){
  for(uint32_t i=0;i<lv_obj_get_child_cnt(root);i++)bindKeyboardDismiss(lv_obj_get_child(root,i));
 }
 void PanelDashboard::closeWifiDialog(){
+ if(wifiOverlay_){refreshNow_=true;}
  lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);
  if(wifiOverlay_)lv_obj_del(wifiOverlay_);
  wifiOverlay_=wifiContent_=wifiMessage_=wifiProgress_=wifiSsid_=wifiPassword_=nullptr;wifiStep_=WifiStep::Closed;mqttDialog_=false;mqttUser_=mqttPort_=nullptr;
  lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));
 }
+void PanelDashboard::suspendBody(){
+ if(bodySuspended_)return;
+ for(const auto& f:fields_)if(f.dirty)drafts_[f.path]=fieldText(f);
+ fields_.clear();labels_.clear();buttons_.clear();meters_.clear();
+ lv_obj_clean(body_);bodySuspended_=true;
+}
+void PanelDashboard::centerSpinner(){
+ wifiProgress_=lv_spinner_create(wifiContent_,1000,70);lv_obj_set_size(wifiProgress_,44,44);
+ lv_obj_add_flag(wifiProgress_,LV_OBJ_FLAG_IGNORE_LAYOUT);lv_obj_align(wifiProgress_,LV_ALIGN_CENTER,0,0);
+}
 void PanelDashboard::wifiDialog(WifiStep step,const String& ssid,bool mqtt){
- closeWifiDialog();keyboardBindingsDirty_=true;mqttDialog_=mqtt;wifiStep_=step;wifiStepAt_=millis();
+ closeWifiDialog();suspendBody();keyboardBindingsDirty_=true;mqttDialog_=mqtt;wifiStep_=step;wifiStepAt_=millis();
+ if(ESP.getFreeHeap()<16000){lv_label_set_text(notice_,"Memory busy. Close playback and retry.");wifiStep_=WifiStep::Closed;refreshNow_=true;return;}
  wifiOverlay_=lv_obj_create(lv_disp_get_layer_top(display_));lv_obj_set_size(wifiOverlay_,LV_PCT(100),LV_PCT(100));
  lv_obj_set_style_bg_color(wifiOverlay_,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(wifiOverlay_,lv_color_hex(0xf3f4f6),0);lv_obj_clear_flag(wifiOverlay_,LV_OBJ_FLAG_SCROLLABLE);
  auto* title=lv_label_create(wifiOverlay_);lv_label_set_text(title,mqttDialog_?"MQTT setup":"Wi-Fi setup");lv_obj_align(title,LV_ALIGN_TOP_LEFT,0,8);
@@ -89,20 +101,22 @@ void PanelDashboard::wifiDialog(WifiStep step,const String& ssid,bool mqtt){
  wifiContent_=lv_obj_create(wifiOverlay_);lv_obj_set_size(wifiContent_,LV_PCT(100),lv_disp_get_ver_res(display_)-90);lv_obj_align(wifiContent_,LV_ALIGN_BOTTOM_MID,0,0);
  lv_obj_set_scroll_dir(wifiContent_,LV_DIR_VER);lv_obj_add_flag(wifiContent_,LV_OBJ_FLAG_SCROLL_MOMENTUM);lv_obj_clear_flag(wifiContent_,LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_set_flex_flow(wifiContent_,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(wifiContent_,8,0);lv_obj_set_style_pad_row(wifiContent_,10,0);lv_obj_set_style_bg_color(wifiContent_,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(wifiContent_,lv_color_hex(0xf3f4f6),0);
  wifiMessage_=lv_label_create(wifiContent_);lv_obj_set_width(wifiMessage_,LV_PCT(100));lv_label_set_long_mode(wifiMessage_,LV_LABEL_LONG_WRAP);
- if(step==WifiStep::Scanning){
-  lv_label_set_text(wifiMessage_,"Scanning for networks...");wifiProgress_=lv_spinner_create(wifiContent_,1000,70);lv_obj_set_size(wifiProgress_,44,44);return;
+ if(step==WifiStep::Scanning){wifiResultOffset_=0;
+  lv_label_set_text(wifiMessage_,"Scanning for networks...");centerSpinner();return;
  }
  if(step==WifiStep::Networks){
   auto networks=state_["wifiScan"]["networks"].as<JsonArrayConst>();lv_label_set_text(wifiMessage_,networks.size()?"Select your network":"No networks found. Close and scan again, or enter a name below.");
-  for(JsonObjectConst n:networks){String name=n["ssid"]|"";if(name.isEmpty())continue;
+  unsigned networkIndex=0;for(JsonObjectConst n:networks){if(networkIndex<wifiResultOffset_){++networkIndex;continue;}if(networkIndex++>=wifiResultOffset_+6)break;String name=n["ssid"]|"";if(name.isEmpty())continue;
    auto* b=lv_btn_create(wifiContent_);lv_obj_set_size(b,LV_PCT(100),48);auto* t=lv_label_create(b);lv_obj_set_width(t,LV_PCT(95));lv_label_set_long_mode(t,LV_LABEL_LONG_DOT);lv_label_set_text(t,name.c_str());lv_obj_center(t);
    lv_obj_add_event_cb(b,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));String name=lv_label_get_text(lv_obj_get_child(lv_event_get_target(e),0));s->wifiDialog(WifiStep::Credentials,name);},LV_EVENT_CLICKED,this);
   }
+  if(networks.size()>6){auto* next=lv_btn_create(wifiContent_);lv_obj_set_size(next,LV_PCT(100),40);auto* caption=lv_label_create(next);lv_label_set_text(caption,"More networks");lv_obj_center(caption);lv_obj_add_event_cb(next,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));s->wifiResultOffset_+=6;if(s->wifiResultOffset_>=s->state_["wifiScan"]["networks"].size())s->wifiResultOffset_=0;s->wifiDialog(WifiStep::Networks);},LV_EVENT_CLICKED,this);}
   auto* manual=lv_btn_create(wifiContent_);lv_obj_set_size(manual,LV_PCT(100),44);auto* t=lv_label_create(manual);lv_label_set_text(t,"Enter network manually");lv_obj_center(t);lv_obj_add_event_cb(manual,[](lv_event_t* e){static_cast<PanelDashboard*>(lv_event_get_user_data(e))->wifiDialog(WifiStep::Credentials);},LV_EVENT_CLICKED,this);return;
  }
  lv_label_set_text(wifiMessage_,mqttDialog_?"Broker host, password, username and port":"Enter network name and password");
  for(int i=0;i<(mqttDialog_?4:2);i++){
   auto* text=lv_textarea_create(wifiContent_);lv_obj_set_size(text,LV_PCT(100),46);lv_textarea_set_one_line(text,true);lv_textarea_set_max_length(text,mqttDialog_?128:(i?64:32));lv_textarea_set_placeholder_text(text,i==1?"Password":i==2?"Username":i==3?"Port":mqttDialog_?"Broker host":"Wi-Fi name");lv_textarea_set_password_mode(text,i==1);
+  lv_obj_set_style_bg_color(text,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(text,lv_color_hex(0xf3f4f6),0);
   if(mqttDialog_){const char* key=i==0?"host":i==1?"password":i==2?"username":"port";String value=valueText(state_["settings"]["mqtt"][key]);lv_textarea_set_text(text,value.c_str());if(i==0)wifiSsid_=text;else if(i==1)wifiPassword_=text;else if(i==2)mqttUser_=text;else{mqttPort_=text;lv_textarea_set_accepted_chars(text,"0123456789");}}
   else if(i){wifiPassword_=text;if(ssid==String(state_["settings"]["wifi"]["ssid"]|""))lv_textarea_set_text(text,state_["settings"]["wifi"]["password"]|"");}else{wifiSsid_=text;lv_textarea_set_text(text,ssid.c_str());}
   lv_obj_add_event_cb(text,wifiDialogEvent,LV_EVENT_CLICKED,this);lv_obj_add_event_cb(text,wifiDialogEvent,LV_EVENT_FOCUSED,this);
@@ -164,7 +178,12 @@ void PanelDashboard::field(const String& caption,const String& path,const String
  lv_obj_add_event_cb(f.object,event,LV_EVENT_ALL,this);fields_.push_back(f);
 }
 String PanelDashboard::fieldText(const Field& f)const{if(f.kind=="switch")return lv_obj_has_state(f.object,LV_STATE_CHECKED)?"true":"false";if(f.kind=="slider")return String(lv_slider_get_value(f.object));if(f.kind=="select")return itemAt(f.options,lv_dropdown_get_selected(f.object));return lv_textarea_get_text(f.object);}
-void PanelDashboard::settingsFields(){for(const auto& f:panelFormFields)if(page_==f.page)field(f.caption,f.path,f.kind,f.options,f.minimum,f.maximum);}
+void PanelDashboard::settingsFields(){
+ unsigned index=0,total=0;for(const auto& f:panelFormFields)if(page_==f.page)++total;
+ const unsigned size=4;if(formPage_*size>=total)formPage_=0;
+ for(const auto& f:panelFormFields)if(page_==f.page){if(index/size==formPage_)field(f.caption,f.path,f.kind,f.options,f.minimum,f.maximum);++index;}
+ if(total>size){label("Settings "+String(formPage_+1)+" / "+String((total+size-1)/size));if(formPage_)button("Previous settings","form:previous");if((formPage_+1)*size<total)button("More settings","form:next");}
+}
 void PanelDashboard::syncMenu(){
  String options,signature;std::vector<String> next;bool locked=state_["security"]["locked"]|false;
  for(const auto& tab:tabList)if((!locked||String(tab.key)=="security")&&(!tab.conditional||state_["caps"][tab.key]==true)){if(options.length())options+='\n';options+=tab.title;signature+=String(tab.key)+"|";next.emplace_back(tab.key);}
@@ -207,6 +226,7 @@ void PanelDashboard::player(){
 }
 void PanelDashboard::page(const String& key){
  keyboardBindingsDirty_=true;
+ if(key!=page_){formPage_=0;snapshotReady_=false;}bodySuspended_=false;metricsLogged_=false;
  page_=key;refreshNow_=true;lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));fields_.clear();buttons_.clear();labels_.clear();meters_.clear();lv_obj_clean(body_);
  for(size_t i=0;i<tabs_.size();i++)if(tabs_[i]==key)lv_dropdown_set_selected(menu_,i);
  if(key=="bno055"){labels_["bno055"]=label("");button("Compass + motion","bno:ndof");button("Motion only","bno:imu");button("Start sampling","bno:on");button("Pause sampling","bno:off");button("Reinitialize sensor","bno:reset");}
@@ -242,7 +262,7 @@ void PanelDashboard::page(const String& key){
  if(key=="hardware"){
   labels_["hardware"]=label("");
   for(const char* key:{"cpu","core0","core1","sram","psram","spiffs","sd","temperature"}){
-   labels_[String("meter:")+key]=label("");auto* bar=lv_bar_create(body_);lv_obj_set_size(bar,LV_PCT(100),16);lv_bar_set_range(bar,0,100);lv_obj_set_style_min_height(bar,16,0);lv_obj_set_style_bg_color(bar,lv_color_hex(0x475569),LV_PART_MAIN);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_MAIN);lv_obj_set_style_bg_color(bar,lv_color_hex(0x22c55e),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_INDICATOR);meters_[key]=bar;
+   labels_[String("meter:")+key]=label("");auto* bar=lv_bar_create(body_);lv_obj_set_size(bar,LV_PCT(100),16);lv_bar_set_range(bar,0,100);lv_obj_set_style_min_height(bar,16,0);lv_obj_set_style_pad_all(bar,0,LV_PART_MAIN);lv_obj_set_style_border_width(bar,0,LV_PART_MAIN);lv_obj_set_style_bg_color(bar,lv_color_hex(0x475569),LV_PART_MAIN);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_MAIN);lv_obj_set_style_bg_color(bar,lv_color_hex(0x22c55e),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_INDICATOR);meters_[key]=bar;
   }
  }
  if(key.startsWith("storage-")){
@@ -266,10 +286,11 @@ void PanelDashboard::page(const String& key){
   if(!(state_["security"]["locked"]|false)){if(state_["security"]["enabled"]|false){button("Lock now","security:lock");button("Disable PIN (current PIN)","security:disable");}else{field("New four-digit PIN","@newPin","secret");field("Confirm PIN","@confirmPin","secret");button("Set PIN","security:set");}}
  }
  if(key=="info")labels_["info"]=label("");
- settingsFields();if(!fields_.empty()&&key!="security")button("Save changes","save");update();
+ settingsFields();DebugLog.printf("[display] page=%s fields=%u heap=%u\n",key.c_str(),unsigned(fields_.size()),ESP.getFreeHeap());if(!fields_.empty()&&key!="security")button("Save changes","save");update();
 }
 void PanelDashboard::queue(const String& action,JsonVariantConst args){if(commands_.size()>=8){lv_label_set_text(notice_,"Please wait for pending changes");return;}JsonDocument q;q["action"]=action;q["args"].set(args);String text;serializeJson(q,text);commands_.push_back(text);}
 void PanelDashboard::submit(int index){
+ if(!snapshotReady_){lv_label_set_text(notice_,"Settings are not loaded yet. Please retry.");return;}
  JsonDocument patch;auto changes=patch["changes"].to<JsonArray>();
  for(size_t i=0;i<fields_.size();i++){auto& f=fields_[i];if(!f.dirty||(index>=0&&i!=size_t(index))||f.path.startsWith("@"))continue;String text=fieldText(f);if(f.secret&&text.isEmpty())continue;
   auto change=changes.add<JsonObject>();change["path"]=f.path;
@@ -278,6 +299,12 @@ void PanelDashboard::submit(int index){
    char* end=nullptr;double value=strtod(text.c_str(),&end);if(text.isEmpty()||*end||!std::isfinite(value)||(f.kind!="select"&&(value<f.minimum||value>f.maximum))){lv_label_set_text(notice_,"Enter a number within the allowed range");noticeUntil_=millis()+5000;return;}
    if(value==std::floor(value))change["value"]=int(value);else change["value"]=value;
   }else change["value"]=text;
+ }
+ if(index<0)for(const auto& definition:panelFormFields){if(page_!=definition.page)continue;bool visible=false;for(const auto& f:fields_)if(f.path==definition.path)visible=true;if(visible)continue;
+  auto draft=drafts_.find(definition.path);if(draft==drafts_.end())continue;const String& text=draft->second;auto change=changes.add<JsonObject>();change["path"]=definition.path;
+  if(String(definition.kind)=="switch")change["value"]=text=="true";
+  else if(String(definition.kind)=="number"||String(definition.kind)=="slider"){char* end=nullptr;double value=strtod(text.c_str(),&end);if(text.isEmpty()||*end||!std::isfinite(value)||value<definition.minimum||value>definition.maximum){lv_label_set_text(notice_,"Invalid value in another settings page");return;}change["value"]=value;}
+  else change["value"]=text;
  }
  if(changes.size()&&commands_.size()<8){for(JsonObjectConst change:changes)for(auto& f:fields_)if(f.path==change["path"].as<String>())f.submitted=valueText(change["value"]);queue("patch",patch);}
 }
@@ -333,11 +360,12 @@ void PanelDashboard::event(lv_event_t* e){
   for(auto& f:s->fields_)if(f.path.startsWith("@"))f.dirty=false;
   lv_keyboard_set_textarea(s->keyboard_,nullptr);lv_obj_add_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_));s->queue("radio",a);return;
  }
- if(key=="wifi:scan"){s->wifiDialog(WifiStep::Scanning);s->queue("wifiScan",a);return;}
+ if(key=="wifi:scan"){s->wifiDialog(WifiStep::Scanning);if(s->wifiOverlay_)s->queue("wifiScan",a);return;}
  if(key=="wifi:password"){for(auto& f:s->fields_)if(f.path=="wifi/password")lv_textarea_set_password_mode(f.object,!lv_textarea_get_password_mode(f.object));return;}
  if(key=="wifi:connect"){
-  String ssid=text("wifi/ssid"),password=text("wifi/password");s->wifiDialog(WifiStep::Credentials,ssid);lv_textarea_set_text(s->wifiPassword_,password.c_str());return;
+  String ssid=text("wifi/ssid"),password=text("wifi/password");s->wifiDialog(WifiStep::Credentials,ssid);if(s->wifiPassword_)lv_textarea_set_text(s->wifiPassword_,password.c_str());return;
  }
+ if(key=="form:next"||key=="form:previous"){for(const auto& f:s->fields_)if(f.dirty)s->drafts_[f.path]=s->fieldText(f);if(key=="form:next")++s->formPage_;else if(s->formPage_)--s->formPage_;s->page(s->page_);return;}
  if(key=="save"){s->submit();return;}if(key=="refresh"){s->page(s->page_);return;}
  if(key.startsWith("confirm:")){s->button("Confirm",key.substring(8));return;}
  if(key.startsWith("logic:")){a["mode"]=key.substring(6);s->queue("logics",a);return;}
@@ -365,6 +393,7 @@ void PanelDashboard::statusBar(const AppStateSnapshot& app){
  time_t now=time(nullptr);char clock[6]="--:--";if(now>1577836800){tm local;localtime_r(&now,&local);strftime(clock,sizeof(clock),"%H:%M",&local);}lv_label_set_text(clock_,clock);
 }
 void PanelDashboard::update(){
+ if(!snapshotReady_)return;
  updating_=true;auto set=[this](const char* key,const String& text){auto it=labels_.find(key);if(it!=labels_.end()&&String(lv_label_get_text(it->second))!=text)lv_label_set_text(it->second,text.c_str());};
  if(page_=="bno055"){
   auto d=state_["bno055"];String text=d["error"]|"";
@@ -373,6 +402,7 @@ void PanelDashboard::update(){
    text+="Calibration (0-3)\n";for(JsonPairConst c:d["calibration"].as<JsonObjectConst>())text+=String(c.key().c_str())+": "+String(c.value().as<int>())+"\n";
   }else if(!text.length())text="No live readings";set("bno055",text);
  }
+ if(page_=="wifi"&&!metricsLogged_){DebugLog.printf("[display] Wi-Fi snapshot ssidPresent=%u passwordPresent=%u heap=%u\n",String(state_["settings"]["wifi"]["ssid"]|"").length()>0,String(state_["settings"]["wifi"]["password"]|"").length()>0,ESP.getFreeHeap());metricsLogged_=true;}
  auto live=state_["live"];set("network",String(live["wifiConnected"]==true?"Connected":"Offline / AP")+"\n"+String(state_["wifiLive"]["ssid"]|"")+"\n"+(live["ip"]|"")+" / "+String(live["rssi"]|0)+" dBm\nMQTT: "+(live["mqttConnected"]==true?"connected":"disconnected"));
  set("wifiScan",state_["wifiScan"]["scanning"]==true?"Scanning...":state_["wifiScan"]["failed"]==true?"Scan failed. Try again.":state_["wifiScan"]["complete"]==true?(state_["wifiScan"]["networks"].size()?"Select a network, enter its password, then Connect":"No networks found"):"Scan or enter a network name below");
  set("radio",state_["radio"]["busy"]==true?String("Loading radio directory..."):String(state_["radio"]["error"]|"Choose a station to play"));
@@ -397,11 +427,12 @@ void PanelDashboard::update(){
   }
   bool temperature=system["chipTemperatureAvailable"]|false;double value=system["chipTemperatureC"]|0.0;
   meter("temperature",temperature?String("Temperature: ")+String(value,1)+" C"+(system["chipTemperatureEstimated"]==true?" (estimated)":""):"Temperature: unavailable",(value+20)*100/120,temperature);
+  if(!metricsLogged_){lv_obj_update_layout(body_);auto* bar=meters_["sram"];DebugLog.printf("[display] Hardware bar size=%dx%d value=%d snapshot=%u heap=%u\n",lv_obj_get_width(bar),lv_obj_get_height(bar),lv_bar_get_value(bar),unsigned(system.size()),ESP.getFreeHeap());metricsLogged_=true;}
  }
 
  set("info",String("Device: ")+(live["name"]|"ELMA IoT")+"\nFirmware: "+(state_["version"]|"unknown")+"\nBuilt: "+(state_["build"]|"")+"\nBoard: "+(hardware["boardProfile"]|"")+"\nChip: "+(hardware["chipModel"]|"")+" rev "+String(hardware["chipRevision"]|0)+"\nCPU: "+String(hardware["cpuCores"]|0)+" cores / "+String(hardware["cpuFreqMHz"]|0)+" MHz\nFlash: "+String((hardware["flashSizeBytes"]|0)/1024)+" KB\nFirmware size: "+String((hardware["sketchSizeBytes"]|0)/1024)+" KB\nFree heap: "+String(system["freeHeap"]|0)+" B\nUptime: "+String(millis()/1000)+" s\nIP: "+(live["ip"]|"")+"\nMAC: "+(state_["mac"]|"")+"\nDisplay: "+String(kPanelWidth)+" x "+String(kPanelHeight)+"\nTouch: "+kPanelTouchName+(panel_.spiClock()?"\nLCD SPI: "+String(panel_.spiClock()/1000000)+" MHz":""));
  set("firmware",String("Installed: ")+(state_["version"]|"")+"\n"+(live["otaPhase"]|"idle")+" "+String(live["otaProgress"]|0)+"%\n"+(live["lastError"]|""));
- set("storage",String(state_["storage"]["mounted"]==true?"Mounted":"Unavailable")+"\nFree: "+valueText(state_["storage"]["free"])+" / "+valueText(state_["storage"]["total"])+" bytes");
+ set("storage",String(state_["storage"]["busy"]==true?"Loading folder...\n":"")+String(state_["storage"]["mounted"]==true?"Mounted":"Unavailable")+"\nFree: "+valueText(state_["storage"]["free"])+" / "+valueText(state_["storage"]["total"])+" bytes");
  set("logs",state_["logText"]|"No log entries");
  String samples;for(JsonObjectConst sample:state_["plots"]["samples"].as<JsonArrayConst>()){samples+=String(sample["plot"]|"")+" / "+(sample["series"]|"")+": "+valueText(sample["value"])+" "+(sample["unit"]|"")+"\n";}set("plots",samples.isEmpty()?String("Waiting for samples"):samples);
  String leds;for(JsonObjectConst led:state_["ledArrays"].as<JsonArrayConst>())leds+="GPIO"+String(led["pin"]|0)+": "+(led["effect"]|"solid")+" / "+String(led["brightness"]|0)+"%\n";set("ledLive",leds);
@@ -409,6 +440,7 @@ void PanelDashboard::update(){
  for(auto& f:fields_){JsonVariantConst incoming=PanelSettings::get(state_["settings"],f.path.c_str());if(f.path=="@volume")incoming=live["volume"];if(f.path=="@position")incoming=live["position"];if(f.path=="@url")incoming=live["url"];
   if(f.path=="@country"||f.path=="@radioSearch"||f.path=="@wifiNetwork")continue;
   if(f.path=="@station"){if(!lv_dropdown_is_open(f.object)&&!f.dirty){int i=0;for(JsonObjectConst station:state_["radio"]["items"].as<JsonArrayConst>()){if(station["url"]==live["url"])lv_dropdown_set_selected(f.object,i);i++;}}continue;}
+  if(incoming.isNull())continue;
   String text=valueText(incoming);if(f.secret && !f.path.startsWith("wifi/"))continue;if(f.dirty){if(f.submitted.length()&&PanelSettings::acknowledged(f.submitted.c_str(),text.c_str())){f.dirty=false;f.submitted="";drafts_.erase(f.path);}else continue;}
   if(lv_obj_has_state(f.object,LV_STATE_PRESSED)||lv_keyboard_get_textarea(keyboard_)==f.object)continue;
   if(f.kind=="switch"){if(incoming==true)lv_obj_add_state(f.object,LV_STATE_CHECKED);else lv_obj_clear_state(f.object,LV_STATE_CHECKED);}
@@ -429,7 +461,8 @@ void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,c
  auto now=millis();lv_tick_inc(now-tick_);tick_=now;
  if(panel_.takeClockChange())lv_obj_invalidate(screen_);
  bool scrolling=lv_obj_is_scrolling(body_)||(wifiContent_&&lv_obj_is_scrolling(wifiContent_));
- if((refreshNow_||now-refresh_>=1000)&&(!scrolling||now-refresh_>=3000)){bool rebuild=refreshNow_;refreshNow_=false;refresh_=now;state_.clear();if(snapshot)snapshot(page_,state_.to<JsonObject>());
+ if((refreshNow_||now-refresh_>=1000)&&(!scrolling||now-refresh_>=3000)){bool rebuild=refreshNow_;refreshNow_=false;refresh_=now;JsonDocument fresh(panelJsonAllocator());if(snapshot)snapshot(page_,fresh.to<JsonObject>());
+  if(!fresh.overflowed()&&!fresh["version"].isNull()){swap(state_,fresh);snapshotReady_=true;}else{lv_label_set_text(notice_,"Memory busy; retaining previous readings");noticeUntil_=now+2000;DebugLog.printf("[display] Snapshot deferred page=%s heap=%u\n",page_.c_str(),ESP.getFreeHeap());}
   auto live=state_["live"].to<JsonObject>();live["name"]=app.device.friendlyName;live["ip"]=app.network.ip;live["wifiConnected"]=app.network.wifiConnected;live["mqttConnected"]=app.network.mqttConnected;live["rssi"]=app.network.wifiRssi;live["voltage"]=app.battery.voltage;live["title"]=app.playback.title;live["playbackState"]=app.playback.state;live["volume"]=app.playback.volumePercent;live["lastError"]=app.system.lastError;live["otaPhase"]=app.ota.phase;live["otaProgress"]=app.ota.progressPercent;
   live["url"]=app.playback.url;live["position"]=app.playback.positionSeconds;live["duration"]=app.playback.durationSeconds;
   if(app.playback.url.length()){resumeUrl_=app.playback.url;resumeTitle_=app.playback.title;}

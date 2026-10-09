@@ -58,6 +58,7 @@ bool formatPromptDismissed=false;
 bool sdEjected=false;int sdMountRequest=0;
 SdSettings pendingSdSettings;
 TaskHandle_t summaryTask = nullptr;
+void (*backgroundWork)(void*)=nullptr;void* backgroundContext=nullptr;
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 #if APP_HAS_ONBOARD_PANEL
@@ -216,8 +217,12 @@ void refreshSdSummaryCache() {
 void summaryWorker(void*) {
     uint32_t lastSummary=millis();
     for(;;) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(100));
         serviceStorageBackends();
+        portENTER_CRITICAL(&storageStateMux);
+        auto work=backgroundWork;auto context=backgroundContext;backgroundWork=nullptr;backgroundContext=nullptr;
+        portEXIT_CRITICAL(&storageStateMux);
+        if(work)work(context);
         if(uint32_t(millis()-lastSummary)<30000)continue;
         lastSummary=millis();
         portENTER_CRITICAL(&storageStateMux);
@@ -530,6 +535,11 @@ void pollStorageBackends() {
     // Retry task allocation without falling back to synchronous card probing.
     static uint32_t lastAttempt=0;
     if(!summaryTask&&uint32_t(millis()-lastAttempt)>=30000){lastAttempt=millis();if(xTaskCreate(summaryWorker,"storage-summary",4096,nullptr,1,&summaryTask)!=pdPASS)DebugLog.println("[storage] Maintenance task memory unavailable");}
+}
+bool requestStorageBackgroundJob(void (*work)(void*),void* context){
+    portENTER_CRITICAL(&storageStateMux);bool accepted=summaryTask&&!backgroundWork;
+    if(accepted){backgroundWork=work;backgroundContext=context;}
+    portEXIT_CRITICAL(&storageStateMux);return accepted;
 }
 bool requestSdFormat(bool confirmed,String& error) {
     portENTER_CRITICAL(&storageStateMux);

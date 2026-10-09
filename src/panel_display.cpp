@@ -36,7 +36,7 @@ void PanelDisplay::brightness(uint8_t percent) {
 }
 
 void PanelDisplay::flush() {
-    if (!board_) return;
+    if (!board_ || !getBuffer()) return;
     // One bounded transfer at a time: never change the DMA source while in use.
     // RGB565 black/white is byte-order invariant.
     const uint8_t *pixels = getBuffer();

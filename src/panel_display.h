@@ -20,6 +20,8 @@ public:
     bool drawColor(int x,int y,int width,int height,uint8_t* colors);
     void brightness(uint8_t percent);
     bool readTouch(int16_t &x, int16_t &y);
+    void releaseTextBuffer(){if(buffer&&buffer_owned)free(buffer);buffer=nullptr;buffer_owned=true;}
+    bool ensureTextBuffer(){if(!buffer)buffer=static_cast<uint8_t*>(calloc((kPanelWidth+7)/8*kPanelHeight,1));return buffer!=nullptr;}
     uint32_t spiClock() const {
 #if APP_SUNTON_PANEL
         return board_?board_->spiClock():0;

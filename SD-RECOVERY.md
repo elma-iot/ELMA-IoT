@@ -62,3 +62,21 @@ Hardware bars have explicit opaque tracks and indicators, independent of theme d
 SD SPI uses verified sector reads and a retained runtime fallback ceiling. The pinned Arduino 2.x driver caps SD SPI at 25 MHz, so SD uses 25/20/10/4/1/0.4 MHz rather than claiming a requested 80 MHz is the actual card clock. Health checks wait for active readers/writers; recovery does not interrupt playback to remount. SDMMC remains a separate native bus.
 
 Validation: final sunton_3248s035c build passed (143.85 s), application image flashed and hash verified on COM13. Boot reached the portrait dashboard and connected Wi-Fi at 192.168.1.180. This physical panel did not provide a matching low-speed pixel readback, so it selected the conservative 20 MHz clock; 80 MHz was not validated on this device. Runtime status returned about 45 KB free heap during initial operation. SD remained unmounted, so high-speed card reads/fallback were not physically exercised. SDMMC syntax and storage stack checks passed. New overlay appearance and gesture smoothness require the user's screen check.
+
+## Mounted-card LCD scan panic and snapshot audit (2026-10-09)
+
+The new capture with the card inserted decoded to `lv_obj_add_style` -> `lv_btn_create` -> `PanelDashboard::wifiDialog`, before the scan command ran. The same boot also reported `AsyncTCP ... failed to start task`; a station IP did not imply a functioning HTTP listener.
+
+Shared LCD changes:
+- Delay full LVGL construction until network services have initialized. Release the unused monochrome splash canvas when entering LVGL (19,200 bytes at 320x480; 9,600 bytes at 240x320), retaining text-mode fallback.
+- Use the basic LVGL theme, paginate settings into four controls, release the underlying page while a setup overlay is active, and limit each network-list page to six entries. Center the scan spinner and delete it with the scanning view.
+- Give LCD JSON a separate bounded budget instead of the storage allocator's 32 KB reserve. Retain a previous complete snapshot on allocation failure and never replace a field with a missing JSON value. Snapshot diagnostics report credential presence, never passwords.
+- Cache scan results independently of the receiving JSON document, so a low-memory LCD cannot turn a successful scan into a shared empty result list.
+- Run LCD directory listings through the storage worker; maintain/eject/remount already use that worker and wait for active readers/writers. Cards with valid filesystems do not trigger formatting.
+- Check the actual web listener state and retry failed startup without claiming the web server is ready.
+
+Validation checkpoint (2026-10-09): the final Guition build passed and its application was flashed and hash verified. All three Sunton variants passed shared-source syntax checks; the S3 SDMMC syntax check and seven panel-settings/SD-format JavaScript tests passed. These are not full builds or hardware tests of every board.
+
+**Unresolved; investigation stopped at the user's request:** with the SD inserted, the card mounts at 25 MHz and Wi-Fi associates at 192.168.1.180, but AsyncTCP still cannot allocate its task. The portrait dashboard renders, then reports deferred snapshots; opening Audio produced a C++ allocation abort in `PanelDashboard::syncMenu`. Hardware bars, scan overlays, HTTP reachability and physical SD hot-plug/eject remain unverified on this candidate. Do not describe this checkpoint as a working LCD firmware release. No SD formatting was performed.
+
+Next investigation: capture actual byte-addressable internal heap and largest block (the generic free-heap number is insufficient), inspect audio/DMA and network task allocations, then re-test scan with/without SD, saved credentials, monitor bars, and physical removal/reinsertion. Local diagnostic logs are excluded from Git because they may contain device/network details.

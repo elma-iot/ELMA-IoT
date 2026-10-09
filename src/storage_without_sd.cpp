@@ -3,6 +3,11 @@
 #include "storage_backend.h"
 #include <LittleFS.h>
 #include <esp_partition.h>
+#if APP_HAS_ONBOARD_PANEL
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <new>
+#endif
 namespace {
 const esp_partition_t* flashPartition() {
     return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, nullptr);
@@ -16,6 +21,15 @@ bool mountFlash() {
 void beginStorageBackends(const SettingsBundle&) { mountFlash(); }
 void applyStorageSettings(const SettingsBundle&) {}
 void pollStorageBackends() {}
+bool requestStorageBackgroundJob(void (*work)(void*),void* context){
+#if APP_HAS_ONBOARD_PANEL
+    struct Job{void (*work)(void*);void* context;};
+    auto* job=new(std::nothrow) Job{work,context};if(!job)return false;
+    if(xTaskCreate([](void* arg){auto* j=static_cast<Job*>(arg);j->work(j->context);delete j;vTaskDelete(nullptr);},"storage-browse",4096,job,1,nullptr)!=pdPASS){delete job;return false;}return true;
+#else
+    return false;
+#endif
+}
 bool requestSdFormat(bool, String& error) { error="SD storage is unavailable";return false; }
 SdFormatState sdFormatState(){return SdFormatState::Idle;}
 bool sdFormatPromptNeeded(){return false;}

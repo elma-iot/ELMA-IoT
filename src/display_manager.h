@@ -17,7 +17,7 @@ class DisplayManager {
   public:
     void begin(const OledSettings& settings);
 #if APP_HAS_ONBOARD_PANEL
-    void setPanelHandlers(PanelDashboard::Snapshot snapshot,PanelDashboard::Command command) { panelSnapshot_=snapshot;panelCommand_=command; }
+    void setPanelHandlers(PanelDashboard::Snapshot snapshot,PanelDashboard::Command command) { panelSnapshot_=snapshot;panelCommand_=command;if(panel_&&settings_.interfaceMode=="lvgl")panel_->releaseTextBuffer(); }
 #endif
     void applySettings(const OledSettings& settings);
     void setBootMessage(const String& message);
