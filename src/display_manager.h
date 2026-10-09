@@ -23,6 +23,13 @@ class DisplayManager {
     void setBootMessage(const String& message);
     void showTemporaryCenterText(const String& message, unsigned long durationMs = 1500UL);
     bool available() const;
+    bool interactivePanelActive() const {
+#if APP_HAS_ONBOARD_PANEL && !APP_DISABLE_DISPLAY
+        return dashboard_ && !dimmed_;
+#else
+        return false;
+#endif
+    }
     bool clearLogicText();
     void markActivity();
     void powerOff();

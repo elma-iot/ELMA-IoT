@@ -18,9 +18,20 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  root["version"]=APP_VERSION;security_.status(root["security"].to<JsonObject>());
  if(security_.locked())return;
  root["sdNeedsFormat"]=sdFormatPromptNeeded();
- SettingsBundle settings=settingsGetter_();settingsManager_->toJson(settings,root["settings"].to<JsonObject>());
- auto config=root["settings"];config["wifi"].remove("password");config["wifi"].remove("apPassword");config["mqtt"].remove("password");config["webAuth"].remove("password");
- JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
+ SettingsBundle settings=settingsGetter_();auto config=root["settings"].to<JsonObject>();
+ const char* section=page=="wifi"?"wifi":page=="mqtt"?"mqtt":page=="device"||page=="gpio"?"device":page=="oled"?"oled":page=="battery"?"battery":page=="effects"?"effects":page=="playback"||page.startsWith("storage-")?"audio":page=="firmware"?"ota":nullptr;
+ if(section)settingsManager_->toJson(settings,config,section,false);
+ if(page=="gpio"||page=="wled"||page=="motor")settingsManager_->toJson(settings,config,"ui",false);
+ // Passwords stay on the unlocked local panel; other pages never carry them.
+ config["mqtt"].remove("password");config["webAuth"].remove("password");
+ JsonDocument profileDoc(storageJsonAllocator());JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
+ if(profiles.isNull()){deserializeJson(profileDoc,settings.ui.peripheralProfileSelections);profiles=profileDoc.as<JsonVariantConst>();}
+ if(page=="wifi"){
+  root["wifiLive"]["ssid"]=wifiManager_->currentSsid();
+  auto scan=wifiManager_->getScanSnapshot();auto result=root["wifiScan"].to<JsonObject>();
+  result["scanning"]=scan.active;result["complete"]=scan.complete;result["failed"]=scan.failed;
+  if(scan.complete)wifiManager_->appendScanResultsJson(result["networks"].to<JsonArray>());
+ }
  auto caps=root["caps"].to<JsonObject>();
  caps["bno055"]=selected(profiles["sensors"],"bno055");if(page=="bno055")Bno055::snapshot(root["bno055"].to<JsonObject>());
  caps["wled"]=selected(profiles["controls"],"ws2812");caps["motor"]=selected(profiles["controls"],"motor-driver");
@@ -29,11 +40,14 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  caps["oled"]=selected(profiles["displayProfiles"])||selected(profiles["displayProfile"])||settings.oled.enabled;
  // Slot capability is independent of whether a card is inserted or mounted.
  caps["storage-external"]=settings.sd.enabled||selected(profiles["storage"]);caps["migration"]=false;
- static bool hasPlots=false;static uint32_t graphAt=0;bool detailed=page=="logics"||page=="plots"||millis()-graphAt>5000;
- JsonDocument graph(storageJsonAllocator());if(logicsGetter_)logicsGetter_(graph,detailed);
- root["logics"].set(graph);
- // Runtime snapshot carries plot definitions even when the editor graph is omitted.
- if(detailed&&!graph["graph"].isNull()){graphAt=millis();hasPlots=false;for(JsonObjectConst n:graph["graph"]["nodes"].as<JsonArrayConst>())if(n["type"]=="mainboard.plot")hasPlots=true;}caps["plots"]=hasPlots;
+ static bool hasPlots=false;static uint32_t graphAt=0;
+ if(page=="logics"||page=="plots"||millis()-graphAt>5000){
+  JsonDocument graph(storageJsonAllocator());if(logicsGetter_)logicsGetter_(graph,page=="logics");
+  if(page=="logics"||page=="plots")root["logics"].set(graph);
+  hasPlots=graph["hasPlots"]|false;
+  if(!graph["graph"].isNull()){hasPlots=false;for(JsonObjectConst n:graph["graph"]["nodes"].as<JsonArrayConst>())if(n["type"]=="mainboard.plot")hasPlots=true;}
+  graphAt=millis();
+ }caps["plots"]=hasPlots;
  if(page=="wled"&&ledStatusAppender_)ledStatusAppender_(root);
  if(page=="motor"&&motorStatusAppender_)motorStatusAppender_(root);
  if(page=="hardware"||page=="info"||page=="gpio")appendSystemMetricsJson(root);
@@ -78,6 +92,7 @@ bool WebServerManager::panelCommand(const String& action,JsonVariantConst args,S
  }
  if(action=="logics"){JsonDocument result;return logicsHandler_&&logicsHandler_(args,result,error);}
  if(action=="bno055")return Bno055::command(args,error);
+ if(action=="wifiScan"){if(wifiManager_->startScan())return true;error="Wi-Fi scan could not start; try again";return false;}
  if(action=="radio")return PanelRadio::request(args,error);
  if(action=="formatSd")return requestSdFormat(args["confirmed"]|false,error);
  if(action=="dismissSdFormat"){dismissSdFormatPrompt();return true;}

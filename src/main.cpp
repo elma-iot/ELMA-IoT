@@ -887,7 +887,8 @@ void applyCpuFrequencyPolicy() {
     // from the first buffering request until playback has stopped.
     const String playbackState = audioPlayer != nullptr ? audioPlayer->currentState() : String("idle");
     const bool audioDemand = playbackState == "buffering" || playbackState == "playing";
-    if (audioDemand) {
+    const bool panelDemand=displayManager && displayManager->interactivePanelActive();
+    if (audioDemand || panelDemand) {
         cpuGovernorHighSamples = 0;
         cpuGovernorLowSamples = 0;
         if (activeCpuFrequencyMhz < kCpuFrequencyBurstMhz &&
@@ -896,11 +897,11 @@ void applyCpuFrequencyPolicy() {
                 activeCpuFrequencyMhz = ESP.getCpuFreqMHz();
                 lastCpuFrequencyChangeAt = now;
                 lastCpuFrequencyFailureAt = 0;
-                DebugLog.printf("[power] cpu frequency set to %lu MHz reason=audio-active\n",
-                                static_cast<unsigned long>(activeCpuFrequencyMhz));
+                DebugLog.printf("[power] cpu frequency set to %lu MHz reason=%s\n",
+                                static_cast<unsigned long>(activeCpuFrequencyMhz),audioDemand?"audio-active":"lcd-active");
             } else {
                 lastCpuFrequencyFailureAt = now;
-                DebugLog.println("[power] cpu frequency change to 240 MHz failed reason=audio-active");
+                DebugLog.printf("[power] cpu frequency change to 240 MHz failed reason=%s\n",audioDemand?"audio-active":"lcd-active");
             }
         }
         return;

@@ -33,3 +33,22 @@ Sizes are measured with the ESP32 compiler. After four replacement pointers, bas
 Radio/SD decoding buffers, sample rates, and audio DSP algorithms are unchanged. Deferred buffers remain available after first use, so these are startup savings, not a reduction of peak memory when all features are active. Serial audio startup reports the deferred DSP bytes. A successful firmware build does not establish that the hardware reboot is fixed; verify a boot reaching `[web] ready` and the LCD dashboard after flashing.
 
 Validation: the full `sunton_3248s035c` build passed on 2026-10-08. Automatic flashing on COM13 was attempted with normal and extended reset timing; both returned normal boot mode `0x13` before any write. This heap candidate has therefore not yet been tested on hardware. Enter the ROM bootloader manually (hold BOOT, tap RESET, release BOOT) and flash from the updated app, then verify startup and Wi-Fi. No SD format or configuration erase was performed.
+
+## Empty slot boot-loop repair (2026-10-09)
+
+Serial capture of the previous image (`c716c146f3354721`) with an empty Guition SD slot identified a `storage-summary` task stack overflow. `spiCardNeedsFormat` placed a FatFs `FATFS` structure (including the SDK's up-to-4096-byte sector window) on the worker's 4096-byte stack. SDMMC probing and formatting had similar large local buffers.
+
+- FAT filesystem probe objects now use checked heap allocations, preferring PSRAM. The SDMMC formatting workspace is also checked and heap allocated. Objects are unmounted/unregistered before memory is released.
+- Unmounted SPI cards first receive a bounded CMD0 response check at 400 kHz. An empty/nonresponding slot skips the seven-frequency mount sequence and the filesystem-format probe. It reports its state once and checks again every five seconds for insertion.
+- A nonresponding slot is never classified as an unformatted card. Without a dedicated card-detect signal, empty and electrically nonresponding cards cannot be distinguished.
+- Card data, LCD functionality, and audio decoder buffers are unchanged.
+
+## Portrait LCD follow-up (2026-10-09)
+
+- LCD snapshots serialize only the settings section needed by the displayed page. Desktop wiring geometry and recorded melodies are excluded, and non-Logics pages no longer request the full editor graph. Existing full settings API serialization is unchanged.
+- The CPU governor holds its performance clock while the interactive LCD is awake; audio retains the same performance priority. Unchanged status indicators avoid redraws, and display-loop callbacks are passed by reference.
+- Wi-Fi adds asynchronous scanning, a network selector, explicit Connect, and masked saved credentials with a local show/hide control. Commands use the web settings validation/save path. Credentials are available only to the unlocked local Wi-Fi page. Scan results remain cached for both web and LCD consumers until a new scan starts.
+- Hardware Monitor adds live CPU/core, RAM, PSRAM, internal-storage, SD-storage and temperature bars. Unavailable readings remain labelled unavailable; classic-ESP32 temperature remains labelled estimated.
+- A mounted, recognized card deliberately does not produce a format prompt. Automatic format confirmation is reserved for a responding card with `FR_NO_FILESYSTEM`.
+
+Validation (2026-10-09): the final Guition firmware build passed and was flashed on COM13 with application-only flashing, preserving settings. Startup reached the web server and portrait dashboard; the captured startup contained no backtrace, stack overflow or SD begin failure. Wi-Fi connected successfully, asynchronous scanning returned eight networks, and a second consumer received the cached results. Four subsequent status samples retained about 51 KB free heap and connected Wi-Fi. The user confirmed that the LCD interface is responsive and controls work. ESP32-S3 SDMMC syntax checking passed; compiler stack analysis reports a 48-byte local frame for the SPI filesystem probe. The current SD state is unmounted; actual formatting and removal/reinsertion were not tested, and no card was erased.

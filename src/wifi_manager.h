@@ -82,6 +82,7 @@ class WiFiManager {
     wifi_event_id_t disconnectEventId_ = 0;
     wifi_err_reason_t lastDisconnectReason_ = WIFI_REASON_UNSPECIFIED;
     String apSsid_;
+    String lastScanResults_;
     int txPowerApplyError_ = 0;
 
     void startStation();

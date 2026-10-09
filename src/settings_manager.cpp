@@ -1368,7 +1368,7 @@ bool SettingsManager::reset() {
     return preferences_.clear();
 }
 
-void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) const {
+void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, const char* section, bool editorState) const {
     auto writeJsonValue = [](JsonObject parent, const char* key, const String& serialized) {
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
@@ -1384,6 +1384,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
             parent[key] = serialized;
         }
     };
+    if(!section || strcmp(section,"wifi") == 0){
     JsonObject wifi = root["wifi"].to<JsonObject>();
     wifi["ssid"] = settings.wifi.ssid;
     wifi["password"] = settings.wifi.password;
@@ -1399,6 +1400,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     wifi["dns1"] = settings.wifi.dns1;
     wifi["dns2"] = settings.wifi.dns2;
 
+    }
+    if(!section || strcmp(section,"mqtt") == 0){
     JsonObject mqtt = root["mqtt"].to<JsonObject>();
     mqtt["host"] = settings.mqtt.host;
     mqtt["port"] = settings.mqtt.port;
@@ -1408,6 +1411,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     mqtt["baseTopic"] = settings.mqtt.baseTopic;
     mqtt["discoveryEnabled"] = settings.mqtt.discoveryEnabled;
 
+    }
+    if(!section || strcmp(section,"ota") == 0){
     JsonObject ota = root["ota"].to<JsonObject>();
     ota["owner"] = settings.ota.owner;
     ota["repository"] = settings.ota.repository;
@@ -1418,6 +1423,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     ota["autoCheck"] = settings.ota.autoCheck;
     ota["autoUpdate"] = settings.ota.autoUpdate;
 
+    }
+    if(!section || strcmp(section,"battery") == 0){
     JsonObject battery = root["battery"].to<JsonObject>();
     battery["dividerR1Ohms"] = settings.battery.dividerR1Ohms;
     battery["dividerR2Ohms"] = settings.battery.dividerR2Ohms;
@@ -1429,11 +1436,15 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     battery["updateIntervalMs"] = settings.battery.updateIntervalMs;
     battery["movingAverageWindowSize"] = settings.battery.movingAverageWindowSize;
 
+    }
+    if(!section || strcmp(section,"webAuth") == 0){
     JsonObject webAuth = root["webAuth"].to<JsonObject>();
     webAuth["enabled"] = settings.webAuth.enabled;
     webAuth["username"] = settings.webAuth.username;
     webAuth["password"] = settings.webAuth.password;
 
+    }
+    if(!section || strcmp(section,"audio") == 0){
     JsonObject audio = root["audio"].to<JsonObject>();
     audio["enabled"] = settings.audio.enabled;
     audio["rememberLastPlayed"] = settings.audio.rememberLastPlayed;
@@ -1451,6 +1462,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     lastPlayback["source"] = settings.audio.lastPlayback.source;
     lastPlayback["resumeAfterBoot"] = settings.audio.lastPlayback.resumeAfterBoot;
 
+    }
+    if(!section || strcmp(section,"effects") == 0){
     JsonObject effects = root["effects"].to<JsonObject>();
     effects["startupFile"] = settings.effects.startupFile;
     effects["startupVolumePercent"] = settings.effects.startupVolumePercent;
@@ -1469,6 +1482,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     effects["updateSuccessFile"] = settings.effects.updateSuccessFile;
     effects["updateSuccessVolumePercent"] = settings.effects.updateSuccessVolumePercent;
 
+    }
+    if(!section || strcmp(section,"oled") == 0){
     JsonObject oled = root["oled"].to<JsonObject>();
     oled["enabled"] = settings.oled.enabled;
     oled["interfaceMode"] = settings.oled.interfaceMode;
@@ -1487,6 +1502,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     oled["wapeTriggerPin"] = settings.oled.wapeTriggerPin;
     oled["wapeTriggerEvent"] = settings.oled.wapeTriggerEvent;
 
+    }
+    if(!section || strcmp(section,"sd") == 0){
     JsonObject sd = root["sd"].to<JsonObject>();
     sd["enabled"] = settings.sd.enabled;
     sd["sdmmc"] = settings.sd.sdmmc;
@@ -1495,6 +1512,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     sd["mosiPin"] = settings.sd.mosiPin;
     sd["misoPin"] = settings.sd.misoPin;
 
+    }
+    if(!section || strcmp(section,"device") == 0){
     JsonObject device = root["device"].to<JsonObject>();
     device["deviceName"] = settings.device.deviceName;
     device["friendlyName"] = settings.device.friendlyName;
@@ -1512,19 +1531,22 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root) co
     device["lowBatterySleepThresholdPercent"] = settings.device.lowBatterySleepThresholdPercent;
     device["lowBatteryWakeIntervalMinutes"] = settings.device.lowBatteryWakeIntervalMinutes;
 
+    }
+    if(!section || strcmp(section,"ui") == 0){
     JsonObject ui = root["ui"].to<JsonObject>();
     ui["language"] = settings.ui.language;
     ui["theme"] = settings.ui.theme;
     ui["gpioSafetyOverride"] = settings.ui.gpioSafetyOverride;
     ui["gpioBoardAutodetect"] = settings.ui.gpioBoardAutodetect;
     ui["gpioBoardSelection"] = settings.ui.gpioBoardSelection;
-    writeJsonValue(ui, "peripheralDiagramLayout", settings.ui.peripheralDiagramLayout);
+    if(editorState)writeJsonValue(ui, "peripheralDiagramLayout", settings.ui.peripheralDiagramLayout);
 
     writeJsonValue(ui, "peripheralHelperBindings", settings.ui.peripheralHelperBindings);
     writeJsonValue(ui, "peripheralProfiles", settings.ui.peripheralProfileSelections);
-    writeJsonValue(ui,"recordedMelodies",settings.ui.recordedMelodies);
-    writeJsonValue(ui, "motorRuntimeConfig", settings.ui.motorRuntimeConfig);
+    if(editorState)writeJsonValue(ui,"recordedMelodies",settings.ui.recordedMelodies);
+    if(editorState)writeJsonValue(ui, "motorRuntimeConfig", settings.ui.motorRuntimeConfig);
 
+    }
     root["usingSavedSettings"] = settings.usingSavedSettings;
 }
 

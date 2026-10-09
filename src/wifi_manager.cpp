@@ -1,3 +1,12 @@
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+namespace {
+struct ScanResultsGuard {
+    SemaphoreHandle_t mutex;bool held;
+    ScanResultsGuard(){static StaticSemaphore_t storage;static SemaphoreHandle_t shared=xSemaphoreCreateMutexStatic(&storage);mutex=shared;held=xSemaphoreTake(mutex,pdMS_TO_TICKS(20))==pdTRUE;}
+    ~ScanResultsGuard(){if(held)xSemaphoreGive(mutex);}
+};
+}
 #include "device_log.h"
 #include "wifi_manager.h"
 
@@ -567,6 +576,7 @@ WiFiManager::ScanSnapshot WiFiManager::getScanSnapshot() {
 }
 
 bool WiFiManager::startScan() {
+    ScanResultsGuard guard;if(!guard.held)return false;
     const int scanState = WiFi.scanComplete();
     if (scanState == WIFI_SCAN_RUNNING) {
         return true;
@@ -587,6 +597,7 @@ bool WiFiManager::startScan() {
     }
 
     lastScanCompleted_ = false;
+    lastScanResults_="";
     WiFi.enableSTA(true);
     const int scanResult = WiFi.scanNetworks(true, true);
     if (scanResult == WIFI_SCAN_FAILED) {
@@ -605,9 +616,16 @@ bool WiFiManager::startScan() {
 }
 
 void WiFiManager::appendScanResultsJson(JsonArray networks) {
+    ScanResultsGuard guard;if(!guard.held)return;
     const int networkCount = WiFi.scanComplete();
+    if(networkCount<0 && lastScanCompleted_ && lastScanResults_.length()){
+        JsonDocument cached;deserializeJson(cached,lastScanResults_);
+        for(JsonObjectConst item:cached.as<JsonArrayConst>())networks.add(item);
+        return;
+    }
     if (networkCount <= 0) {
         lastScanCompleted_ = networkCount == 0;
+        if(networkCount==0)lastScanResults_="[]";
         WiFi.scanDelete();
         finishUserScan();
         return;
@@ -627,6 +645,7 @@ void WiFiManager::appendScanResultsJson(JsonArray networks) {
         network["encrypted"] = WiFi.encryptionType(index) != WIFI_AUTH_OPEN;
     }
 
+    lastScanResults_="";serializeJson(networks,lastScanResults_);
     WiFi.scanDelete();
     finishUserScan();
 }

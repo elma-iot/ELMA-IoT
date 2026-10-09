@@ -385,6 +385,7 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){response["error"]="Logics busy";return;}
     response["mode"]=mode_;response["updating"]=updating_;runtime_.telemetry(response["live"].to<JsonObject>());
     response["groups"].set(runtime_.graph()["groups"]);
+    bool hasPlots=false;for(JsonObjectConst node:runtime_.graph()["nodes"].as<JsonArrayConst>())if(node["type"]=="mainboard.plot"){hasPlots=true;break;}response["hasPlots"]=hasPlots;
     response["ledBinding"].set(ledBinding_);
 #ifdef APP_DISABLE_AUDIO
     response["audioEnabled"]=false;

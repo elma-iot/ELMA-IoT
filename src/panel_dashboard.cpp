@@ -119,7 +119,7 @@ void PanelDashboard::player(){
  if((state_["live"]["duration"]|0)>0)field("Position (seconds)","@position","slider","",0,state_["live"]["duration"]|0);
 }
 void PanelDashboard::page(const String& key){
- page_=key;refreshNow_=true;lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));fields_.clear();buttons_.clear();labels_.clear();lv_obj_clean(body_);
+ page_=key;refreshNow_=true;lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));fields_.clear();buttons_.clear();labels_.clear();meters_.clear();lv_obj_clean(body_);
  for(size_t i=0;i<tabs_.size();i++)if(tabs_[i]==key)lv_dropdown_set_selected(menu_,i);
  if(key=="bno055"){labels_["bno055"]=label("");button("Compass + motion","bno:ndof");button("Motion only","bno:imu");button("Start sampling","bno:on");button("Pause sampling","bno:off");button("Reinitialize sensor","bno:reset");}
  if(key=="gpio")wiring();
@@ -143,11 +143,25 @@ void PanelDashboard::page(const String& key){
  }
  if(key=="effects")for(const char* name:{"startup","alarm","notification","ambientSound","lowBattery","shutDown","updateAvailable","updateSuccess"}){section(name);field("File","effects/"+String(name)+"File");String volume=String(name)=="ambientSound"?"ambient":name;field("Volume (%)","effects/"+volume+"VolumePercent","slider","",0,100);}
  if(key=="wifi"||key=="mqtt")labels_["network"]=label("");
+ if(key=="wifi"){
+  labels_["wifiScan"]=label("");button("Scan networks","wifi:scan");
+  String options;for(JsonObjectConst network:state_["wifiScan"]["networks"].as<JsonArrayConst>()){
+   String ssid=network["ssid"]|"";ssid.replace("\n"," ");ssid.replace("\r"," ");
+   if(options.length())options+='\n';options+=ssid+" ("+String(network["rssi"]|0)+" dBm)";
+  }
+  if(options.length())field("Available networks","@wifiNetwork","select",String("Select a network...\n")+options);
+  button("Connect to selected / entered network","wifi:connect");button("Show / hide Wi-Fi password","wifi:password");
+ }
  if(key=="mqtt"){button("Connect","mqtt:connect");button("Disconnect","mqtt:disconnect");button("Rediscover devices","mqtt:rediscover");}
  if(key=="battery")labels_["battery"]=label("");
  if(key=="device"){labels_["device"]=label("");button("Restart device","confirm:reboot");}
  if(key=="oled")label(String(kPanelWidth)+" x "+String(kPanelHeight)+" / "+kPanelTouchName);
- if(key=="hardware")labels_["hardware"]=label("");
+ if(key=="hardware"){
+  labels_["hardware"]=label("");
+  for(const char* key:{"cpu","core0","core1","sram","psram","spiffs","sd","temperature"}){
+   labels_[String("meter:")+key]=label("");auto* bar=lv_bar_create(body_);lv_obj_set_size(bar,LV_PCT(100),16);lv_bar_set_range(bar,0,100);meters_[key]=bar;
+  }
+ }
  if(key.startsWith("storage-")){
   if(key=="storage-external"){button("Mount SD card","mountSd");button("Eject SD card","ejectSd");}
   player();labels_["storage"]=label("");String path=state_["storage"]["path"]|"/";section(path);
@@ -189,6 +203,17 @@ void PanelDashboard::event(lv_event_t* e){
  for(size_t i=0;i<s->fields_.size();i++){auto& f=s->fields_[i];if(f.object!=object)continue;
   if(code==LV_EVENT_CLICKED&&(f.kind=="text"||f.kind=="secret"||f.kind=="number")){lv_keyboard_set_mode(s->keyboard_,f.kind=="number"?LV_KEYBOARD_MODE_NUMBER:LV_KEYBOARD_MODE_TEXT_LOWER);lv_keyboard_set_textarea(s->keyboard_,object);lv_obj_clear_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_)*52/100);lv_obj_scroll_to_view_recursive(object,LV_ANIM_ON);}
   if(code==LV_EVENT_VALUE_CHANGED){f.dirty=true;s->drafts_[f.path]=s->fieldText(f);f.submitted="";
+   if(f.path=="@wifiNetwork"){
+    int selectedIndex=lv_dropdown_get_selected(object)-1;if(selectedIndex<0)return;
+    auto network=s->state_["wifiScan"]["networks"][selectedIndex];
+    String selected=network["ssid"]|"";
+    s->updating_=true;
+    for(auto& target:s->fields_)if(target.path=="wifi/ssid"||target.path=="wifi/password"){
+     String value=target.path=="wifi/ssid"?selected:(selected==String(s->state_["settings"]["wifi"]["ssid"]|"")?String(s->state_["settings"]["wifi"]["password"]|""):String(""));
+     lv_textarea_set_text(target.object,value.c_str());target.dirty=true;target.submitted="";s->drafts_[target.path]=value;
+    }
+    s->updating_=false;f.dirty=false;return;
+   }
    if(f.path=="@country"){JsonDocument args;String country=s->fieldText(f);args["country"]=country=="All countries"?String(""):country;s->queue("radio",args);f.dirty=false;}
    else if(f.kind=="switch"||f.kind=="select")s->submit(i);
   }
@@ -225,6 +250,13 @@ void PanelDashboard::event(lv_event_t* e){
   for(auto& f:s->fields_)if(f.path.startsWith("@"))f.dirty=false;
   lv_keyboard_set_textarea(s->keyboard_,nullptr);lv_obj_add_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_));s->queue("radio",a);return;
  }
+ if(key=="wifi:scan"){s->queue("wifiScan",a);return;}
+ if(key=="wifi:password"){for(auto& f:s->fields_)if(f.path=="wifi/password")lv_textarea_set_password_mode(f.object,!lv_textarea_get_password_mode(f.object));return;}
+ if(key=="wifi:connect"){
+  String ssid=text("wifi/ssid");if(ssid.isEmpty()){lv_label_set_text(s->notice_,"Choose or enter a network name");s->noticeUntil_=millis()+5000;return;}
+  auto changes=a["changes"].to<JsonArray>();for(const char* path:{"wifi/ssid","wifi/password"}){auto c=changes.add<JsonObject>();c["path"]=path;c["value"]=text(path);for(auto& f:s->fields_)if(f.path==path)f.submitted=text(path);}
+  s->queue("patch",a);return;
+ }
  if(key=="save"){s->submit();return;}if(key=="refresh"){s->page(s->page_);return;}
  if(key.startsWith("confirm:")){s->button("Confirm",key.substring(8));return;}
  if(key.startsWith("logic:")){a["mode"]=key.substring(6);s->queue("logics",a);return;}
@@ -235,6 +267,8 @@ void PanelDashboard::event(lv_event_t* e){
  if(key=="play")a["url"]=text("@url");s->queue(key,a);
 }
 void PanelDashboard::statusBar(const AppStateSnapshot& app){
+ String signature=String(app.network.wifiConnected)+String(app.network.apMode)+String(app.network.wifiRssi/5)+String(app.network.mqttConnected)+String(app.playback.volumePercent)+app.playback.state+String(app.battery.voltage,1)+String(time(nullptr)/60)+String(state_["security"]["locked"]|false)+String(state_["caps"]["playback"]|false)+String(state_["caps"]["battery"]|false)+String(state_["caps"]["storage-external"]|false);
+ if(signature==statusSignature_)return;statusSignature_=signature;
  bool sta=app.network.wifiConnected,ap=app.network.apMode;lv_label_set_text(wifi_,(String(LV_SYMBOL_WIFI)+(sta?(ap?" S+A":" STA"):ap?" AP":" " LV_SYMBOL_CLOSE)).c_str());lv_obj_set_style_text_color(wifi_,lv_color_hex(sta?0x72dc9e:ap?0x60a5fa:0xf87171),0);
  int level=sta?(app.network.wifiRssi>=-55?4:app.network.wifiRssi>=-67?3:app.network.wifiRssi>=-78?2:1):0;
  for(int i=0;i<4;i++)lv_obj_set_style_bg_color(bars_[i],lv_color_hex(i<level?0x72dc9e:0x475569),0);
@@ -257,12 +291,32 @@ void PanelDashboard::update(){
    text+="Calibration (0-3)\n";for(JsonPairConst c:d["calibration"].as<JsonObjectConst>())text+=String(c.key().c_str())+": "+String(c.value().as<int>())+"\n";
   }else if(!text.length())text="No live readings";set("bno055",text);
  }
- auto live=state_["live"];set("network",String(live["wifiConnected"]==true?"Connected":"Offline / AP")+"\n"+(live["ip"]|"")+" / "+String(live["rssi"]|0)+" dBm\nMQTT: "+(live["mqttConnected"]==true?"connected":"disconnected"));
+ auto live=state_["live"];set("network",String(live["wifiConnected"]==true?"Connected":"Offline / AP")+"\n"+String(state_["wifiLive"]["ssid"]|"")+"\n"+(live["ip"]|"")+" / "+String(live["rssi"]|0)+" dBm\nMQTT: "+(live["mqttConnected"]==true?"connected":"disconnected"));
+ set("wifiScan",state_["wifiScan"]["scanning"]==true?"Scanning...":state_["wifiScan"]["failed"]==true?"Scan failed. Try again.":state_["wifiScan"]["complete"]==true?(state_["wifiScan"]["networks"].size()?"Select a network, enter its password, then Connect":"No networks found"):"Scan or enter a network name below");
  set("radio",state_["radio"]["busy"]==true?String("Loading radio directory..."):String(state_["radio"]["error"]|"Choose a station to play"));
  set("device",String(live["name"]|"ELMA")+"\n"+(live["ip"]|""));set("playback",String(live["title"]|"Idle")+"\n"+(live["playbackState"]|"idle")+" / "+String(live["volume"]|0)+"%");
  set("battery",String(live["voltage"]|0.0f,2)+" V");
  String logic=String("Logics: ")+(state_["logics"]["mode"]|"stopped");for(JsonObjectConst group:state_["logics"]["groups"].as<JsonArrayConst>())logic+="\n"+String(group["name"]|group["id"]|"Group")+": "+(group["mode"]|"playing");logic+="\n"+String(state_["logics"]["live"]["error"]|"");for(JsonPairConst activity:state_["logics"]["live"]["activity"].as<JsonObjectConst>())if(activity.value()["failed"]==true)logic+="\nFailed: "+String(activity.key().c_str());set("logics",logic);
- auto system=state_["system"],hardware=state_["hardware"];set("hardware",String(hardware["chipModel"]|"")+"\nCPU: "+String(hardware["cpuFreqMHz"]|0)+" MHz / "+String(system["cpuLoadPercent"]|0)+"%\nFree heap: "+String(system["freeHeap"]|0)+" B\nLargest block: "+String(system["largestHeapBlockBytes"]|0)+" B\nTemperature: "+valueText(system["chipTemperatureC"])+" C\nPSRAM free: "+valueText(system["psram"]["freeBytes"])+" B");
+ auto system=state_["system"],hardware=state_["hardware"];
+ set("hardware",String(hardware["chipModel"]|"")+" / "+String(hardware["cpuFreqMHz"]|0)+" MHz\nLargest heap block: "+String(system["largestHeapBlockBytes"]|0)+" B");
+ if(page_=="hardware"){
+  auto meter=[&](const char* key,const String& text,double percent,bool available){
+   set((String("meter:")+key).c_str(),text);auto it=meters_.find(key);if(it==meters_.end())return;
+   int value=available?constrain(int(percent),0,100):0;if(lv_bar_get_value(it->second)!=value)lv_bar_set_value(it->second,value,LV_ANIM_OFF);
+   if(available)lv_obj_clear_state(it->second,LV_STATE_DISABLED);else lv_obj_add_state(it->second,LV_STATE_DISABLED);
+  };
+  bool cpu=system["cpuLoadAvailable"]|false;meter("cpu",cpu?String("CPU: ")+String(system["cpuLoadPercent"]|0)+"%":"CPU: waiting for sample",system["cpuLoadPercent"]|0,cpu);
+  for(int i=0;i<2;i++){bool exists=cpu&&i<int(system["cpuLoadCorePercent"].size());int value=system["cpuLoadCorePercent"][i]|0;meter(i?"core1":"core0",String("Core ")+String(i+1)+(exists?": "+String(value)+"%":": unavailable"),value,exists);}
+  for(const char* key:{"sram","psram","spiffs","sd"}){
+   auto memory=system[key];double total=memory["totalBytes"]|0.0,used=memory["usedBytes"]|0.0;
+   bool storage=String(key)=="sd"||String(key)=="spiffs";bool available=(memory["available"]|false)&&total>0&&(!storage||(memory["mounted"]|false));
+   String name=String(key)=="sram"?"RAM":String(key)=="psram"?"PSRAM":String(key)=="sd"?"SD card":"Internal storage";
+   meter(key,available?name+": "+String(used/1024,0)+" / "+String(total/1024,0)+" KB":name+": unavailable",available?100*used/total:0,available);
+  }
+  bool temperature=system["chipTemperatureAvailable"]|false;double value=system["chipTemperatureC"]|0.0;
+  meter("temperature",temperature?String("Temperature: ")+String(value,1)+" C"+(system["chipTemperatureEstimated"]==true?" (estimated)":""):"Temperature: unavailable",(value+20)*100/120,temperature);
+ }
+
  set("info",String("ELMA IoT ")+(state_["version"]|"")+"\n"+(hardware["boardProfile"]|"")+"\n"+(live["ip"]|"")+"\nDisplay: "+String(kPanelWidth)+" x "+String(kPanelHeight));
  set("firmware",String("Installed: ")+(state_["version"]|"")+"\n"+(live["otaPhase"]|"idle")+" "+String(live["otaProgress"]|0)+"%\n"+(live["lastError"]|""));
  set("storage",String(state_["storage"]["mounted"]==true?"Mounted":"Unavailable")+"\nFree: "+valueText(state_["storage"]["free"])+" / "+valueText(state_["storage"]["total"])+" bytes");
@@ -271,9 +325,9 @@ void PanelDashboard::update(){
  String leds;for(JsonObjectConst led:state_["ledArrays"].as<JsonArrayConst>())leds+="GPIO"+String(led["pin"]|0)+": "+(led["effect"]|"solid")+" / "+String(led["brightness"]|0)+"%\n";set("ledLive",leds);
  set("motor",valueText(state_["motor"]));set("security",String(state_["security"]["locked"]==true?"Locked":"Unlocked")+"\nPIN: "+(state_["security"]["enabled"]==true?"set":"not set")+"\nRetry in: "+String(state_["security"]["retryAfterSeconds"]|0)+" s");
  for(auto& f:fields_){JsonVariantConst incoming=PanelSettings::get(state_["settings"],f.path.c_str());if(f.path=="@volume")incoming=live["volume"];if(f.path=="@position")incoming=live["position"];if(f.path=="@url")incoming=live["url"];
-  if(f.path=="@country"||f.path=="@radioSearch")continue;
+  if(f.path=="@country"||f.path=="@radioSearch"||f.path=="@wifiNetwork")continue;
   if(f.path=="@station"){if(!lv_dropdown_is_open(f.object)&&!f.dirty){int i=0;for(JsonObjectConst station:state_["radio"]["items"].as<JsonArrayConst>()){if(station["url"]==live["url"])lv_dropdown_set_selected(f.object,i);i++;}}continue;}
-  String text=valueText(incoming);if(f.secret)continue;if(f.dirty){if(f.submitted.length()&&PanelSettings::acknowledged(f.submitted.c_str(),text.c_str())){f.dirty=false;f.submitted="";drafts_.erase(f.path);}else continue;}
+  String text=valueText(incoming);if(f.secret && !f.path.startsWith("wifi/"))continue;if(f.dirty){if(f.submitted.length()&&PanelSettings::acknowledged(f.submitted.c_str(),text.c_str())){f.dirty=false;f.submitted="";drafts_.erase(f.path);}else continue;}
   if(lv_obj_has_state(f.object,LV_STATE_PRESSED)||lv_keyboard_get_textarea(keyboard_)==f.object)continue;
   if(f.kind=="switch"){if(incoming==true)lv_obj_add_state(f.object,LV_STATE_CHECKED);else lv_obj_clear_state(f.object,LV_STATE_CHECKED);}
   else if(f.kind=="slider"){if(f.path=="@position")lv_slider_set_range(f.object,0,live["duration"]|0);lv_slider_set_value(f.object,incoming|0,LV_ANIM_OFF);}
@@ -289,7 +343,7 @@ void PanelDashboard::sdFormatEvent(lv_event_t* event){
  else {JsonDocument args;self->queue("dismissSdFormat",args);}
  lv_msgbox_close(self->sdFormatPrompt_);self->sdFormatPrompt_=nullptr;
 }
-void PanelDashboard::loop(const AppStateSnapshot& app,Snapshot snapshot,Command command,const String& overlay){
+void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,const Command& command,const String& overlay){
  auto now=millis();lv_tick_inc(now-tick_);tick_=now;
  if(refreshNow_||now-refresh_>=1000){bool rebuild=refreshNow_;refreshNow_=false;refresh_=now;state_.clear();if(snapshot)snapshot(page_,state_.to<JsonObject>());
   auto live=state_["live"].to<JsonObject>();live["name"]=app.device.friendlyName;live["ip"]=app.network.ip;live["wifiConnected"]=app.network.wifiConnected;live["mqttConnected"]=app.network.mqttConnected;live["rssi"]=app.network.wifiRssi;live["voltage"]=app.battery.voltage;live["title"]=app.playback.title;live["playbackState"]=app.playback.state;live["volume"]=app.playback.volumePercent;live["lastError"]=app.system.lastError;live["otaPhase"]=app.ota.phase;live["otaProgress"]=app.ota.progressPercent;
@@ -301,12 +355,13 @@ void PanelDashboard::loop(const AppStateSnapshot& app,Snapshot snapshot,Command 
   String structure=page_;serializeJson(state_["settings"]["ui"]["peripheralProfiles"],structure);
   if(page_.startsWith("storage-")){serializeJson(state_["files"],structure);structure+=String(state_["storage"]["path"]|"/")+String(state_["storage"]["mounted"]|false);}
   if(page_=="playback"&&state_["radio"]["busy"]!=true)serializeJson(state_["radio"],structure);
+  if(page_=="wifi")serializeJson(state_["wifiScan"]["networks"],structure);
   structure+=String(app.playback.durationSeconds>0);
   for(JsonPairConst slot:state_["settings"]["ui"]["peripheralHelperBindings"].as<JsonObjectConst>())structure+=String(slot.key().c_str())+":"+String(slot.value()["LED_ARRAYS"]|1);
   bool editing=false;for(const auto& f:fields_)if((f.dirty&&!f.path.startsWith("@"))||lv_keyboard_get_textarea(keyboard_)==f.object||lv_obj_has_state(f.object,LV_STATE_PRESSED)||(f.kind=="select"&&lv_dropdown_is_open(f.object)))editing=true;
   if(structure!=structure_&&!editing){structure_=structure;rebuild=true;}
   statusBar(app);syncMenu();if(rebuild){page(page_);refreshNow_=false;}update();
-  if(overlay.length())lv_label_set_text(notice_,overlay.c_str());else if(int32_t(now-noticeUntil_)>=0)lv_label_set_text(notice_,"");
+  if(overlay.length())lv_label_set_text(notice_,overlay.c_str());else if(int32_t(now-noticeUntil_)>=0 && *lv_label_get_text(notice_))lv_label_set_text(notice_,"");
  }
  if(sdFormatPrompt_ && !sdFormatPromptNeeded()){lv_msgbox_close(sdFormatPrompt_);sdFormatPrompt_=nullptr;}
  if(!sdFormatPromptShown_ && sdFormatPromptNeeded() && !(state_["security"]["locked"]|false)){
@@ -333,7 +388,7 @@ void PanelDashboard::loop(const AppStateSnapshot& app,Snapshot snapshot,Command 
  lv_timer_handler();
  if(!commands_.empty()){String encoded=commands_.front();commands_.pop_front();JsonDocument request;deserializeJson(request,encoded);String error;bool ok=command&&command(request["action"].as<String>(),request["args"],error);lv_label_set_text(notice_,ok?"Applied":error.c_str());noticeUntil_=now+4000;
   if(ok&&request["action"]=="patch")for(JsonObjectConst change:request["args"]["changes"].as<JsonArrayConst>()){String path=change["path"]|"";auto it=drafts_.find(path);if(it!=drafts_.end()&&it->second==valueText(change["value"]))drafts_.erase(it);}
-  if(ok)for(auto& f:fields_)if(f.secret){updating_=true;lv_textarea_set_text(f.object,"");updating_=false;f.dirty=false;drafts_.erase(f.path);}
+  if(ok)for(auto& f:fields_)if(f.secret && !f.path.startsWith("wifi/")){updating_=true;lv_textarea_set_text(f.object,"");updating_=false;f.dirty=false;drafts_.erase(f.path);}
   if(request["action"]=="security"){page("security");refreshNow_=true;}
  }
 }

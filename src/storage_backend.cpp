@@ -15,6 +15,8 @@
 #include <diskio.h>
 #endif
 #include <SPI.h>
+#include <memory>
+#include "psram_allocator.h"
 #include <esp_partition.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -273,13 +275,36 @@ void unmountSdStorage() {
     cacheSdSummary(summary);
 }
 
+// Only called with the filesystem unmounted and the maintenance lease held.
+// CMD0 is a bounded, read-only presence probe: absent slots never enter FatFs.
+bool spiCardResponds(const SdSettings& settings) {
+    sdSpi.beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
+    bool present=false;
+    for(unsigned attempt=0;attempt<3 && !present;++attempt){
+        digitalWrite(settings.csPin,HIGH);
+        for(unsigned i=0;i<10;++i)sdSpi.transfer(0xff);
+        digitalWrite(settings.csPin,LOW);
+        const uint8_t command[]={0x40,0,0,0,0,0x95};
+        for(uint8_t value:command)sdSpi.transfer(value);
+        for(unsigned i=0;i<9;++i){uint8_t response=sdSpi.transfer(0xff);if(!(response&0x80)){present=response==1;break;}}
+        digitalWrite(settings.csPin,HIGH);sdSpi.transfer(0xff);
+        if(!present)delay(2);
+    }
+    sdSpi.endTransaction();
+    return present;
+}
+
 // Read-only FAT probe distinguishes an absent/I/O-failing card from a responding
 // card with no supported filesystem. Never infer permission to erase from failure.
 bool spiCardNeedsFormat(const SdSettings& settings) {
     uint8_t drive=sdcard_init(settings.csPin,&sdSpi,1000000);
     if(drive==0xff)return false;
-    FATFS filesystem{};char name[]={char('0'+drive),':',0};
-    FRESULT result=f_mount(&filesystem,name,1);
+    // FATFS contains a sector buffer up to FF_MAX_SS (4096 on this SDK).
+    // It must not live on the 4096-byte storage worker stack.
+    std::unique_ptr<FATFS> filesystem(allocatePreferPsram<FATFS>());
+    if(!filesystem){sdcard_uninit(drive);return false;}
+    char name[]={char('0'+drive),':',0};
+    FRESULT result=f_mount(filesystem.get(),name,1);
     f_mount(nullptr,name,0);sdcard_uninit(drive);
     return result==FR_NO_FILESYSTEM;
 }
@@ -306,11 +331,12 @@ bool mmcCardNeedsFormat(bool format=false) {
         BYTE drive;
         if(ff_diskio_get_drive(&drive)==ESP_OK){
             ff_diskio_register_sdmmc(drive,&card);
-            FATFS filesystem{};char name[]={char('0'+drive),':',0};
-            needsFormat=f_mount(&filesystem,name,1)==FR_NO_FILESYSTEM;
+            std::unique_ptr<FATFS> filesystem(allocatePreferPsram<FATFS>());
+            char name[]={char('0'+drive),':',0};
+            needsFormat=filesystem && f_mount(filesystem.get(),name,1)==FR_NO_FILESYSTEM;
             // Formatting is permitted only for this positively identified FAT
             // result, not a timeout, bad wiring, or general mount error.
-            if(needsFormat && format){BYTE work[FF_MAX_SS];f_mkfs(name,FM_ANY,0,work,sizeof(work));}
+            if(needsFormat && format){std::unique_ptr<BYTE[]> work(new(std::nothrow) BYTE[FF_MAX_SS]);if(work)f_mkfs(name,FM_ANY,0,work.get(),FF_MAX_SS);}
             f_mount(nullptr,name,0);ff_diskio_unregister(drive);
         }
     }
@@ -364,6 +390,15 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
     digitalWrite(settings.csPin, HIGH);
     sdSpi.begin(settings.sckPin, settings.misoPin, settings.mosiPin, settings.csPin);
     sdSpiStarted = true;
+
+    if(!spiCardResponds(settings)){
+        if(sdConsecutiveMountFailures==0)DebugLog.println("[storage] SD slot empty or card not responding; waiting for insertion");
+        sdConsecutiveMountFailures=min<uint8_t>(254,sdConsecutiveMountFailures)+1;
+        nextSdMountAttemptAt=millis()+5000;
+        StorageBackendSummary summary;summary.available=true;
+        cacheSdSummary(summary); // Not a format request: no responding medium.
+        return false;
+    }
 
     // Re-check at execution time. SD.begin(true) only formats FR_NO_FILESYSTEM;
     // an already valid filesystem is never reformatted.

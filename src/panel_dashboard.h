@@ -16,7 +16,7 @@ public:
  using Command=std::function<bool(const String&,JsonVariantConst,String&)>;
  explicit PanelDashboard(PanelDisplay& panel):panel_(panel),state_(storageJsonAllocator()){}
  ~PanelDashboard();bool begin(uint8_t rotation);
- void loop(const AppStateSnapshot&,Snapshot,Command,const String&);
+ void loop(const AppStateSnapshot&,const Snapshot&,const Command&,const String&);
  bool touched(){bool v=touched_;touched_=false;return v;}
 private:
  struct Field {String path,kind,options;lv_obj_t* object=nullptr;bool dirty=false,secret=false;String submitted;double minimum=-1e9,maximum=1e9;};
@@ -25,14 +25,14 @@ private:
  lv_obj_t *screen_=nullptr,*body_=nullptr,*notice_=nullptr,*keyboard_=nullptr,*menu_=nullptr;
  lv_obj_t *wifi_=nullptr,*mqtt_=nullptr,*extra_=nullptr,*clock_=nullptr,*bars_[4]{};
  lv_obj_t *speaker_=nullptr,*volumeOverlay_=nullptr,*volumeSlider_=nullptr,*volumeLabel_=nullptr;
- std::map<String,lv_obj_t*> labels_,buttons_;std::map<String,String> drafts_;std::vector<Field> fields_;std::vector<String> tabs_;
+ std::map<String,lv_obj_t*> labels_,buttons_,meters_;std::map<String,String> drafts_;std::vector<Field> fields_;std::vector<String> tabs_;
  JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_,countryOptions_="All countries";
  unsigned long tick_=0,refresh_=0,noticeUntil_=0;bool touched_=false,frameReported_=false,updating_=false,refreshNow_=true;
  bool radioRequested_=false;
  bool sdFormatPromptShown_=false;lv_obj_t* sdFormatPrompt_=nullptr;
  lv_obj_t *sdFormatProgress_=nullptr,*sdFormatBar_=nullptr;
  static void sdFormatEvent(lv_event_t*);
- String lastPlaybackUrl_,resumeUrl_,resumeTitle_;
+ String lastPlaybackUrl_,resumeUrl_,resumeTitle_,statusSignature_;
  void page(const String&);void syncMenu();void statusBar(const AppStateSnapshot&);void update();
  lv_obj_t* label(const String&);void button(const String&,const String&);
  void field(const String&,const String&,const String& kind="text",const String& options="",double minimum=-1e9,double maximum=1e9);
