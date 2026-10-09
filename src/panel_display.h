@@ -20,6 +20,20 @@ public:
     bool drawColor(int x,int y,int width,int height,uint8_t* colors);
     void brightness(uint8_t percent);
     bool readTouch(int16_t &x, int16_t &y);
+    uint32_t spiClock() const {
+#if APP_SUNTON_PANEL
+        return board_?board_->spiClock():0;
+#else
+        return 0;
+#endif
+    }
+    bool takeClockChange(){
+#if APP_SUNTON_PANEL
+        return board_&&board_->takeClockChange();
+#else
+        return false;
+#endif
+    }
 private:
 #if APP_SUNTON_PANEL
     std::unique_ptr<SuntonPanel> board_;

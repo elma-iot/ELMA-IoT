@@ -4750,12 +4750,18 @@ void loop() {
         processSoundEffectTransitions(runtimeStateSnapshot);
         serviceRuntimeAudioAutomation(runtimeStateSnapshot);
         serviceAudioPlaybackGuard(runtimeStateSnapshot);
+#if !APP_HAS_ONBOARD_PANEL
         displayManager->loop(runtimeStateSnapshot);
+#endif
         Bno055::tick();
         handleLowBatterySleepPolicy(runtimeStateSnapshot);
         confirmOtaHealthIfReady();
         publishOtaStateIfNeeded(runtimeStateSnapshot);
     }
+#if APP_HAS_ONBOARD_PANEL
+    // Service touch/LVGL independently of periodic state and telemetry work.
+    if(runtimeStateSnapshotInitialized)displayManager->loop(runtimeStateSnapshot);
+#endif
     maybeClearPowerCycleCounterAfterStableBoot();
 
     if (millis() - lastHeapUpdateAt > 2000UL) {
@@ -4821,7 +4827,7 @@ void loop() {
         (runtimeStateSnapshot.playback.state == "playing" || runtimeStateSnapshot.playback.state == "buffering" ||
          runtimeStateSnapshot.ota.busy);
     wifiManager->setLowLatencyMode(latencySensitive);
-    delay(latencySensitive ? kActiveLoopDelayMs : kIdleLoopDelayMs);
+    delay((latencySensitive || displayManager->interactivePanelActive()) ? kActiveLoopDelayMs : kIdleLoopDelayMs);
 }
 
 #endif

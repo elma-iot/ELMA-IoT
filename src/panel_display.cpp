@@ -54,6 +54,7 @@ bool PanelDisplay::drawColor(int x,int y,int width,int height,uint8_t* colors) {
     if(!board_)return false;
     // LV_COLOR_16_SWAP=1 already stores wire-order RGB565, as in LovyanGFX's LVGL port.
     board_->pushImage(x,y,width,height,reinterpret_cast<lgfx::swap565_t*>(colors));
+    board_->verifyTransfer(x,y,width,height,colors);
     const bool ok=true;
 #else
     const bool ok = board_ && board_->getLCD()->drawBitmap(x,y,width,height,colors,-1);

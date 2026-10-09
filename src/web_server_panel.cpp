@@ -15,6 +15,7 @@ bool selected(JsonVariantConst values,const char* fragment=nullptr){
 }
 }
 void WebServerManager::panelSnapshot(const String& page,JsonObject root){
+ if(page=="info"){root["build"]=__DATE__ " " __TIME__;root["mac"]=WiFi.macAddress();}
  root["version"]=APP_VERSION;security_.status(root["security"].to<JsonObject>());
  if(security_.locked())return;
  root["sdNeedsFormat"]=sdFormatPromptNeeded();
@@ -23,7 +24,7 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  if(section)settingsManager_->toJson(settings,config,section,false);
  if(page=="gpio"||page=="wled"||page=="motor")settingsManager_->toJson(settings,config,"ui",false);
  // Passwords stay on the unlocked local panel; other pages never carry them.
- config["mqtt"].remove("password");config["webAuth"].remove("password");
+ if(page!="mqtt")config["mqtt"].remove("password");config["webAuth"].remove("password");
  JsonDocument profileDoc(storageJsonAllocator());JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
  if(profiles.isNull()){deserializeJson(profileDoc,settings.ui.peripheralProfileSelections);profiles=profileDoc.as<JsonVariantConst>();}
  if(page=="wifi"){

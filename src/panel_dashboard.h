@@ -28,7 +28,14 @@ private:
  std::map<String,lv_obj_t*> labels_,buttons_,meters_;std::map<String,String> drafts_;std::vector<Field> fields_;std::vector<String> tabs_;
  JsonDocument state_;std::deque<String> commands_;String page_="gpio",menuSignature_,structure_,countryOptions_="All countries";
  unsigned long tick_=0,refresh_=0,noticeUntil_=0;bool touched_=false,frameReported_=false,updating_=false,refreshNow_=true;
- bool radioRequested_=false;
+ bool radioRequested_=false,keyboardBindingsDirty_=true;
+ lv_obj_t *wifiOverlay_=nullptr,*wifiContent_=nullptr,*wifiMessage_=nullptr,*wifiProgress_=nullptr,*wifiSsid_=nullptr,*wifiPassword_=nullptr;
+ enum class WifiStep { Closed, Scanning, Networks, Credentials, Connecting, Success };
+ WifiStep wifiStep_=WifiStep::Closed;unsigned long wifiStepAt_=0;String wifiTarget_;
+ bool mqttDialog_=false;lv_obj_t *mqttUser_=nullptr,*mqttPort_=nullptr;
+ void wifiDialog(WifiStep,const String& ssid="",bool mqtt=false);void closeWifiDialog();void connectWifiDialog();void updateWifiDialog();
+ static void wifiDialogEvent(lv_event_t*);
+ void hideKeyboard();void bindKeyboardDismiss(lv_obj_t*);
  bool sdFormatPromptShown_=false;lv_obj_t* sdFormatPrompt_=nullptr;
  lv_obj_t *sdFormatProgress_=nullptr,*sdFormatBar_=nullptr;
  static void sdFormatEvent(lv_event_t*);

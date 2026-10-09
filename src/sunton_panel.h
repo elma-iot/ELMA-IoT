@@ -4,6 +4,7 @@
 #if APP_SUNTON_PANEL
 #include <LovyanGFX.hpp>
 #include <Wire.h>
+#include "device_log.h"
 class SuntonPanel : public lgfx::LGFX_Device {
     lgfx::Bus_SPI bus_;
 #if APP_SUNTON_PANEL == 3
@@ -15,6 +16,30 @@ class SuntonPanel : public lgfx::LGFX_Device {
     TwoWire touchWire_{1};
     bool touchEnabled_ = false;
     uint8_t touchAddress_ = 0;
+    bool readbackVerified_ = false;
+    uint32_t checkedAt_ = 0;
+    bool clockChanged_ = false;
+    bool testPixels() {
+        // Check a varied block before the UI is drawn, with slow reads.
+        uint16_t pixels[128];
+        for(int pass=0;pass<3;pass++) {
+            for(int i=0;i<128;i++)pixels[i]=uint16_t((i*977+pass*12347)^0xa55a);
+            pushImage(0,0,16,8,reinterpret_cast<lgfx::rgb565_t*>(pixels));
+            for(int i=0;i<128;i+=7)if(readPixel(i%16,i/16)!=pixels[i])return false;
+        }
+        return true;
+    }
+    void selectClock() {
+        bus_.setClock(20000000);
+        readbackVerified_=testPixels();
+        if(!readbackVerified_){bus_.setClock(10000000);readbackVerified_=testPixels();}
+        if(!readbackVerified_){bus_.setClock(20000000);DebugLog.println("[display] Pixel readback unavailable; conservative SPI 20 MHz");return;}
+        for(uint32_t hz:{80000000UL,40000000UL,20000000UL,10000000UL}){
+            bus_.setClock(hz);
+            if(testPixels()){DebugLog.printf("[display] SPI %u MHz passed pixel readback\n",unsigned(hz/1000000));return;}
+            DebugLog.printf("[display] SPI %u MHz pixel check failed; reducing clock\n",unsigned(hz/1000000));
+        }
+    }
 #if APP_SUNTON_PANEL == 3
     bool touchPressed_ = false;
     int16_t touchX_ = 0, touchY_ = 0;
@@ -43,7 +68,7 @@ class SuntonPanel : public lgfx::LGFX_Device {
 public:
     SuntonPanel() {
         auto b=bus_.config();b.spi_host=SPI2_HOST;b.spi_mode=0;
-        b.freq_write=24000000;b.freq_read=16000000;b.spi_3wire=false;
+        b.freq_write=20000000;b.freq_read=4000000;b.spi_3wire=false;
         b.use_lock=true;b.dma_channel=SPI_DMA_CH_AUTO;
         b.pin_sclk=14;b.pin_mosi=13;b.pin_miso=12;b.pin_dc=2;bus_.config(b);panel_.setBus(&bus_);
         auto p=panel_.config();p.pin_cs=15;p.pin_rst=-1;p.pin_busy=-1;
@@ -55,7 +80,7 @@ public:
     }
     bool start(bool touch) {
         if(!init())return false;
-        setRotation(0);touchEnabled_=touch;
+        setRotation(0);selectClock();touchEnabled_=touch;
         if(!touch)return true;
 #if APP_SUNTON_PANEL == 1
         // Software SPI keeps the separate XPT2046 wiring off the SD VSPI host.
@@ -103,6 +128,18 @@ public:
         x=((data[1]&15)<<8)|data[2];y=((data[3]&15)<<8)|data[4];
 #endif
         return x>=0&&x<kPanelWidth&&y>=0&&y<kPanelHeight;
+    }
+    uint32_t spiClock() const { return bus_.config().freq_write; }
+    bool takeClockChange(){bool changed=clockChanged_;clockChanged_=false;return changed;}
+    void verifyTransfer(int x,int y,int width,int height,const uint8_t* bytes){
+        if(!readbackVerified_||millis()-checkedAt_<2000||width<=0||height<=0)return;
+        checkedAt_=millis();
+        int i=(width*height)/2;uint16_t expected=(uint16_t(bytes[i*2])<<8)|bytes[i*2+1];
+        if(readPixel(x+i%width,y+i/width)==expected)return;
+        uint32_t hz=bus_.getClock();if(hz<=10000000){DebugLog.println("[display] Pixel mismatch at minimum SPI clock; check panel");return;}
+        uint32_t next=hz>40000000?40000000:hz>20000000?20000000:10000000;
+        bus_.setClock(next);clockChanged_=true;
+        DebugLog.printf("[display] Runtime pixel mismatch: SPI reduced to %u MHz\n",unsigned(next/1000000));
     }
 };
 #endif

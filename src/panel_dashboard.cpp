@@ -27,7 +27,7 @@ bool PanelDashboard::begin(uint8_t rotation){
  lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*rows);lv_disp_drv_init(&displayDriver_);
  displayDriver_.hor_res=kPanelWidth;displayDriver_.ver_res=kPanelHeight;displayDriver_.draw_buf=&drawBuffer_;displayDriver_.flush_cb=flush;displayDriver_.user_data=this;displayDriver_.sw_rotate=1;
  display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
- lv_indev_drv_init(&inputDriver_);inputDriver_.type=LV_INDEV_TYPE_POINTER;inputDriver_.read_cb=touch;inputDriver_.user_data=this;inputDriver_.disp=display_;input_=lv_indev_drv_register(&inputDriver_);
+ lv_indev_drv_init(&inputDriver_);inputDriver_.type=LV_INDEV_TYPE_POINTER;inputDriver_.read_cb=touch;inputDriver_.user_data=this;inputDriver_.disp=display_;inputDriver_.scroll_limit=8;inputDriver_.scroll_throw=12;input_=lv_indev_drv_register(&inputDriver_);
  screen_=lv_disp_get_scr_act(display_);lv_obj_set_style_bg_color(screen_,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(screen_,lv_color_hex(0xf3f4f6),0);lv_obj_set_style_pad_all(screen_,6,0);lv_obj_set_style_pad_row(screen_,5,0);lv_obj_set_flex_flow(screen_,LV_FLEX_FLOW_COLUMN);lv_obj_clear_flag(screen_,LV_OBJ_FLAG_SCROLLABLE);
  auto* bar=lv_obj_create(screen_);lv_obj_set_style_text_color(bar,lv_color_hex(0xf3f4f6),0);lv_obj_set_size(bar,LV_PCT(100),28);lv_obj_set_style_pad_all(bar,0,0);lv_obj_set_style_border_width(bar,0,0);lv_obj_set_style_bg_opa(bar,LV_OPA_TRANSP,0);lv_obj_clear_flag(bar,LV_OBJ_FLAG_SCROLLABLE);
  wifi_=lv_label_create(bar);lv_obj_set_pos(wifi_,0,5);lv_label_set_text(wifi_,LV_SYMBOL_WIFI " --");
@@ -39,10 +39,10 @@ bool PanelDashboard::begin(uint8_t rotation){
   if(lv_obj_has_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN))lv_obj_clear_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);
  },LV_EVENT_CLICKED,this);
  menu_=lv_dropdown_create(screen_);lv_obj_set_size(menu_,LV_PCT(100),44);lv_obj_add_event_cb(menu_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));auto i=lv_dropdown_get_selected(s->menu_);if(i<s->tabs_.size())s->page(s->tabs_[i]);},LV_EVENT_VALUE_CHANGED,this);
- body_=lv_obj_create(screen_);lv_obj_set_width(body_,LV_PCT(100));lv_obj_set_flex_grow(body_,1);lv_obj_set_flex_flow(body_,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(body_,8,0);lv_obj_set_style_pad_row(body_,9,0);lv_obj_set_style_bg_color(body_,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(body_,lv_color_hex(0xf3f4f6),0);
+ body_=lv_obj_create(screen_);lv_obj_set_scroll_dir(body_,LV_DIR_VER);lv_obj_add_flag(body_,LV_OBJ_FLAG_SCROLL_MOMENTUM);lv_obj_clear_flag(body_,LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_set_width(body_,LV_PCT(100));lv_obj_set_flex_grow(body_,1);lv_obj_set_flex_flow(body_,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(body_,8,0);lv_obj_set_style_pad_row(body_,9,0);lv_obj_set_style_bg_color(body_,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(body_,lv_color_hex(0xf3f4f6),0);
  notice_=lv_label_create(screen_);lv_obj_set_width(notice_,LV_PCT(100));lv_label_set_long_mode(notice_,LV_LABEL_LONG_WRAP);lv_label_set_text(notice_,"");
  keyboard_=lv_keyboard_create(lv_disp_get_layer_top(display_));lv_obj_set_height(keyboard_,LV_PCT(48));lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);
- lv_obj_add_event_cb(keyboard_,[](lv_event_t* e){if(lv_event_get_code(e)==LV_EVENT_READY||lv_event_get_code(e)==LV_EVENT_CANCEL){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));lv_keyboard_set_textarea(s->keyboard_,nullptr);lv_obj_add_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_));}},LV_EVENT_ALL,this);
+ lv_obj_add_event_cb(keyboard_,[](lv_event_t* e){if(lv_event_get_code(e)==LV_EVENT_READY||lv_event_get_code(e)==LV_EVENT_CANCEL){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));lv_keyboard_set_textarea(s->keyboard_,nullptr);lv_obj_add_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_));if(s->wifiOverlay_){lv_obj_set_height(s->wifiOverlay_,LV_PCT(100));lv_obj_set_height(s->wifiContent_,lv_disp_get_ver_res(s->display_)-90);if(lv_event_get_code(e)==LV_EVENT_READY)s->connectWifiDialog();}}},LV_EVENT_ALL,this);
  volumeOverlay_=lv_obj_create(lv_disp_get_layer_top(display_));lv_obj_set_size(volumeOverlay_,LV_PCT(100),LV_PCT(100));lv_obj_set_style_bg_opa(volumeOverlay_,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(volumeOverlay_,0,0);lv_obj_set_style_pad_all(volumeOverlay_,0,0);lv_obj_clear_flag(volumeOverlay_,LV_OBJ_FLAG_SCROLLABLE);lv_obj_add_flag(volumeOverlay_,LV_OBJ_FLAG_HIDDEN);
  lv_obj_add_event_cb(volumeOverlay_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));if(lv_event_get_target(e)==s->volumeOverlay_)lv_obj_add_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);},LV_EVENT_CLICKED,this);
  auto* volumeBox=lv_obj_create(volumeOverlay_);lv_obj_set_size(volumeBox,LV_PCT(94),100);lv_obj_align(volumeBox,LV_ALIGN_TOP_MID,0,37);lv_obj_clear_flag(volumeBox,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_style_bg_color(volumeBox,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(volumeBox,lv_color_hex(0xf3f4f6),0);
@@ -58,7 +58,94 @@ void PanelDashboard::flush(lv_disp_drv_t* d,const lv_area_t* a,lv_color_t* c){au
 void PanelDashboard::touch(lv_indev_drv_t* d,lv_indev_data_t* data){auto* s=static_cast<PanelDashboard*>(d->user_data);int16_t x,y;if(s->panel_.readRawTouch(x,y)){data->point.x=x;data->point.y=y;data->state=LV_INDEV_STATE_PRESSED;s->touched_=true;}else data->state=LV_INDEV_STATE_RELEASED;}
 lv_obj_t* PanelDashboard::label(const String& text){auto* o=lv_label_create(body_);lv_obj_set_width(o,LV_PCT(100));lv_label_set_long_mode(o,LV_LABEL_LONG_WRAP);lv_label_set_text(o,text.c_str());return o;}
 void PanelDashboard::section(const String& text){auto* o=label(text);lv_obj_set_style_text_color(o,lv_color_hex(0xf59e0b),0);}
-void PanelDashboard::button(const String& caption,const String& key){auto* o=lv_btn_create(body_);lv_obj_set_size(o,LV_PCT(100),44);auto* t=lv_label_create(o);lv_obj_set_width(t,LV_PCT(95));lv_label_set_long_mode(t,LV_LABEL_LONG_DOT);lv_label_set_text(t,caption.c_str());lv_obj_center(t);buttons_[key]=o;lv_obj_add_event_cb(o,event,LV_EVENT_CLICKED,this);}
+void PanelDashboard::hideKeyboard(){
+ lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));
+ if(wifiOverlay_){lv_obj_set_height(wifiOverlay_,LV_PCT(100));lv_obj_set_height(wifiContent_,lv_disp_get_ver_res(display_)-90);}
+}
+void PanelDashboard::bindKeyboardDismiss(lv_obj_t* root){
+ if(!lv_obj_has_flag(root,LV_OBJ_FLAG_USER_1)){
+  lv_obj_add_flag(root,LV_OBJ_FLAG_USER_1);lv_obj_set_style_shadow_width(root,0,LV_PART_MAIN);
+  lv_obj_add_event_cb(root,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));
+   if(lv_obj_has_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN))return;
+   for(auto* o=lv_event_get_target(e);o;o=lv_obj_get_parent(o))if(o==s->keyboard_||lv_obj_check_type(o,&lv_textarea_class))return;
+   s->hideKeyboard();
+  },LV_EVENT_CLICKED,this);
+ }
+ for(uint32_t i=0;i<lv_obj_get_child_cnt(root);i++)bindKeyboardDismiss(lv_obj_get_child(root,i));
+}
+void PanelDashboard::closeWifiDialog(){
+ lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);
+ if(wifiOverlay_)lv_obj_del(wifiOverlay_);
+ wifiOverlay_=wifiContent_=wifiMessage_=wifiProgress_=wifiSsid_=wifiPassword_=nullptr;wifiStep_=WifiStep::Closed;mqttDialog_=false;mqttUser_=mqttPort_=nullptr;
+ lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));
+}
+void PanelDashboard::wifiDialog(WifiStep step,const String& ssid,bool mqtt){
+ closeWifiDialog();keyboardBindingsDirty_=true;mqttDialog_=mqtt;wifiStep_=step;wifiStepAt_=millis();
+ wifiOverlay_=lv_obj_create(lv_disp_get_layer_top(display_));lv_obj_set_size(wifiOverlay_,LV_PCT(100),LV_PCT(100));
+ lv_obj_set_style_bg_color(wifiOverlay_,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(wifiOverlay_,lv_color_hex(0xf3f4f6),0);lv_obj_clear_flag(wifiOverlay_,LV_OBJ_FLAG_SCROLLABLE);
+ auto* title=lv_label_create(wifiOverlay_);lv_label_set_text(title,mqttDialog_?"MQTT setup":"Wi-Fi setup");lv_obj_align(title,LV_ALIGN_TOP_LEFT,0,8);
+ auto* close=lv_btn_create(wifiOverlay_);lv_obj_set_size(close,40,36);lv_obj_align(close,LV_ALIGN_TOP_RIGHT,0,0);auto* x=lv_label_create(close);lv_label_set_text(x,LV_SYMBOL_CLOSE);lv_obj_center(x);
+ lv_obj_add_event_cb(close,[](lv_event_t* e){static_cast<PanelDashboard*>(lv_event_get_user_data(e))->closeWifiDialog();},LV_EVENT_CLICKED,this);
+ wifiContent_=lv_obj_create(wifiOverlay_);lv_obj_set_size(wifiContent_,LV_PCT(100),lv_disp_get_ver_res(display_)-90);lv_obj_align(wifiContent_,LV_ALIGN_BOTTOM_MID,0,0);
+ lv_obj_set_scroll_dir(wifiContent_,LV_DIR_VER);lv_obj_add_flag(wifiContent_,LV_OBJ_FLAG_SCROLL_MOMENTUM);lv_obj_clear_flag(wifiContent_,LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_set_flex_flow(wifiContent_,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(wifiContent_,8,0);lv_obj_set_style_pad_row(wifiContent_,10,0);lv_obj_set_style_bg_color(wifiContent_,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(wifiContent_,lv_color_hex(0xf3f4f6),0);
+ wifiMessage_=lv_label_create(wifiContent_);lv_obj_set_width(wifiMessage_,LV_PCT(100));lv_label_set_long_mode(wifiMessage_,LV_LABEL_LONG_WRAP);
+ if(step==WifiStep::Scanning){
+  lv_label_set_text(wifiMessage_,"Scanning for networks...");wifiProgress_=lv_spinner_create(wifiContent_,1000,70);lv_obj_set_size(wifiProgress_,44,44);return;
+ }
+ if(step==WifiStep::Networks){
+  auto networks=state_["wifiScan"]["networks"].as<JsonArrayConst>();lv_label_set_text(wifiMessage_,networks.size()?"Select your network":"No networks found. Close and scan again, or enter a name below.");
+  for(JsonObjectConst n:networks){String name=n["ssid"]|"";if(name.isEmpty())continue;
+   auto* b=lv_btn_create(wifiContent_);lv_obj_set_size(b,LV_PCT(100),48);auto* t=lv_label_create(b);lv_obj_set_width(t,LV_PCT(95));lv_label_set_long_mode(t,LV_LABEL_LONG_DOT);lv_label_set_text(t,name.c_str());lv_obj_center(t);
+   lv_obj_add_event_cb(b,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));String name=lv_label_get_text(lv_obj_get_child(lv_event_get_target(e),0));s->wifiDialog(WifiStep::Credentials,name);},LV_EVENT_CLICKED,this);
+  }
+  auto* manual=lv_btn_create(wifiContent_);lv_obj_set_size(manual,LV_PCT(100),44);auto* t=lv_label_create(manual);lv_label_set_text(t,"Enter network manually");lv_obj_center(t);lv_obj_add_event_cb(manual,[](lv_event_t* e){static_cast<PanelDashboard*>(lv_event_get_user_data(e))->wifiDialog(WifiStep::Credentials);},LV_EVENT_CLICKED,this);return;
+ }
+ lv_label_set_text(wifiMessage_,mqttDialog_?"Broker host, password, username and port":"Enter network name and password");
+ for(int i=0;i<(mqttDialog_?4:2);i++){
+  auto* text=lv_textarea_create(wifiContent_);lv_obj_set_size(text,LV_PCT(100),46);lv_textarea_set_one_line(text,true);lv_textarea_set_max_length(text,mqttDialog_?128:(i?64:32));lv_textarea_set_placeholder_text(text,i==1?"Password":i==2?"Username":i==3?"Port":mqttDialog_?"Broker host":"Wi-Fi name");lv_textarea_set_password_mode(text,i==1);
+  if(mqttDialog_){const char* key=i==0?"host":i==1?"password":i==2?"username":"port";String value=valueText(state_["settings"]["mqtt"][key]);lv_textarea_set_text(text,value.c_str());if(i==0)wifiSsid_=text;else if(i==1)wifiPassword_=text;else if(i==2)mqttUser_=text;else{mqttPort_=text;lv_textarea_set_accepted_chars(text,"0123456789");}}
+  else if(i){wifiPassword_=text;if(ssid==String(state_["settings"]["wifi"]["ssid"]|""))lv_textarea_set_text(text,state_["settings"]["wifi"]["password"]|"");}else{wifiSsid_=text;lv_textarea_set_text(text,ssid.c_str());}
+  lv_obj_add_event_cb(text,wifiDialogEvent,LV_EVENT_CLICKED,this);lv_obj_add_event_cb(text,wifiDialogEvent,LV_EVENT_FOCUSED,this);
+ }
+ auto* reveal=lv_btn_create(wifiContent_);lv_obj_set_size(reveal,LV_PCT(100),36);auto* eye=lv_label_create(reveal);lv_label_set_text(eye,LV_SYMBOL_EYE_OPEN " Show / hide password");lv_obj_center(eye);
+ lv_obj_add_event_cb(reveal,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));lv_textarea_set_password_mode(s->wifiPassword_,!lv_textarea_get_password_mode(s->wifiPassword_));},LV_EVENT_CLICKED,this);
+ auto* connect=lv_btn_create(wifiContent_);lv_obj_set_size(connect,LV_PCT(100),44);auto* caption=lv_label_create(connect);lv_label_set_text(caption,"Connect");lv_obj_center(caption);
+ lv_obj_add_event_cb(connect,[](lv_event_t* e){static_cast<PanelDashboard*>(lv_event_get_user_data(e))->connectWifiDialog();},LV_EVENT_CLICKED,this);
+}
+void PanelDashboard::wifiDialogEvent(lv_event_t* e){
+ auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));if(s->wifiStep_!=WifiStep::Credentials)return;
+ if(lv_event_get_code(e)==LV_EVENT_FOCUSED&&lv_indev_get_act()&&lv_indev_get_type(lv_indev_get_act())==LV_INDEV_TYPE_POINTER)return;
+ lv_keyboard_set_mode(s->keyboard_,lv_event_get_target(e)==s->mqttPort_?LV_KEYBOARD_MODE_NUMBER:LV_KEYBOARD_MODE_TEXT_LOWER);lv_keyboard_set_textarea(s->keyboard_,lv_event_get_target(e));lv_obj_align(s->keyboard_,LV_ALIGN_BOTTOM_MID,0,0);lv_obj_clear_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(s->keyboard_);
+ lv_obj_set_height(s->wifiOverlay_,lv_disp_get_ver_res(s->display_)*52/100);lv_obj_set_height(s->wifiContent_,lv_disp_get_ver_res(s->display_)*52/100-70);lv_obj_scroll_to_view_recursive(lv_event_get_target(e),LV_ANIM_ON);
+}
+void PanelDashboard::connectWifiDialog(){
+ if(wifiStep_!=WifiStep::Credentials)return;
+ wifiTarget_=lv_textarea_get_text(wifiSsid_);if(wifiTarget_.isEmpty()){lv_label_set_text(wifiMessage_,mqttDialog_?"Enter a broker host first":"Enter a Wi-Fi name first");return;}
+ lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(wifiOverlay_,LV_PCT(100));lv_obj_set_height(wifiContent_,lv_disp_get_ver_res(display_)-90);
+ JsonDocument args;auto changes=args["changes"].to<JsonArray>();
+ if(mqttDialog_){int port=atoi(lv_textarea_get_text(mqttPort_));if(port<1||port>65535){lv_label_set_text(wifiMessage_,"Port must be 1 to 65535");return;}
+  for(const char* key:{"host","password","username","port"}){auto c=changes.add<JsonObject>();String path=String("mqtt/")+key;c["path"]=path;if(String(key)=="port")c["value"]=port;else c["value"]=lv_textarea_get_text(String(key)=="host"?wifiSsid_:String(key)=="password"?wifiPassword_:mqttUser_);drafts_.erase(path);for(auto& f:fields_)if(f.path==path)f.dirty=false;}args["connectMqtt"]=true;
+ }else {for(const char* path:{"wifi/ssid","wifi/password"}){auto c=changes.add<JsonObject>();c["path"]=path;c["value"]=String(path)=="wifi/ssid"?wifiTarget_:String(lv_textarea_get_text(wifiPassword_));drafts_.erase(path);for(auto& f:fields_)if(f.path==path){f.dirty=false;f.submitted="";}}}
+ queue("patch",args);wifiStep_=WifiStep::Connecting;wifiStepAt_=millis();lv_label_set_text(wifiMessage_,"Connecting and saving settings...");lv_obj_add_state(wifiSsid_,LV_STATE_DISABLED);lv_obj_add_state(wifiPassword_,LV_STATE_DISABLED);
+ wifiProgress_=lv_spinner_create(wifiContent_,1000,70);lv_obj_set_size(wifiProgress_,44,44);
+}
+void PanelDashboard::updateWifiDialog(){
+ if(!wifiOverlay_)return;
+ if(state_["security"]["locked"]==true){closeWifiDialog();return;}
+ if(wifiStep_==WifiStep::Scanning){
+  if(state_["wifiScan"]["complete"]==true){wifiDialog(WifiStep::Networks);return;}
+  if(state_["wifiScan"]["failed"]==true||millis()-wifiStepAt_>20000){if(wifiProgress_){lv_obj_del(wifiProgress_);wifiProgress_=nullptr;}lv_label_set_text(wifiMessage_,"Scan failed. Close and try again.");}
+ }
+ if(wifiStep_==WifiStep::Connecting){
+  if(millis()-wifiStepAt_>1500&&(mqttDialog_?state_["live"]["mqttConnected"]==true:(state_["live"]["wifiConnected"]==true&&String(state_["wifiLive"]["ssid"]|"")==wifiTarget_))){
+   wifiStep_=WifiStep::Success;wifiStepAt_=millis();if(wifiProgress_){lv_obj_del(wifiProgress_);wifiProgress_=nullptr;}
+   lv_label_set_text(wifiMessage_,"Connected. Settings saved.");auto* check=lv_label_create(wifiContent_);lv_label_set_text(check,LV_SYMBOL_OK);lv_obj_set_width(check,LV_PCT(100));lv_obj_set_style_text_align(check,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_text_color(check,lv_color_hex(0x22c55e),0);
+   lv_anim_t a;lv_anim_init(&a);lv_anim_set_var(&a,check);lv_anim_set_values(&a,LV_OPA_TRANSP,LV_OPA_COVER);lv_anim_set_time(&a,600);lv_anim_set_exec_cb(&a,[](void* object,int32_t value){lv_obj_set_style_opa(static_cast<lv_obj_t*>(object),value,0);});lv_anim_start(&a);lv_obj_scroll_to_view(check,LV_ANIM_ON);
+  }else if(millis()-wifiStepAt_>30000){wifiStep_=WifiStep::Credentials;if(wifiProgress_){lv_obj_del(wifiProgress_);wifiProgress_=nullptr;}lv_obj_clear_state(wifiSsid_,LV_STATE_DISABLED);lv_obj_clear_state(wifiPassword_,LV_STATE_DISABLED);lv_label_set_text(wifiMessage_,mqttDialog_?"Could not connect. Check broker, port and credentials.":"Could not connect. Check password and try again.");}
+ }
+ if(wifiStep_==WifiStep::Success&&millis()-wifiStepAt_>2200){closeWifiDialog();refreshNow_=true;}
+}
+void PanelDashboard::button(const String& caption,const String& key){keyboardBindingsDirty_=true;auto* o=lv_btn_create(body_);lv_obj_set_size(o,LV_PCT(100),44);auto* t=lv_label_create(o);lv_obj_set_width(t,LV_PCT(95));lv_label_set_long_mode(t,LV_LABEL_LONG_DOT);lv_label_set_text(t,caption.c_str());lv_obj_center(t);buttons_[key]=o;lv_obj_add_event_cb(o,event,LV_EVENT_CLICKED,this);}
 void PanelDashboard::field(const String& caption,const String& path,const String& kind,const String& options,double minimum,double maximum){
  label(caption);Field f;f.path=path;f.kind=kind;f.options=options;f.minimum=minimum;f.maximum=maximum;f.secret=kind=="secret";
  if(kind=="switch"){f.object=lv_switch_create(body_);lv_obj_set_size(f.object,56,30);}
@@ -119,6 +206,7 @@ void PanelDashboard::player(){
  if((state_["live"]["duration"]|0)>0)field("Position (seconds)","@position","slider","",0,state_["live"]["duration"]|0);
 }
 void PanelDashboard::page(const String& key){
+ keyboardBindingsDirty_=true;
  page_=key;refreshNow_=true;lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));fields_.clear();buttons_.clear();labels_.clear();meters_.clear();lv_obj_clean(body_);
  for(size_t i=0;i<tabs_.size();i++)if(tabs_[i]==key)lv_dropdown_set_selected(menu_,i);
  if(key=="bno055"){labels_["bno055"]=label("");button("Compass + motion","bno:ndof");button("Motion only","bno:imu");button("Start sampling","bno:on");button("Pause sampling","bno:off");button("Reinitialize sensor","bno:reset");}
@@ -145,11 +233,6 @@ void PanelDashboard::page(const String& key){
  if(key=="wifi"||key=="mqtt")labels_["network"]=label("");
  if(key=="wifi"){
   labels_["wifiScan"]=label("");button("Scan networks","wifi:scan");
-  String options;for(JsonObjectConst network:state_["wifiScan"]["networks"].as<JsonArrayConst>()){
-   String ssid=network["ssid"]|"";ssid.replace("\n"," ");ssid.replace("\r"," ");
-   if(options.length())options+='\n';options+=ssid+" ("+String(network["rssi"]|0)+" dBm)";
-  }
-  if(options.length())field("Available networks","@wifiNetwork","select",String("Select a network...\n")+options);
   button("Connect to selected / entered network","wifi:connect");button("Show / hide Wi-Fi password","wifi:password");
  }
  if(key=="mqtt"){button("Connect","mqtt:connect");button("Disconnect","mqtt:disconnect");button("Rediscover devices","mqtt:rediscover");}
@@ -159,7 +242,7 @@ void PanelDashboard::page(const String& key){
  if(key=="hardware"){
   labels_["hardware"]=label("");
   for(const char* key:{"cpu","core0","core1","sram","psram","spiffs","sd","temperature"}){
-   labels_[String("meter:")+key]=label("");auto* bar=lv_bar_create(body_);lv_obj_set_size(bar,LV_PCT(100),16);lv_bar_set_range(bar,0,100);meters_[key]=bar;
+   labels_[String("meter:")+key]=label("");auto* bar=lv_bar_create(body_);lv_obj_set_size(bar,LV_PCT(100),16);lv_bar_set_range(bar,0,100);lv_obj_set_style_min_height(bar,16,0);lv_obj_set_style_bg_color(bar,lv_color_hex(0x475569),LV_PART_MAIN);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_MAIN);lv_obj_set_style_bg_color(bar,lv_color_hex(0x22c55e),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_INDICATOR);meters_[key]=bar;
   }
  }
  if(key.startsWith("storage-")){
@@ -201,7 +284,7 @@ void PanelDashboard::submit(int index){
 void PanelDashboard::event(lv_event_t* e){
  auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));if(s->updating_)return;auto* object=lv_event_get_target(e);auto code=lv_event_get_code(e);
  for(size_t i=0;i<s->fields_.size();i++){auto& f=s->fields_[i];if(f.object!=object)continue;
-  if(code==LV_EVENT_CLICKED&&(f.kind=="text"||f.kind=="secret"||f.kind=="number")){lv_keyboard_set_mode(s->keyboard_,f.kind=="number"?LV_KEYBOARD_MODE_NUMBER:LV_KEYBOARD_MODE_TEXT_LOWER);lv_keyboard_set_textarea(s->keyboard_,object);lv_obj_clear_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_)*52/100);lv_obj_scroll_to_view_recursive(object,LV_ANIM_ON);}
+  if((code==LV_EVENT_CLICKED||(code==LV_EVENT_FOCUSED&&(!lv_indev_get_act()||lv_indev_get_type(lv_indev_get_act())!=LV_INDEV_TYPE_POINTER)))&&(f.kind=="text"||f.kind=="secret"||f.kind=="number")){lv_keyboard_set_mode(s->keyboard_,f.kind=="number"?LV_KEYBOARD_MODE_NUMBER:LV_KEYBOARD_MODE_TEXT_LOWER);lv_keyboard_set_textarea(s->keyboard_,object);lv_obj_align(s->keyboard_,LV_ALIGN_BOTTOM_MID,0,0);lv_obj_move_foreground(s->keyboard_);lv_obj_clear_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_)*52/100);lv_obj_scroll_to_view_recursive(object,LV_ANIM_ON);}
   if(code==LV_EVENT_VALUE_CHANGED){f.dirty=true;s->drafts_[f.path]=s->fieldText(f);f.submitted="";
    if(f.path=="@wifiNetwork"){
     int selectedIndex=lv_dropdown_get_selected(object)-1;if(selectedIndex<0)return;
@@ -250,17 +333,16 @@ void PanelDashboard::event(lv_event_t* e){
   for(auto& f:s->fields_)if(f.path.startsWith("@"))f.dirty=false;
   lv_keyboard_set_textarea(s->keyboard_,nullptr);lv_obj_add_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_));s->queue("radio",a);return;
  }
- if(key=="wifi:scan"){s->queue("wifiScan",a);return;}
+ if(key=="wifi:scan"){s->wifiDialog(WifiStep::Scanning);s->queue("wifiScan",a);return;}
  if(key=="wifi:password"){for(auto& f:s->fields_)if(f.path=="wifi/password")lv_textarea_set_password_mode(f.object,!lv_textarea_get_password_mode(f.object));return;}
  if(key=="wifi:connect"){
-  String ssid=text("wifi/ssid");if(ssid.isEmpty()){lv_label_set_text(s->notice_,"Choose or enter a network name");s->noticeUntil_=millis()+5000;return;}
-  auto changes=a["changes"].to<JsonArray>();for(const char* path:{"wifi/ssid","wifi/password"}){auto c=changes.add<JsonObject>();c["path"]=path;c["value"]=text(path);for(auto& f:s->fields_)if(f.path==path)f.submitted=text(path);}
-  s->queue("patch",a);return;
+  String ssid=text("wifi/ssid"),password=text("wifi/password");s->wifiDialog(WifiStep::Credentials,ssid);lv_textarea_set_text(s->wifiPassword_,password.c_str());return;
  }
  if(key=="save"){s->submit();return;}if(key=="refresh"){s->page(s->page_);return;}
  if(key.startsWith("confirm:")){s->button("Confirm",key.substring(8));return;}
  if(key.startsWith("logic:")){a["mode"]=key.substring(6);s->queue("logics",a);return;}
  if(key.startsWith("group:")){int split=key.lastIndexOf(':');a["group"]["id"]=key.substring(6,split);a["group"]["mode"]=key.substring(split+1);s->queue("logics",a);return;}
+ if(key=="mqtt:connect"){s->wifiDialog(WifiStep::Credentials,"",true);return;}
  if(key.startsWith("mqtt:")){a["action"]=key.substring(5);s->queue("mqtt",a);return;}
  if(key.startsWith("security:")){a["action"]=key.substring(9);a["pin"]=text("@pin");a["newPin"]=text("@newPin");a["confirmPin"]=text("@confirmPin");s->queue("security",a);return;}
  if(key.startsWith("motor:")){a["channel"]=key.substring(6,7).toInt();a["forward"]=key.endsWith("forward");a["durationMs"]=1000;s->queue("motor",a);return;}
@@ -317,7 +399,7 @@ void PanelDashboard::update(){
   meter("temperature",temperature?String("Temperature: ")+String(value,1)+" C"+(system["chipTemperatureEstimated"]==true?" (estimated)":""):"Temperature: unavailable",(value+20)*100/120,temperature);
  }
 
- set("info",String("ELMA IoT ")+(state_["version"]|"")+"\n"+(hardware["boardProfile"]|"")+"\n"+(live["ip"]|"")+"\nDisplay: "+String(kPanelWidth)+" x "+String(kPanelHeight));
+ set("info",String("Device: ")+(live["name"]|"ELMA IoT")+"\nFirmware: "+(state_["version"]|"unknown")+"\nBuilt: "+(state_["build"]|"")+"\nBoard: "+(hardware["boardProfile"]|"")+"\nChip: "+(hardware["chipModel"]|"")+" rev "+String(hardware["chipRevision"]|0)+"\nCPU: "+String(hardware["cpuCores"]|0)+" cores / "+String(hardware["cpuFreqMHz"]|0)+" MHz\nFlash: "+String((hardware["flashSizeBytes"]|0)/1024)+" KB\nFirmware size: "+String((hardware["sketchSizeBytes"]|0)/1024)+" KB\nFree heap: "+String(system["freeHeap"]|0)+" B\nUptime: "+String(millis()/1000)+" s\nIP: "+(live["ip"]|"")+"\nMAC: "+(state_["mac"]|"")+"\nDisplay: "+String(kPanelWidth)+" x "+String(kPanelHeight)+"\nTouch: "+kPanelTouchName+(panel_.spiClock()?"\nLCD SPI: "+String(panel_.spiClock()/1000000)+" MHz":""));
  set("firmware",String("Installed: ")+(state_["version"]|"")+"\n"+(live["otaPhase"]|"idle")+" "+String(live["otaProgress"]|0)+"%\n"+(live["lastError"]|""));
  set("storage",String(state_["storage"]["mounted"]==true?"Mounted":"Unavailable")+"\nFree: "+valueText(state_["storage"]["free"])+" / "+valueText(state_["storage"]["total"])+" bytes");
  set("logs",state_["logText"]|"No log entries");
@@ -345,7 +427,9 @@ void PanelDashboard::sdFormatEvent(lv_event_t* event){
 }
 void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,const Command& command,const String& overlay){
  auto now=millis();lv_tick_inc(now-tick_);tick_=now;
- if(refreshNow_||now-refresh_>=1000){bool rebuild=refreshNow_;refreshNow_=false;refresh_=now;state_.clear();if(snapshot)snapshot(page_,state_.to<JsonObject>());
+ if(panel_.takeClockChange())lv_obj_invalidate(screen_);
+ bool scrolling=lv_obj_is_scrolling(body_)||(wifiContent_&&lv_obj_is_scrolling(wifiContent_));
+ if((refreshNow_||now-refresh_>=1000)&&(!scrolling||now-refresh_>=3000)){bool rebuild=refreshNow_;refreshNow_=false;refresh_=now;state_.clear();if(snapshot)snapshot(page_,state_.to<JsonObject>());
   auto live=state_["live"].to<JsonObject>();live["name"]=app.device.friendlyName;live["ip"]=app.network.ip;live["wifiConnected"]=app.network.wifiConnected;live["mqttConnected"]=app.network.mqttConnected;live["rssi"]=app.network.wifiRssi;live["voltage"]=app.battery.voltage;live["title"]=app.playback.title;live["playbackState"]=app.playback.state;live["volume"]=app.playback.volumePercent;live["lastError"]=app.system.lastError;live["otaPhase"]=app.ota.phase;live["otaProgress"]=app.ota.progressPercent;
   live["url"]=app.playback.url;live["position"]=app.playback.positionSeconds;live["duration"]=app.playback.durationSeconds;
   if(app.playback.url.length()){resumeUrl_=app.playback.url;resumeTitle_=app.playback.title;}
@@ -355,12 +439,11 @@ void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,c
   String structure=page_;serializeJson(state_["settings"]["ui"]["peripheralProfiles"],structure);
   if(page_.startsWith("storage-")){serializeJson(state_["files"],structure);structure+=String(state_["storage"]["path"]|"/")+String(state_["storage"]["mounted"]|false);}
   if(page_=="playback"&&state_["radio"]["busy"]!=true)serializeJson(state_["radio"],structure);
-  if(page_=="wifi")serializeJson(state_["wifiScan"]["networks"],structure);
   structure+=String(app.playback.durationSeconds>0);
   for(JsonPairConst slot:state_["settings"]["ui"]["peripheralHelperBindings"].as<JsonObjectConst>())structure+=String(slot.key().c_str())+":"+String(slot.value()["LED_ARRAYS"]|1);
   bool editing=false;for(const auto& f:fields_)if((f.dirty&&!f.path.startsWith("@"))||lv_keyboard_get_textarea(keyboard_)==f.object||lv_obj_has_state(f.object,LV_STATE_PRESSED)||(f.kind=="select"&&lv_dropdown_is_open(f.object)))editing=true;
-  if(structure!=structure_&&!editing){structure_=structure;rebuild=true;}
-  statusBar(app);syncMenu();if(rebuild){page(page_);refreshNow_=false;}update();
+  if(structure!=structure_&&!editing&&!wifiOverlay_){structure_=structure;rebuild=true;}
+  statusBar(app);syncMenu();if(rebuild&&!wifiOverlay_){page(page_);refreshNow_=false;}update();updateWifiDialog();
   if(overlay.length())lv_label_set_text(notice_,overlay.c_str());else if(int32_t(now-noticeUntil_)>=0 && *lv_label_get_text(notice_))lv_label_set_text(notice_,"");
  }
  if(sdFormatPrompt_ && !sdFormatPromptNeeded()){lv_msgbox_close(sdFormatPrompt_);sdFormatPrompt_=nullptr;}
@@ -385,8 +468,10 @@ void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,c
   lv_obj_del(sdFormatProgress_);sdFormatProgress_=nullptr;sdFormatBar_=nullptr;
   lv_label_set_text(notice_,formatting==SdFormatState::Complete?"SD card ready":"Formatting failed. Check card on a computer.");noticeUntil_=now+8000;refreshNow_=true;
  }
+ if(keyboardBindingsDirty_){keyboardBindingsDirty_=false;bindKeyboardDismiss(screen_);bindKeyboardDismiss(lv_disp_get_layer_top(display_));}
  lv_timer_handler();
- if(!commands_.empty()){String encoded=commands_.front();commands_.pop_front();JsonDocument request;deserializeJson(request,encoded);String error;bool ok=command&&command(request["action"].as<String>(),request["args"],error);lv_label_set_text(notice_,ok?"Applied":error.c_str());noticeUntil_=now+4000;
+ if(!commands_.empty()){String encoded=commands_.front();commands_.pop_front();JsonDocument request;deserializeJson(request,encoded);String error;bool ok=command&&command(request["action"].as<String>(),request["args"],error);lv_label_set_text(notice_,ok?(request["action"]=="wifiScan"?"Scanning...":"Applied"):error.c_str());if(!ok&&wifiOverlay_){lv_label_set_text(wifiMessage_,error.c_str());if(wifiProgress_){lv_obj_del(wifiProgress_);wifiProgress_=nullptr;}if(wifiStep_==WifiStep::Connecting){wifiStep_=WifiStep::Credentials;lv_obj_clear_state(wifiSsid_,LV_STATE_DISABLED);lv_obj_clear_state(wifiPassword_,LV_STATE_DISABLED);}}noticeUntil_=now+4000;
+  if(ok&&request["action"]=="patch"&&request["args"]["connectMqtt"]==true){JsonDocument a;a["action"]="connect";queue("mqtt",a);}
   if(ok&&request["action"]=="patch")for(JsonObjectConst change:request["args"]["changes"].as<JsonArrayConst>()){String path=change["path"]|"";auto it=drafts_.find(path);if(it!=drafts_.end()&&it->second==valueText(change["value"]))drafts_.erase(it);}
   if(ok)for(auto& f:fields_)if(f.secret && !f.path.startsWith("wifi/")){updating_=true;lv_textarea_set_text(f.object,"");updating_=false;f.dirty=false;drafts_.erase(f.path);}
   if(request["action"]=="security"){page("security");refreshNow_=true;}

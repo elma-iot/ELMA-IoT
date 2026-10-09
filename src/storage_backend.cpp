@@ -24,13 +24,15 @@
 void serviceStorageBackends();
 
 namespace {
-constexpr uint32_t kSdFrequenciesHz[] = {80000000UL, 40000000UL, 20000000UL, 10000000UL, 4000000UL, 1000000UL, 400000UL};
+// Arduino ESP32 2.x sd_diskio caps transfers at 25 MHz. Do not report requested 80 MHz as actual speed.
+constexpr uint32_t kSdFrequenciesHz[] = {25000000UL, 20000000UL, 10000000UL, 4000000UL, 1000000UL, 400000UL};
 constexpr unsigned long kSdHotplugPollIntervalMs = 2000UL;
 constexpr unsigned long kSdRetryBackoffMs[] = {2000UL, 5000UL, 15000UL, 60000UL};
 
 bool flashMounted = false;
 bool sdMounted = false;
 bool sdSpiStarted = false;
+uint32_t sdClockCeiling=25000000UL,sdMountedClock=0;
 unsigned long lastSdHotplugPollAt = 0;
 unsigned long nextSdMountAttemptAt = 0;
 SdSettings activeSdSettings;
@@ -351,6 +353,7 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
     portEXIT_CRITICAL(&storageStateMux);
     if(busy){portENTER_CRITICAL(&storageStateMux);pendingSdSettings=settings;sdSettingsPending=true;portEXIT_CRITICAL(&storageStateMux);return false;}
     struct Release {~Release(){portENTER_CRITICAL(&storageStateMux);sdMaintenance=false;portEXIT_CRITICAL(&storageStateMux);}} release;
+    if(!sameSdSettings(activeSdSettings,settings))sdClockCeiling=kSdFrequenciesHz[0];
     unmountSdStorage();
     activeSdSettings = settings;
     lastSdHotplugPollAt = millis();
@@ -405,6 +408,7 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
     if(allowFormat && !spiCardNeedsFormat(settings))allowFormat=false;
 
     for (uint32_t frequencyHz : kSdFrequenciesHz) {
+        if(frequencyHz>sdClockCeiling&&!allowFormat)continue;
         if(allowFormat)frequencyHz=1000000; // Conservative clock for destructive writes.
         bool began=SD.begin(settings.csPin, sdSpi, frequencyHz, "/sd", 5, allowFormat);
         allowFormat=false; // A confirmation authorizes one format attempt only.
@@ -433,6 +437,11 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
             continue;
         }
 
+        // A mounted FAT cache alone cannot validate the transfer rate.
+        uint8_t sector[512];bool verified=true;
+        for(uint32_t block:{0UL,1UL,2UL})if(!SD.readRAW(sector,block)){verified=false;break;}
+        if(!verified){DebugLog.printf("[storage] SD sector test failed at %lu Hz; lowering clock\n",static_cast<unsigned long>(frequencyHz));SD.end();continue;}
+        sdMountedClock=frequencyHz;sdClockCeiling=frequencyHz;
         sdMounted = true;
         resetSdMountRetryState();
         DebugLog.printf("[storage] SD mounted cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u used=%u\n",
@@ -578,7 +587,10 @@ void serviceStorageBackends() {
         portEXIT_CRITICAL(&storageStateMux);
         if(!check)return;
         bool healthy=sdFilesystemHealthy();decrementSdReadDepth();
-        if(!healthy){DebugLog.println("[storage] SD card unavailable; retrying in maintenance task");mountSdStorage(activeSdSettings);}
+        if(!healthy){
+            if(!activeSdSettings.sdmmc){for(uint32_t hz:kSdFrequenciesHz)if(hz<sdMountedClock){sdClockCeiling=hz;break;}}
+            DebugLog.printf("[storage] SD unavailable; retrying with SPI ceiling %lu Hz\n",static_cast<unsigned long>(sdClockCeiling));mountSdStorage(activeSdSettings);
+        }
         return;
     }
 
