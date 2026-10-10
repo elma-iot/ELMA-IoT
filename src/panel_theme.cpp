@@ -24,6 +24,12 @@ void apply(lv_theme_t*,lv_obj_t* object) {
         lv_obj_add_style(object,&selected,LV_PART_SELECTED|LV_STATE_CHECKED);
         lv_obj_add_style(object,&selected,LV_PART_SELECTED|LV_STATE_PRESSED);
         lv_obj_add_style(object,&selected,LV_PART_SELECTED|LV_STATE_CHECKED|LV_STATE_PRESSED);
+        // LVGL calculates highlight coordinates from SELECTED typography, but
+        // hit testing uses MAIN. Keep both at the same finger-sized row pitch.
+        const lv_state_t states[] = {LV_STATE_DEFAULT, LV_STATE_CHECKED,
+            LV_STATE_PRESSED, LV_STATE_CHECKED|LV_STATE_PRESSED};
+        for(auto state : states)
+            lv_obj_add_style(object,&choices,LV_PART_SELECTED|state);
     } else if(lv_obj_check_type(object,&lv_btn_class)) {
         lv_obj_add_style(object,&button,LV_PART_MAIN);
         lv_obj_add_style(object,&selected,LV_PART_MAIN|LV_STATE_PRESSED);

@@ -45,7 +45,17 @@ int main(){
         assert(lv_obj_get_style_border_width(frame,LV_PART_MAIN)==1);
         save(size?"panel-controls-240.ppm":"panel-controls-320.ppm");
         lv_dropdown_open(menu);auto* list=lv_dropdown_get_list(menu);assert(list);assert(lv_obj_get_style_text_font(list,LV_PART_MAIN)->line_height+lv_obj_get_style_text_line_space(list,LV_PART_MAIN)>=40);readable(list,LV_PART_MAIN);readable(list,LV_PART_SELECTED);assert(lv_obj_get_style_border_width(list,LV_PART_MAIN)==1);
-        lv_obj_add_state(list,LV_STATE_CHECKED);readable(list,LV_PART_SELECTED);
+        const lv_state_t selectionStates[] = {LV_STATE_DEFAULT, LV_STATE_CHECKED,
+            LV_STATE_PRESSED, LV_STATE_CHECKED|LV_STATE_PRESSED};
+        for(auto state : selectionStates){
+            lv_obj_clear_state(list,LV_STATE_CHECKED|LV_STATE_PRESSED);
+            lv_obj_add_state(list,state);
+            assert(lv_obj_get_style_text_font(list,LV_PART_SELECTED)==lv_obj_get_style_text_font(list,LV_PART_MAIN));
+            assert(lv_obj_get_style_text_line_space(list,LV_PART_SELECTED)==lv_obj_get_style_text_line_space(list,LV_PART_MAIN));
+        }
+        lv_obj_clear_state(list,LV_STATE_CHECKED|LV_STATE_PRESSED);
+        lv_dropdown_close(menu);lv_dropdown_set_selected(menu,5);lv_dropdown_open(menu);
+        readable(list,LV_PART_SELECTED);
         save(size?"panel-menu-240.ppm":"panel-menu-320.ppm");lv_dropdown_close(menu);
         lv_obj_t* format=nullptr;auto* dialog=elmaSdFormatDialog(display,&format);lv_obj_update_layout(dialog);
         lv_area_t bounds;lv_obj_get_coords(dialog,&bounds);printf("Dialog %d: %d,%d-%d,%d\n",width,bounds.x1,bounds.y1,bounds.x2,bounds.y2);
