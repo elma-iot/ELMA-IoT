@@ -3,5 +3,5 @@
 #include <lvgl.h>
 class PanelDisplay;
 void drawPanelBootLogo(PanelDisplay& panel);
-void animatePanelBootLogo(lv_disp_t* display);
+void animatePanelBootLogo(lv_disp_t* display,bool staticFirst=false);
 #endif

@@ -1,0 +1,15 @@
+{
+  "version": "0.1.59-test.6",
+  "profile": "viewe_rotary_gc9503",
+  "build": "passed",
+  "applicationCapacity": 4194304,
+  "ramBytes": 77844,
+  "flashBytes": 2926644,
+  "bootArtworkPixelMatch": "passed",
+  "physicalEarlierDashboardLockStartup": "user confirmed",
+  "physicalLatestClockRefinement": "pending",
+  "physicalST7701S": "unverified",
+  "physicalTouch": "not present on tested MD80E",
+  "sizeBytes": 2927296,
+  "sha256": "1be00c9d963c878fc9a188bc702d8feeb531e830a26d18dc00910b980a89602b"
+}

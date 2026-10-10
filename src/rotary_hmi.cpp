@@ -3,6 +3,7 @@
 #include "panel_display.h"
 #include "panel_memory.h"
 #include "panel_theme.h"
+#include "panel_boot.h"
 #include "device_log.h"
 #include "round_system_dashboard.h"
 #include <esp_system.h>
@@ -23,6 +24,7 @@ struct Guard {
 };
 PanelDisplay* panel=nullptr;RotaryHmi::Model model;RotaryHmi::Encoder decoder;
 RoundSystemDashboard dashboard;
+bool bootAnimationPending=false;
 TaskHandle_t failsafeTask=nullptr;
 void buttonFailsafe(void*){
     RotaryHmi::HoldFailsafe hold;
@@ -165,10 +167,13 @@ bool begin(PanelDisplay& p,uint8_t rotation,const String& configuration){Guard g
     screen=lv_disp_get_scr_act(display);lv_obj_set_style_bg_opa(screen,LV_OPA_COVER,0);group=lv_group_create();lv_indev_drv_init(&touchDriver);touchDriver.disp=display;touchDriver.type=LV_INDEV_TYPE_POINTER;touchDriver.read_cb=touch;pointer=lv_indev_drv_register(&touchDriver);
     lv_indev_drv_init(&encoderDriver);encoderDriver.disp=display;encoderDriver.type=LV_INDEV_TYPE_ENCODER;encoderDriver.read_cb=readEncoder;encoder=lv_indev_drv_register(&encoderDriver);if(!pointer||!encoder||!group){end();return false;}lv_indev_set_group(encoder,group);
     pinMode(6,INPUT_PULLUP);pinMode(5,INPUT_PULLUP);
-    decoder.reset(digitalRead(6),digitalRead(5));attachInterrupt(6,rotate,CHANGE);attachInterrupt(5,rotate,CHANGE);armed=digitalRead(0)==HIGH;buttonRaw=buttonDown=false;pendingClick=false;longSent=false;touchDown=false;tick=millis();active=true;dashboard.begin(screen,p,configuration);render();DebugLog.printf("[hmi] ready items=%u rotation=%u\n",unsigned(model.items.size()),rotation);return true;
+    decoder.reset(digitalRead(6),digitalRead(5));attachInterrupt(6,rotate,CHANGE);attachInterrupt(5,rotate,CHANGE);armed=digitalRead(0)==HIGH;buttonRaw=buttonDown=false;pendingClick=false;longSent=false;touchDown=false;tick=millis();active=true;dashboard.begin(screen,p,configuration);render();bootAnimationPending=true;DebugLog.printf("[hmi] ready items=%u rotation=%u\n",unsigned(model.items.size()),rotation);return true;
 }
 void end(){Guard guard;if(!guard)return;dashboard.end();detachInterrupt(6);detachInterrupt(5);active=false;if(pointer)lv_indev_delete(pointer);if(encoder)lv_indev_delete(encoder);if(group)lv_group_del(group);if(display)lv_disp_remove(display);if(pixels)heap_caps_free(pixels);pointer=encoder=nullptr;group=nullptr;display=nullptr;pixels=nullptr;panel=nullptr;buttons.clear();screen=center=ring=valueLabel=nullptr;}
 void loop(){Guard guard;if(!guard||!active)return;uint32_t now=millis();if(overlayText.length()&&int32_t(now-overlayUntil)>=0){overlayText="";++model.revision;}lv_tick_inc(now-tick);tick=now;
+    // Start on the first serviced LVGL tick; slow network/storage startup must
+    // not consume the animation before the display loop can render its frames.
+    if(bootAnimationPending){bootAnimationPending=false;animatePanelBootLogo(display,true);}
     portENTER_CRITICAL(&mux);int delta=pending;pending=0;portEXIT_CRITICAL(&mux);if(delta){delta*=direction;rotationDelta=delta;event(0);event(delta>0?1:2);encoderDelta=delta;
         if(dashboard.enabled())dashboard.rotate(delta);else if(model.navigate(delta*sensitivity))event(10);}
     bool down=digitalRead(0)==LOW;if(!armed){if(!down)armed=true;}else{

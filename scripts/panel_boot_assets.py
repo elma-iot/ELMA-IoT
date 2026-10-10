@@ -48,3 +48,13 @@ with out.open('w',encoding='utf-8') as f:
   f.write('{\n');f.write(',\n'.join(','.join(map(str,frame[i:i+64])) for i in range(0,len(frame),64)));f.write('\n},\n')
  f.write('};\n')
 print('Generated',len(frames),'frames;',len(frames)*4112,'flash bytes; no frame RAM allocation')
+
+# Static and animated artwork share the same viewport and rasterized paths.
+# Palette order matches drawPanelBootLogo's RGB565 decoder.
+static=Image.new('L',(size,size),0)
+for index in range(6):static.paste([1,3,3,1,2,2][index],mask=masks[index].convert('L').point(lambda x:255 if x else 0))
+data=bytearray([39,24,17,255,39,191,89,255,209,121,8,255,36,28,236,255])
+pixels=list(static.getdata())
+for i in range(0,len(pixels),4):data.append(sum(pixels[i+j]<<(6-2*j) for j in range(4)))
+out.with_name('panel_boot_logo.h').write_text('// Generated from the same Android vector paths as panel_boot_layers.h.\n#pragma once\n#include <stdint.h>\nstatic const uint8_t elmaBootPixels[]={\n'+',\n'.join(','.join(map(str,data[i:i+64])) for i in range(0,len(data),64))+'\n};\n',encoding='utf-8')
+print('Generated matching static logo:',len(data),'flash bytes')

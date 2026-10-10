@@ -1,0 +1,1 @@
+1be00c9d963c878fc9a188bc702d8feeb531e830a26d18dc00910b980a89602b  elma-esp32s3-board30-v0.1.59-test.6.bin

@@ -31,6 +31,11 @@ private:
     lv_obj_t *title_=nullptr,*primary_=nullptr,*subtitle_=nullptr,*footer_=nullptr,*gauge_=nullptr;
     std::array<lv_obj_t*,12> badges_{};std::array<lv_obj_t*,3> rowWidgets_{};
     std::array<lv_obj_t*,3> rowLabels_{},rowValues_{};
+    std::array<lv_obj_t*,24> clockStatus_{};
+    std::array<lv_obj_t*,8> clockDigits_{};
+    uint32_t clockFrame_=0;
+    String clockStatusText_;
+    int clockPalette_=-1;
     std::array<Row,32> rows_{};int rowCount_=0,selected_=0,section_=0,metric_=0;
     int paintedSelection_=-1;
     std::array<std::array<lv_point_t,3>,18> wires_{};
@@ -39,7 +44,7 @@ private:
     View view_=Clock;bool enabled_=false,customBackground_=false,dirty_=true,editBrightness_=false,confirmation_=false;
     uint32_t refresh_=0,lastInput_=0,timeout_=60,clockSecond_=UINT32_MAX,lastRotation_=0;
     int brightness_=100,pinDigit_=0,pinStage_=0;String pinAction_,pinDraft_,firstPin_,oldTicket_,notice_;
-    InterfaceSecurity security_;JsonDocument cache_{panelJsonAllocator()};AppStateSnapshot live_;
+    InterfaceSecurity& security_=InterfaceSecurity::device();JsonDocument cache_{panelJsonAllocator()};AppStateSnapshot live_;
     const PanelDashboard::Command* command_=nullptr;
     char logs_[4097]{};uint16_t logOffsets_[50]{};unsigned logCount_=0;uint64_t logSequence_=UINT64_MAX;
     bool followLogs_=true;int logSelected_=0;
@@ -47,7 +52,7 @@ private:
     void activity();void message(const String&);bool execute(const String&,JsonVariantConst);
     void patch(const char*,JsonVariantConst);void pinStart(const String&,int stage);void pinSubmit();
     void row(const String&,const String&,const String& id="",uint32_t color=0x39baff);
-    void drawWiring();void updateGauge();void securityStatus(JsonObject);
+    void drawWiring();void updateGauge();void updateClockStatus();void updateClockRing();void securityStatus(JsonObject);
     static void clicked(lv_event_t*);
 };
 #endif

@@ -8,6 +8,7 @@
 // Device-wide state. Never serialized with ordinary settings/backups.
 class InterfaceSecurity {
 public:
+    static InterfaceSecurity& device();
     void begin(const char* storageNamespace = "elma-security");
     void tick();
     bool locked();

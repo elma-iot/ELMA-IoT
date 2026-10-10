@@ -9,6 +9,7 @@
 namespace {
 struct Guard { SemaphoreHandle_t mutex; explicit Guard(SemaphoreHandle_t m):mutex(m){if(m)xSemaphoreTake(m,portMAX_DELAY);} ~Guard(){if(mutex)xSemaphoreGive(mutex);} };
 }
+InterfaceSecurity& InterfaceSecurity::device(){static InterfaceSecurity shared;return shared;}
 uint64_t InterfaceSecurity::now(){return esp_timer_get_time()/1000ULL;}
 String InterfaceSecurity::randomHex(){uint8_t bytes[16];esp_fill_random(bytes,sizeof(bytes));String result;for(auto byte:bytes){char hex[3];snprintf(hex,sizeof(hex),"%02x",byte);result+=hex;}return result;}
 String InterfaceSecurity::digest(const String& salt,const String& pin){String input=salt+":"+pin;uint8_t hash[32];mbedtls_sha256_ret(reinterpret_cast<const uint8_t*>(input.c_str()),input.length(),hash,0);String result;for(auto byte:hash){char hex[3];snprintf(hex,sizeof(hex),"%02x",byte);result+=hex;}return result;}
@@ -20,7 +21,21 @@ void InterfaceSecurity::begin(const char* storageNamespace){
     if(!mutex_)return;
     Guard guard(mutex_);
     if(!preferences_.begin(storageNamespace,false))return;
-    const String stored=preferences_.getString("state","");
+    String stored=preferences_.getString("state","");
+#if APP_ROTARY_HMI
+    // Preserve an existing LCD-only PIN when upgrading to the shared service.
+    // An existing Web security record remains the authoritative configuration.
+    if(stored.isEmpty()&&String(storageNamespace)=="elma-security"){
+        Preferences legacy;
+        if(legacy.begin("elma-lcd-pin",true)){
+            const String previous=legacy.getString("state","");legacy.end();
+            if(previous.length()){
+                if(preferences_.putString("state",previous)!=previous.length())return;
+                stored=previous;
+            }
+        }
+    }
+#endif
     if(stored.length()){
         JsonDocument record;if(deserializeJson(record,stored))return;
         enabled_=record["enabled"]|false;locked_=record["locked"]|true;

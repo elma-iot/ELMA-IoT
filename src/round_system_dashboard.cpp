@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include <cmath>
 #include <ctime>
+#include <sys/time.h>
 
 namespace {
 const char* keys[]={"gpio","logics","wifi","mqtt","device","oled","hardware","memory","firmware","logs","security","info"};
@@ -33,11 +34,11 @@ void glow(void* object,int32_t opacity){lv_obj_set_style_shadow_opa(static_cast<
 void RoundSystemDashboard::begin(lv_obj_t* screen,PanelDisplay& panel,const String& raw){
     screen_=screen;panel_=&panel;JsonDocument options;deserializeJson(options,raw);
     customBackground_=!(options["systemDashboard"]|true);timeout_=constrain(options["systemTimeoutSeconds"]|60U,15U,3600U);
-    security_.begin("elma-lcd-pin");enabled_=!customBackground_||security_.locked();view_=security_.locked()?Locked:Clock;lastInput_=millis();refresh_=0;clockSecond_=UINT32_MAX;dirty_=true;
+    security_.begin();enabled_=!customBackground_||security_.locked();view_=Clock;lastInput_=millis();refresh_=0;clockSecond_=UINT32_MAX;dirty_=true;
     if(enabled_)draw();
 }
 void RoundSystemDashboard::end(){enabled_=false;screen_=nullptr;panel_=nullptr;command_=nullptr;cache_.clear();pinDraft_="";firstPin_="";oldTicket_="";}
-void RoundSystemDashboard::useCustomMenu(){customBackground_=true;enabled_=security_.locked();if(enabled_){view_=Locked;dirty_=true;draw();}}
+void RoundSystemDashboard::useCustomMenu(){customBackground_=true;enabled_=security_.locked();if(enabled_){view_=Clock;dirty_=true;draw();}}
 void RoundSystemDashboard::securityStatus(JsonObject out){security_.status(out);}
 void RoundSystemDashboard::activity(){lastInput_=millis();notice_="";JsonDocument a,r;a["action"]="activity";security_.command(a,r.to<JsonObject>());}
 void RoundSystemDashboard::message(const String& value){notice_=value.substring(0,110);text(footer_,notice_);}
@@ -47,12 +48,14 @@ bool RoundSystemDashboard::execute(const String& action,JsonVariantConst args){
 }
 void RoundSystemDashboard::patch(const char* path,JsonVariantConst value){JsonDocument d;auto change=d["changes"].to<JsonArray>().add<JsonObject>();change["path"]=path;change["value"].set(value);execute("patch",d.as<JsonVariantConst>());}
 void RoundSystemDashboard::row(const String& name,const String& value,const String& id,uint32_t color){if(rowCount_>=int(rows_.size()))return;rows_[rowCount_++]={name.substring(0,72),value.substring(0,120),id,color};}
-void RoundSystemDashboard::selectSection(int section){section_=section;selected_=metric_=0;editBrightness_=false;view_=Page;refresh_=0;dirty_=true;draw();}
+void RoundSystemDashboard::selectSection(int section){section_=section;selected_=metric_=0;editBrightness_=section==5;view_=Page;refresh_=0;dirty_=true;draw();}
 void RoundSystemDashboard::clicked(lv_event_t* e){auto* self=static_cast<RoundSystemDashboard*>(lv_event_get_user_data(e));self->press();}
 
 void RoundSystemDashboard::draw(){
     if(!enabled_||!screen_)return;
     lv_obj_clean(screen_);badges_.fill(nullptr);rowWidgets_.fill(nullptr);rowLabels_.fill(nullptr);rowValues_.fill(nullptr);
+    clockStatus_.fill(nullptr);clockDigits_.fill(nullptr);clockStatusText_="";
+    clockPalette_=-1;
     lv_obj_set_style_bg_color(screen_,lv_color_hex(0x020409),0);lv_obj_set_style_bg_opa(screen_,LV_OPA_COVER,0);lv_obj_clear_flag(screen_,LV_OBJ_FLAG_SCROLLABLE);
     title_=label(screen_,100,65,280,&lv_font_montserrat_22);primary_=label(screen_,90,209,300,&lv_font_montserrat_48);
     subtitle_=label(screen_,90,273,300,&lv_font_montserrat_18,0xa6b8d0);footer_=label(screen_,140,409,200,&lv_font_montserrat_14,0x91a6c2);
@@ -74,17 +77,40 @@ void RoundSystemDashboard::draw(){
         if(section_!=5&&section_!=6&&section_!=7&&section_!=8){
             lv_obj_add_flag(gauge_,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(primary_,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(subtitle_,LV_OBJ_FLAG_HIDDEN);
             for(int i=0;i<3;i++){rowWidgets_[i]=box(screen_,74,161+i*76,332,68,0x0c1420,23);rowLabels_[i]=label(rowWidgets_[i],14,9,304,&lv_font_montserrat_14,0xa6b8d0);rowValues_[i]=label(rowWidgets_[i],14,29,304,&lv_font_montserrat_18);if(section_==9){lv_obj_set_style_text_font(rowValues_[i],&lv_font_montserrat_14,0);lv_obj_set_pos(rowValues_[i],14,25);lv_label_set_long_mode(rowValues_[i],LV_LABEL_LONG_WRAP);lv_obj_set_height(rowValues_[i],39);}}
-        }else{lv_obj_set_size(gauge_,312,312);lv_obj_set_pos(gauge_,84,103);lv_obj_set_pos(primary_,90,208);}
+        }else{
+            lv_obj_set_size(gauge_,288,288);lv_obj_align(gauge_,LV_ALIGN_CENTER,0,0);
+            lv_obj_align(title_,LV_ALIGN_TOP_MID,0,58);lv_obj_align(primary_,LV_ALIGN_CENTER,0,-8);
+            lv_obj_set_width(subtitle_,236);lv_obj_set_height(subtitle_,64);lv_obj_align(subtitle_,LV_ALIGN_TOP_MID,0,282);
+        }
         if(section_==0)drawWiring();
     }else if(view_==Wiring){
+        lv_obj_align(title_,LV_ALIGN_TOP_MID,0,55);
         text(title_,"Configured circuit");lv_obj_add_flag(gauge_,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(primary_,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(subtitle_,LV_OBJ_FLAG_HIDDEN);drawWiring();
     }else if(view_==Pin){
         text(title_,pinStage_==0?"Enter current PIN":pinStage_==1?"Set a new PIN":pinStage_==2?"Confirm new PIN":"Unlock display");
         lv_obj_set_style_arc_color(gauge_,lv_color_hex(colors[10]),LV_PART_INDICATOR);
     }else if(view_==Locked){
-        icon(screen_,10,colors[10],216,147);text(title_,"Display locked");text(primary_,LV_SYMBOL_CLOSE);text(subtitle_,"Turn or press to unlock");
+        for(auto* widget:{title_,primary_,subtitle_,footer_,gauge_})lv_obj_add_flag(widget,LV_OBJ_FLAG_HIDDEN);
+        // One centered lock, drawn as vectors so the enlarged icon stays crisp.
+        auto* shackle=box(screen_,197,148,86,106,0x020409,43);
+        lv_obj_set_style_border_width(shackle,10,0);lv_obj_set_style_border_color(shackle,lv_color_hex(colors[10]),0);
+        auto* body=box(screen_,168,212,144,120,0x020409,20);
+        lv_obj_set_style_border_width(body,10,0);lv_obj_set_style_border_color(body,lv_color_hex(colors[10]),0);
+        box(screen_,235,251,10,32,colors[10],5);
     }else if(view_==Confirm){text(title_,"Install firmware?");text(subtitle_,"Uses the existing OTA updater");}
-    else{text(title_,live_.device.friendlyName.length()?live_.device.friendlyName:"ELMA IoT");}
+    else{
+        lv_obj_add_flag(title_,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(footer_,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_size(gauge_,460,460);lv_obj_center(gauge_);
+        lv_obj_set_style_arc_width(gauge_,16,LV_PART_MAIN);lv_obj_set_style_arc_width(gauge_,18,LV_PART_INDICATOR);
+        lv_arc_set_bg_angles(gauge_,0,360);lv_arc_set_rotation(gauge_,270);lv_arc_set_range(gauge_,0,6000);
+        lv_obj_add_flag(primary_,LV_OBJ_FLAG_HIDDEN);
+        // Separate fixed-width cells prevent proportional digits from moving
+        // the rest of the clock when seconds change.
+        for(unsigned i=0;i<clockDigits_.size();++i)
+            clockDigits_[i]=label(screen_,88+38*i,188,38,&lv_font_montserrat_48);
+        lv_obj_set_height(subtitle_,64);lv_obj_align(subtitle_,LV_ALIGN_TOP_MID,0,270);
+        updateClockStatus();
+    }
     lv_obj_remove_event_cb(screen_,clicked);
     if(view_!=Locked)lv_obj_add_event_cb(screen_,clicked,LV_EVENT_CLICKED,this);
     dirty_=false;update();
@@ -167,7 +193,7 @@ void RoundSystemDashboard::paintRows(){
 
 void RoundSystemDashboard::updateGauge(){
     auto m=getSystemMetricsSnapshot();String name,value,hint;double percent=0;
-    if(section_==5){name="Brightness";value=String(brightness_)+"%";percent=brightness_;hint=editBrightness_?"Turn to adjust\nPress to save":"Press to adjust";}
+    if(section_==5){name="Brightness";value=String(brightness_)+"%";percent=brightness_;hint="Turn to adjust\nPress to save";}
     else if(section_==6){
         int n=(metric_%4+4)%4;
         if(n==0){name="CPU load";value=m.cpuLoadAvailable?String(m.cpuLoadPercent)+"%":"--";percent=m.cpuLoadPercent;}
@@ -187,11 +213,37 @@ void RoundSystemDashboard::updateGauge(){
     text(title_,name);text(primary_,value);text(subtitle_,hint);lv_obj_set_style_arc_color(gauge_,lv_color_hex(colors[section_]),LV_PART_INDICATOR);lv_arc_set_value(gauge_,constrain(int(percent),0,100));
 }
 
+void RoundSystemDashboard::updateClockStatus(){
+    const String status=String("Wi-Fi ")+(live_.network.wifiConnected?"ON":"OFF")+"  |  MQTT "+(live_.network.mqttConnected?"ON":"OFF");
+    // Static glyphs follow the inner lower arc. Only connection changes repaint
+    // them, so ticking seconds cannot repeatedly rebuild the status widgets.
+    if(status==clockStatusText_)return;
+    clockStatusText_=status;
+    const unsigned count=min(unsigned(status.length()),unsigned(clockStatus_.size()));
+    const double step=5.4;
+    for(unsigned i=0;i<clockStatus_.size();++i){
+        if(i>=count){if(clockStatus_[i])lv_obj_add_flag(clockStatus_[i],LV_OBJ_FLAG_HIDDEN);continue;}
+        const double degrees=90.+(double(count-1)/2.-i)*step;
+        const double angle=degrees*3.141592653589793/180.;
+        auto*& glyph=clockStatus_[i];if(!glyph)glyph=label(screen_,0,0,22,&lv_font_montserrat_18);
+        lv_obj_clear_flag(glyph,LV_OBJ_FLAG_HIDDEN);lv_obj_set_size(glyph,22,26);
+        lv_obj_set_pos(glyph,229+int(std::cos(angle)*155),227+int(std::sin(angle)*155));
+        lv_obj_set_style_transform_pivot_x(glyph,11,0);lv_obj_set_style_transform_pivot_y(glyph,13,0);
+        lv_obj_set_style_transform_angle(glyph,int((degrees-90.)*10),0);
+        const bool connected=i<10?live_.network.wifiConnected:live_.network.mqttConnected;
+        lv_obj_set_style_text_color(glyph,lv_color_hex(connected?0x60e6b0:0x8194af),0);
+        char letter[2]={status[i],0};text(glyph,letter);
+    }
+}
+
 void RoundSystemDashboard::update(){
     if(!enabled_)return;
-    if(view_==Clock){text(title_,live_.device.friendlyName.length()?live_.device.friendlyName:"ELMA IoT");time_t now=time(nullptr);const bool synced=now>1577836800;now+=live_.device.clockUtcOffsetMinutes*60;tm utc{};char timeText[12]="--:--",date[36]="Waiting for time sync";
-        if(synced&&gmtime_r(&now,&utc)){strftime(timeText,sizeof(timeText),"%H:%M",&utc);strftime(date,sizeof(date),"%a, %d %b %Y",&utc);lv_arc_set_value(gauge_,utc.tm_sec*100/59);}
-        text(primary_,timeText);char zone[16];const int offset=live_.device.clockUtcOffsetMinutes;snprintf(zone,sizeof(zone),"UTC%c%02d:%02d",offset<0?'-':'+',abs(offset)/60,abs(offset)%60);text(subtitle_,String(zone)+"\n"+date);text(footer_,String(live_.network.wifiConnected?LV_SYMBOL_WIFI " Connected":"Wi-Fi offline")+"\nMQTT "+(live_.network.mqttConnected?"connected":"offline"));
+    if(view_==Clock){time_t now=time(nullptr);const bool synced=now>1577836800;now+=live_.device.clockUtcOffsetMinutes*60;tm utc{};char timeText[12]="--:--:--",date[36]="Waiting for time sync";
+        if(synced&&gmtime_r(&now,&utc)){
+            strftime(timeText,sizeof(timeText),"%H:%M:%S",&utc);strftime(date,sizeof(date),"%a, %d %b %Y",&utc);
+        }
+        for(unsigned i=0;i<clockDigits_.size();++i){char glyph[]={timeText[i],0};text(clockDigits_[i],glyph);}
+        updateClockRing();char zone[16];const int offset=live_.device.clockUtcOffsetMinutes;snprintf(zone,sizeof(zone),"UTC%c%02d:%02d",offset<0?'-':'+',abs(offset)/60,abs(offset)%60);text(subtitle_,String(date)+"\n"+zone);updateClockStatus();
     }else if(view_==Menu){if(paintedSelection_==selected_)return;text(title_,titles[selected_]);text(footer_,String(selected_+1)+" / 12\nPress to open · hold for clock");
         for(int i=0;i<12;i++){int id=i;bool on=id==selected_;lv_obj_set_style_border_width(badges_[i],on?3:1,0);lv_obj_set_style_border_color(badges_[i],lv_color_hex(colors[id]),0);
             lv_obj_set_style_shadow_color(badges_[i],lv_color_hex(colors[id]),0);lv_obj_set_style_shadow_width(badges_[i],on?18:8,0);lv_obj_set_style_shadow_opa(badges_[i],on?LV_OPA_50:LV_OPA_20,0);lv_obj_set_style_bg_color(badges_[i],lv_color_hex(on?0x15243a:0x09101b),0);
@@ -204,16 +256,31 @@ void RoundSystemDashboard::update(){
     else if(view_==Pin){text(primary_,pinDigit_==10?LV_SYMBOL_BACKSPACE:String(pinDigit_));String dots;for(unsigned i=0;i<4;i++)dots+=i<pinDraft_.length()?"* ":"_ ";text(subtitle_,dots);text(footer_,notice_.length()?notice_:"Turn for digit / backspace\nPress to confirm · hold to cancel");lv_arc_set_value(gauge_,pinDraft_.length()*25);}
 }
 
+void RoundSystemDashboard::updateClockRing(){
+    timeval stamp{};gettimeofday(&stamp,nullptr);
+    if(stamp.tv_sec<=1577836800){lv_arc_set_value(gauge_,0);return;}
+    const uint32_t palette[]={0x168fff,0xff941a,0x00e5ff,0xff298b,0x9cff20,0xa34dff};
+    const int color=int((uint64_t(stamp.tv_sec)/60)%6);
+    if(clockPalette_!=color){
+        lv_obj_set_style_arc_color(gauge_,lv_color_hex(palette[(color+5)%6]),LV_PART_MAIN);
+        lv_obj_set_style_arc_color(gauge_,lv_color_hex(palette[color]),LV_PART_INDICATOR);clockPalette_=color;
+    }
+    // Subsecond motion over a complete previous-color track; no blank reset.
+    lv_arc_set_value(gauge_,int(stamp.tv_sec%60)*100+stamp.tv_usec/10000);
+}
+
 void RoundSystemDashboard::loop(const AppStateSnapshot& live,const PanelDashboard::Snapshot& snapshot,const PanelDashboard::Command& command){
     if(!screen_)return;
     live_=live;command_=&command;security_.tick();uint32_t now=millis();
-    if(security_.locked()&&!enabled_){enabled_=true;view_=Locked;dirty_=true;}
+    if(security_.locked()&&!enabled_){enabled_=true;view_=Clock;dirty_=true;}
     if(customBackground_&&!security_.locked()&&view_!=Pin){enabled_=false;return;}
+    if(!security_.locked()&&(view_==Locked||(view_==Pin&&pinAction_=="unlock"))){pinDraft_="";view_=Clock;dirty_=true;}
     if(brightnessPending_&&now-brightnessChanged_>=250){JsonDocument v;v.set(brightness_);brightnessPending_=false;patch("oled/brightness",v.as<JsonVariantConst>());}
-    if(security_.locked()&&view_!=Locked&&view_!=Pin){view_=Locked;dirty_=true;pinDraft_="";firstPin_="";}
+    if(security_.locked()&&view_!=Clock&&view_!=Locked&&view_!=Pin){view_=Clock;dirty_=true;pinDraft_="";firstPin_="";}
+    if(security_.locked()&&(view_==Locked||(view_==Pin&&pinAction_=="unlock"))&&now-lastInput_>=10000){pinDraft_="";firstPin_="";view_=Clock;dirty_=true;}
     if(view_!=Clock&&view_!=Locked&&!live_.ota.busy&&now-lastInput_>=timeout_*1000UL){
         // Brightness is committed as it is adjusted; PIN drafts are discarded.
-        editBrightness_=false;pinDraft_="";firstPin_="";oldTicket_="";view_=security_.locked()?Locked:Clock;selected_=0;dirty_=true;
+        editBrightness_=false;pinDraft_="";firstPin_="";oldTicket_="";view_=Clock;selected_=0;dirty_=true;
     }
     bool refreshed=false;
     if((view_==Page||view_==Wiring)&&(!refresh_||now-refresh_>=1000)){
@@ -230,20 +297,22 @@ void RoundSystemDashboard::loop(const AppStateSnapshot& live,const PanelDashboar
         }
     }
     if(dirty_)draw();
+    if(view_==Clock&&now-clockFrame_>=33){clockFrame_=now;updateClockRing();}
     if(clockSecond_!=now/1000||refreshed){clockSecond_=now/1000;update();}
 }
 
 void RoundSystemDashboard::rotate(int delta){
     if(!enabled_||!delta)return;
     activity();
+    if(security_.locked()&&view_!=Clock&&view_!=Locked&&view_!=Pin){view_=Clock;dirty_=true;}
     if(view_==Locked){pinStart("unlock",3);return;}
-    if(view_==Clock){view_=Menu;selected_=delta>0?0:11;dirty_=true;}
+    if(view_==Clock){view_=security_.locked()?Locked:Menu;selected_=delta>0?0:11;dirty_=true;}
     else if(view_==Menu){selected_=(selected_+delta%12+12)%12;}
     else if(view_==Pin)pinDigit_=(pinDigit_+delta%11+11)%11;
     else if(view_==Confirm)confirmation_=delta>0;
     else if(view_==Wiring){int count=cache_["settings"]["ui"]["peripheralHelperBindings"].size();metric_=constrain(metric_+delta,0,max(0,(count-1)/6));dirty_=true;}
     else if(view_==Page){
-        if(section_==5&&editBrightness_){brightness_=constrain(brightness_+delta*2,1,100);panel_->brightness(brightness_);brightnessPending_=true;brightnessChanged_=millis();}
+        if(section_==5){brightness_=constrain(brightness_+delta*2,1,100);panel_->brightness(brightness_);brightnessPending_=true;brightnessChanged_=millis();}
         else if(section_==6||section_==7)metric_+=delta;
         else if(section_==9){followLogs_=false;logSelected_=constrain(logSelected_+delta,0,max(0,int(logCount_)-1));}
         else {int multiplier=millis()-lastRotation_<75&&rowCount_>12?3:1;selected_=constrain(selected_+delta*multiplier,0,max(0,rowCount_-1));}
@@ -253,14 +322,15 @@ void RoundSystemDashboard::rotate(int delta){
 void RoundSystemDashboard::press(){
     if(!enabled_)return;
     activity();
+    if(security_.locked()&&view_!=Clock&&view_!=Locked&&view_!=Pin){view_=Clock;dirty_=true;}
     if(view_==Locked){pinStart("unlock",3);return;}
-    if(view_==Clock){view_=Menu;selected_=0;dirty_=true;}
+    if(view_==Clock){view_=security_.locked()?Locked:Menu;selected_=0;dirty_=true;}
     else if(view_==Menu){selectSection(selected_);return;}
     else if(view_==Pin){if(pinDigit_==10){if(pinDraft_.length())pinDraft_.remove(pinDraft_.length()-1);}else{pinDraft_+=char('0'+pinDigit_);if(pinDraft_.length()==4){pinSubmit();return;}}}
     else if(view_==Wiring){view_=Page;dirty_=true;}
     else if(view_==Confirm){view_=Page;dirty_=true;if(confirmation_){JsonDocument args;execute("otaInstall",args.as<JsonVariantConst>());}}
     else if(view_==Page){
-        if(section_==5){editBrightness_=!editBrightness_;if(brightnessPending_){JsonDocument v;v.set(brightness_);brightnessPending_=false;patch("oled/brightness",v.as<JsonVariantConst>());}}
+        if(section_==5){if(brightnessPending_){JsonDocument v;v.set(brightness_);brightnessPending_=false;patch("oled/brightness",v.as<JsonVariantConst>());}message("Brightness saved");}
         else if(section_==9){followLogs_=true;logSelected_=max(0,int(logCount_)-1);}
         else if(rowCount_){const Row selected=rows_[selected_];JsonDocument args;
             if(section_==0&&selected.id=="$diagram"){view_=Wiring;metric_=0;dirty_=true;}
@@ -270,14 +340,14 @@ void RoundSystemDashboard::press(){
             }else if(section_==8&&!live_.ota.busy){if(selected.id=="$check")execute("otaCheck",args.as<JsonVariantConst>());else if(selected.id=="$install"){view_=Confirm;confirmation_=false;dirty_=true;}}
             else if(section_==10){
                 if(selected.id=="$timeout"){timeout_=timeout_==60?120:timeout_==120?300:60;JsonDocument config;deserializeJson(config,cache_["settings"]["oled"]["circularMenu"]|"{}");if(!config["items"].is<JsonArrayConst>()){config["schemaVersion"]=1;auto home=config["items"].to<JsonArray>().add<JsonObject>();home["id"]=1;home["title"]="Home";home["kind"]="text";}config["systemTimeoutSeconds"]=timeout_;config["systemDashboard"]=true;String raw;serializeJson(config,raw);JsonDocument value;value.set(raw);patch("oled/circularMenu",value.as<JsonVariantConst>());refreshRows();}
-                else if(selected.id=="lock"){args["action"]="lock";JsonDocument result;security_.command(args,result.to<JsonObject>());if(result["ok"]==true){view_=Locked;dirty_=true;}else message(result["error"]|"Unable to lock");}
+                else if(selected.id=="lock"){args["action"]="lock";JsonDocument result;security_.command(args,result.to<JsonObject>());if(result["ok"]==true){view_=Clock;dirty_=true;}else message(result["error"]|"Unable to lock");}
                 else if(selected.id=="set")pinStart("set",1);else if(selected.id=="change"||selected.id=="disable")pinStart(selected.id,0);
             }
         }
     }
     if(dirty_)draw();else update();
 }
-void RoundSystemDashboard::back(){activity();if(view_==Locked)return;if(view_==Pin){pinDraft_="";firstPin_="";oldTicket_="";view_=security_.locked()?Locked:Page;section_=10;selected_=0;refresh_=0;}
+void RoundSystemDashboard::back(){activity();if(view_==Locked){view_=Clock;dirty_=true;draw();return;}if(view_==Pin){pinDraft_="";firstPin_="";oldTicket_="";view_=security_.locked()?Clock:Page;section_=10;selected_=0;refresh_=0;}
     else if(view_==Confirm||view_==Wiring)view_=Page;else if(view_==Page){editBrightness_=false;view_=Menu;selected_=section_;}else view_=Clock;
     dirty_=true;draw();}
 void RoundSystemDashboard::pinStart(const String& action,int stage){pinAction_=action;pinStage_=stage;pinDraft_="";firstPin_="";oldTicket_="";pinDigit_=0;view_=Pin;dirty_=true;draw();}
@@ -297,18 +367,18 @@ void RoundSystemDashboard::pinSubmit(){
 
 void RoundSystemDashboard::drawWiring(){
     if(view_!=Wiring)return;
-    auto* board=box(screen_,185,199,110,82,0x18334d,18);text(label(board,2,19,106,&lv_font_montserrat_14),"ESP32-S3\nGPIO");
+    auto* board=box(screen_,185,203,110,82,0x18334d,18);text(label(board,2,19,106,&lv_font_montserrat_14),"ESP32-S3\nGPIO");
     auto bindings=cache_["settings"]["ui"]["peripheralHelperBindings"].as<JsonObjectConst>();
     int total=bindings.size(),first=min(metric_*6,max(0,((total-1)/6)*6)),index=0,visible=0,lineIndex=0;
     for(JsonPairConst slot:bindings){if(index++<first)continue;if(visible>=6)break;
-        double angle=(-90.+60*visible)*3.141592653589793/180.;int cx=240+int(std::cos(angle)*145),cy=240+int(std::sin(angle)*145);++visible;
+        double angle=(-90.+60*visible)*3.141592653589793/180.;int cx=240+int(std::cos(angle)*128),cy=244+int(std::sin(angle)*128);++visible;
         String pins;int pinCount=0;
         for(JsonPairConst pin:slot.value().as<JsonObjectConst>()){
             String role=pin.key().c_str();if(!pin.value().is<int>()||role.startsWith("LED_")||role=="I2C_ADDRESS")continue;
             if(pinCount<2)pins+=role+" "+variant(pin.value())+" ";
             ++pinCount;
             if(lineIndex<18){uint32_t ink=0x0f766e;role.toUpperCase();for(const auto& wire:RoundIcons::wireColors)if(role==wire.signal){ink=wire.color;break;}
-                auto& points=wires_[lineIndex++];int offset=(pinCount%3-1)*5;points={{{int16_t(240+std::cos(angle)*55),int16_t(240+std::sin(angle)*42+offset)},{int16_t(cx),int16_t(240+std::sin(angle)*42+offset)},{int16_t(cx),int16_t(cy)}}};
+                auto& points=wires_[lineIndex++];int offset=(pinCount%3-1)*5;points={{{int16_t(240+std::cos(angle)*55),int16_t(244+std::sin(angle)*42+offset)},{int16_t(cx),int16_t(244+std::sin(angle)*42+offset)},{int16_t(cx),int16_t(cy)}}};
                 auto* wire=lv_line_create(screen_);lv_line_set_points(wire,points.data(),3);lv_obj_set_style_line_color(wire,lv_color_hex(ink),0);lv_obj_set_style_line_width(wire,2,0);lv_obj_move_background(wire);
             }
         }

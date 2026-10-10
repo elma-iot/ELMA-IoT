@@ -102,7 +102,11 @@ class WebServerManager {
     SimpleHandler serverShutdownHandler_;
     SimpleHandler rebootHandler_;
     SimpleHandler factoryResetHandler_;
+#if APP_ROTARY_HMI
+    InterfaceSecurity& security_=InterfaceSecurity::device();
+#else
     mutable InterfaceSecurity security_;
+#endif
     void registerSecurityRoutes();
     void releaseStorageUploadLease();
     AsyncWebServerRequest* storageUploadOwner_ = nullptr;

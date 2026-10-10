@@ -7,12 +7,13 @@
 void drawPanelBootLogo(PanelDisplay& panel) {
     // Decode one row from the flash-resident indexed artwork. No full RGB buffer.
     uint8_t row[kPanelWidth*2];
-    const int left=(kPanelWidth-128)/2,top=(kPanelHeight-128)/2;
+    const int scale=APP_ROTARY_HMI?2:1,size=128*scale;
+    const int left=(kPanelWidth-size)/2,top=(kPanelHeight-size)/2;
     for(int y=0;y<kPanelHeight;++y){
         for(int x=0;x<kPanelWidth;++x){
             unsigned index=0;
-            if(x>=left&&x<left+128&&y>=top&&y<top+128){
-                unsigned pixel=(y-top)*128+x-left;
+            if(x>=left&&x<left+size&&y>=top&&y<top+size){
+                unsigned pixel=((y-top)/scale)*128+(x-left)/scale;
                 index=(elmaBootPixels[16+pixel/4]>>(6-2*(pixel%4)))&3;
             }
             const auto* color=elmaBootPixels+index*4;

@@ -79,4 +79,6 @@ Firmware 0.1.59-test.3 was uploaded through the web OTA endpoint with USB discon
 
 ## Round dashboard and clock
 
+Firmware 0.1.59-test.6 centers the round gauges, applies encoder brightness changes immediately, shares LCD/Web security while preserving the existing PIN, and starts matching 256 × 256 static and animated boot artwork. The user confirmed these changes, including the locked clock, two-stage knob interaction and ten-second return to the clock. Subsequent clock refinement uses fixed digit cells, a 460-pixel ring with doubled stroke thickness, subsecond movement and contrasting successive colors; physical confirmation of that refinement is recorded separately from the earlier checks.
+
 The user verified firmware 0.1.59-test.4: the system dashboard opens correctly and holding the knob push continuously for 15 seconds reboots to the dashboard. Firmware 0.1.59-test.5 places all twelve section icons on one enlarged ring. Device settings expose `clockUtcOffsetMinutes` (-720 to 840 in 15-minute steps), saved in NVS with default zero. The round idle clock and Web header apply this offset to device UTC; NTP and Logics schedules remain UTC. Alarm Clock already provides `valid`, `epoch`, and `clockTime` (YYYY-MM-DD HH:MM:SSZ).
