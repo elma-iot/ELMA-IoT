@@ -1,10 +1,19 @@
 #if APP_HAS_ONBOARD_PANEL
 #include "panel_boot.h"
+#if APP_ROTARY_HMI
+#include "panel_boot_rotary_layers.h"
+#else
 #include "panel_boot_layers.h"
+#endif
 namespace {
 const lv_img_dsc_t* bootLayer(unsigned index){
     static lv_img_dsc_t images[26]{};
-    auto& d=images[index];d.header.cf=LV_IMG_CF_INDEXED_2BIT;d.header.w=128;d.header.h=128;
+    auto& d=images[index];d.header.cf=LV_IMG_CF_INDEXED_2BIT;
+#if APP_ROTARY_HMI
+    d.header.w=256;d.header.h=256;
+#else
+    d.header.w=128;d.header.h=128;
+#endif
     d.data_size=sizeof(elmaBootLayers[index]);d.data=elmaBootLayers[index];return &d;
 }
 int smooth(int t,int begin,int end){if(t<=begin)return 0;if(t>=end)return 255;float x=float(t-begin)/(end-begin);return int(255*x*x*(3-2*x));}
@@ -17,10 +26,6 @@ void animatePanelBootLogo(lv_disp_t* display,bool staticFirst){
     lv_obj_set_style_radius(overlay,0,0);lv_obj_set_style_border_width(overlay,0,0);lv_obj_set_style_pad_all(overlay,0,0);lv_obj_clear_flag(overlay,LV_OBJ_FLAG_SCROLLABLE);
     if(staticFirst)lv_obj_add_flag(overlay,LV_OBJ_FLAG_USER_1);
     for(unsigned i=0;i<6;i++){auto* layer=lv_img_create(overlay);lv_img_set_src(layer,bootLayer(i));lv_obj_center(layer);
-#if APP_ROTARY_HMI
-        // Same 2x scale and nearest-pixel sampling as the raw static splash.
-        lv_img_set_zoom(layer,512);lv_img_set_antialias(layer,false);
-#endif
         lv_obj_set_style_img_opa(layer,0,0);}
     // Match Android: mark fade, traced swoosh/spark, flickering seeds, text rise, exit fade.
     // Indexed frames remain in flash; LVGL invalidates only the small logo area.

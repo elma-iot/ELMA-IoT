@@ -13,6 +13,17 @@ def decode(data):
 
 
 class BootArtworkTest(unittest.TestCase):
+    def test_rotary_layers_are_exact_native_double_size(self):
+        original=(ROOT/'include/panel_boot_layers.h').read_text()
+        rotary=(ROOT/'include/panel_boot_rotary_layers.h').read_text()
+        frames=lambda source:[decode(list(map(int,re.findall(r'\d+',group)))) for group in re.findall(r'\{([^{}]+)\}',source)]
+        small,big=frames(original),frames(rotary)
+        self.assertEqual(len(small),len(big))
+        for source,target in zip(small,big):
+            self.assertEqual(len(target),256*256)
+            for y in range(256):
+                self.assertEqual(target[y*256:(y+1)*256],[source[(y//2)*128+x//2] for x in range(256)])
+
     def test_static_matches_complete_animation_at_every_pixel(self):
         static_text = (ROOT / 'include/panel_boot_logo.h').read_text()
         data = re.search(r'elmaBootPixels\[\]\s*=\s*\{(.*?)\};', static_text, re.S)[1]

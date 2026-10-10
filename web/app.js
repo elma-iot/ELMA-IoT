@@ -352,6 +352,7 @@ const PERIPHERAL_POWER_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_DIAGRAM_ASSET_MAP = {
+  sensor: {bno055:{src:"/bno055-breadboard.svg",label:"DFRobot BNO055"}},
   communication: {mcp2551:{src:"/mcp2551-breadboard.svg",label:"MCP2551 CAN"}},
   audio: {
     "max98357a-i2s-amp": { src: "/max98357a-breadboard.svg", label: "Audio Out" },

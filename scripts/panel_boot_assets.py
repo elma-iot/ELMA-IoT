@@ -49,6 +49,26 @@ with out.open('w',encoding='utf-8') as f:
  f.write('};\n')
 print('Generated',len(frames),'frames;',len(frames)*4112,'flash bytes; no frame RAM allocation')
 
+# Indexed images are decoded a scanline at a time by LVGL 8. Its scanline
+# drawing path cannot apply image zoom, so store rotary layers at native size.
+rotary=[]
+for frame in frames:
+ data=bytearray(frame[:16])
+ for y in range(256):
+  for x in range(0,256,4):
+   value=0
+   for j in range(4):
+    source=(y//2)*128+(x+j)//2
+    pixel=(frame[16+source//4]>>(6-2*(source%4)))&3
+    value|=pixel<<(6-2*j)
+   data.append(value)
+ rotary.append(data)
+with out.with_name('panel_boot_rotary_layers.h').open('w',encoding='utf-8') as f:
+ f.write('// Generated 2x indexed rotary layers; no runtime image zoom.\n#pragma once\n#include <stdint.h>\nstatic const uint8_t elmaBootLayers[][16400] = {\n')
+ for frame in rotary:
+  f.write('{\n');f.write(',\n'.join(','.join(map(str,frame[i:i+64])) for i in range(0,len(frame),64)));f.write('\n},\n')
+ f.write('};\n')
+
 # Static and animated artwork share the same viewport and rasterized paths.
 # Palette order matches drawPanelBootLogo's RGB565 decoder.
 static=Image.new('L',(size,size),0)

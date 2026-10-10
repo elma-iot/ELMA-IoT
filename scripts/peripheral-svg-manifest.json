@@ -1,4 +1,17 @@
 {
+  "bno055-breadboard.svg": {
+    "profiles": [
+      "sensor:bno055"
+    ],
+    "pins": [
+      "SDA",
+      "SCL",
+      "INT",
+      "VCC",
+      "GND"
+    ],
+    "title": "bno055"
+  },
   "mcp2551-breadboard.svg": {
     "profiles": [
       "communication:mcp2551"

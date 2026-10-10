@@ -1,0 +1,18 @@
+{
+  "version": "0.1.59-test.7",
+  "profile": "viewe_rotary_gc9503",
+  "build": "passed",
+  "applicationCapacity": 4194304,
+  "ramBytes": 77836,
+  "flashBytes": 3246252,
+  "ota": "passed",
+  "faultSignatures": 0,
+  "clockUtcOffsetMinutes": 180,
+  "nativeAnimationPixelTests": 2,
+  "physicalClock": "user confirmed fixed text and smooth ring",
+  "physicalNativeAnimation": "awaiting user confirmation",
+  "physicalST7701S": "unverified",
+  "physicalTouch": "not present on tested MD80E",
+  "sizeBytes": 3246896,
+  "sha256": "a1aca3630c81f8ed09af5230f3722455e638a7a0f76f76c6d8ca12674304a70e"
+}
