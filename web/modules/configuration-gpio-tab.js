@@ -385,7 +385,10 @@ export function createConfigurationGpioTab({
     }
     const selectedBoard = String(elements.gpioBoardSelector.value || "esp32-s3-super-mini");
     const asset = gpioBoardAssets[selectedBoard] || gpioBoardAssets["esp32-s3-super-mini"];
-    const presentation = gpioBoardPresentation[selectedBoard] || gpioBoardPresentation["esp32-s3-super-mini"];
+    const presentation = gpioBoardPresentation[selectedBoard] || gpioBoardPresentation["esp32-s3-super-mini"] || {
+      rotation: "none", tone: "neutral", rank: "Board configuration",
+      recommendation: "Check the board pin assignments before connecting peripherals.",
+    };
     elements.gpioBoardImage.src = asset.src;
     elements.gpioBoardImage.alt = asset.alt;
     elements.gpioBoardImage.style.transform = presentation.rotation;

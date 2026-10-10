@@ -1,3 +1,4 @@
+import {ONBOARD_BOARDS} from "./onboard-boards.js";
 export function createDisplayTab({
   state,
   elements,
@@ -76,6 +77,19 @@ export function createDisplayTab({
     const oledSelected = displayType !== "wape";
     const panelSelected=displayType==='panel';
     const panelControls=document.getElementById('panelControls');if(panelControls)panelControls.hidden=!panelSelected;
+    const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
+    const roundControls=document.getElementById('roundSystemControls');if(roundControls)roundControls.hidden=!panelSelected||!board?.roundHmi;
+    let roundOptions={};try{roundOptions=JSON.parse(state.settings?.oled?.circularMenu||'{}');}catch{}
+    const dashboard=document.getElementById('roundSystemDashboard');if(dashboard)dashboard.checked=roundOptions.systemDashboard!==false;
+    const timeout=document.getElementById('roundSystemTimeout');if(timeout&&document.activeElement!==timeout)timeout.value=roundOptions.systemTimeoutSeconds||60;
+    const wiringHelp=document.getElementById('displayWiringHelp');if(wiringHelp)wiringHelp.hidden=!!board?.roundHmi;
+    if(panelControls&&board){
+      const touch=namedField('oled.touchEnabled');const text=touch?.parentElement?.lastChild;
+      if(text?.nodeType===3)text.textContent=' '+(board.roundHmi?'Optional CST826 touchscreen (MD80ET only)':(board.touchName||'CHSC6540')+' touchscreen');
+      const description=panelControls.querySelector('p');if(description)description.textContent=board.roundHmi?'480 x 480 circular LCD and rotary encoder. MD80E is knob-only; enable touch only on touch-equipped MD80ET boards.':'Onboard LCD; rotation below also rotates touch. LCD controls share the live web settings.';
+      const mode=namedField('oled.interfaceMode');const option=mode?.querySelector('option[value="lvgl"]');if(option)option.textContent=board.roundHmi?'Circular menu':'LVGL mobile interface';
+    }
+
     for(const key of ['driver','i2cAddress','width','height','sdaPin','sclPin','resetPin']){const field=namedField('oled.'+key);if(field)field.disabled=panelSelected;}
     if(elements.oledPreviewCard)elements.oledPreviewCard.hidden=panelSelected;
     const oledEnabledField = namedField("oled.enabled");
@@ -259,6 +273,15 @@ export function createDisplayTab({
   }
 
   function bindEvents() {
+    const saveRoundOptions=()=>{
+      let config;try{config=JSON.parse(state.settings?.oled?.circularMenu||'{}');}catch{config={};}
+      if(!Array.isArray(config.items)){config.schemaVersion=1;config.items=[{id:1,title:'Home',kind:'text'}];}
+      config.systemDashboard=document.getElementById('roundSystemDashboard').checked;
+      config.systemTimeoutSeconds=Math.max(15,Math.min(3600,Number(document.getElementById('roundSystemTimeout').value)||60));
+      state.settings.oled.circularMenu=JSON.stringify(config);queueSettingsSave();
+    };
+    document.getElementById('roundSystemDashboard')?.addEventListener('change',saveRoundOptions);
+    document.getElementById('roundSystemTimeout')?.addEventListener('change',saveRoundOptions);
     elements.displayTriggerButton?.addEventListener("click", () => triggerDisplay().catch(handleError));
 
     elements.peripheralDisplayAddButton?.addEventListener("click", () => {

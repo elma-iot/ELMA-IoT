@@ -1,0 +1,885 @@
+{
+  "usingSavedSettings": false,
+  "device": {
+    "deviceName": "elma-future-device",
+    "friendlyName": "ELMA Future Device",
+    "savedVolumePercent": 35,
+    "audioMuted": false,
+    "statusLedPin": 8,
+    "statusLedType": "neopixel",
+    "lowBatterySleepEnabled": false,
+    "lowBatterySleepThresholdPercent": 10,
+    "lowBatteryWakeIntervalMinutes": 30,
+    "powerCycleFactoryResetEnabled": true,
+    "touchHoldFactoryResetEnabled": true
+  },
+  "wifi": {
+    "ssid": "",
+    "password": "",
+    "apSsid": "",
+    "apPassword": "",
+    "apFallbackEnabled": true,
+    "useStaticIp": false,
+    "staticIp": "",
+    "staTxPowerDbm": 15.0,
+    "apTxPowerDbm": 15.0,
+    "gateway": "",
+    "subnet": "255.255.255.0",
+    "dns1": "",
+    "dns2": ""
+  },
+  "mqtt": {
+    "host": "",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "clientId": "elma-future-device",
+    "baseTopic": "elma/elma-future-device",
+    "discoveryEnabled": true
+  },
+  "audio": {
+    "enabled": false,
+    "rememberLastPlayed": true,
+    "wsPin": 5,
+    "bclkPin": 4,
+    "doutPin": 3
+  },
+  "oled": {
+    "enabled": true,
+    "displayType": "panel",
+    "driver": "ssd1306",
+    "i2cAddress": 60,
+    "width": 480,
+    "height": 480,
+    "rotation": 0,
+    "dimTimeoutSeconds": 60,
+    "sdaPin": 4,
+    "sclPin": 5,
+    "resetPin": -1,
+    "interfaceMode": "lvgl",
+    "brightness": 80,
+    "touchEnabled": false,
+    "circularMenu": "{\"schemaVersion\": 1, \"stepsPerDetent\": 2, \"sensitivity\": 1, \"reverse\": false, \"accent\": \"#12a6a6\", \"fontSize\": 14, \"showProgress\": true, \"items\": [{\"id\": 1, \"title\": \"Temperature\", \"kind\": \"gauge\", \"value\": 24, \"unit\": \"C\"}, {\"id\": 2, \"title\": \"Wi-Fi\", \"kind\": \"text\"}, {\"id\": 3, \"title\": \"LED Control\", \"kind\": \"value\", \"value\": 50}, {\"id\": 4, \"title\": \"Settings\", \"kind\": \"menu\", \"submenu\": 1}, {\"id\": 5, \"parent\": 1, \"title\": \"Brightness\", \"kind\": \"value\", \"value\": 80}, {\"id\": 6, \"parent\": 1, \"title\": \"Restart\", \"kind\": \"confirm\"}]}"
+  },
+  "sd": {
+    "enabled": false,
+    "csPin": 10,
+    "sckPin": 6,
+    "mosiPin": 7,
+    "misoPin": 2
+  },
+  "battery": {
+    "adcPin": 0,
+    "calibrationMultiplier": 2.0,
+    "measuredVoltage": 0,
+    "movingAverageWindowSize": 8,
+    "updateIntervalMs": 5000,
+    "chargingSensePin": 0
+  },
+  "ota": {
+    "autoCheck": true,
+    "autoUpdate": false
+  },
+  "webAuth": {
+    "enabled": false,
+    "username": "admin",
+    "password": ""
+  },
+  "effects": {},
+  "ui": {
+    "gpioBoardAutodetect": true,
+    "gpioBoardSelection": "viewe-uedx48480021-md80et",
+    "peripheralDiagramPositions": {
+      "BOARD_VIEWE_UEDX48480021_MD80ET": {
+        "x": 561.2597402597403,
+        "y": 401.0909090909091,
+        "centerXFactor": 0.6562597402597403,
+        "centerYFactor": 0.8851515151515152,
+        "worldCoordinates": false
+      }
+    },
+    "peripheralHelperBindings": {},
+    "peripheralProfiles": {
+      "audioProfile": "none",
+      "audioProfiles": [
+        "none"
+      ],
+      "audioInProfile": "none",
+      "audioInProfiles": [
+        "none"
+      ],
+      "displayProfile": "none",
+      "displayProfiles": [
+        "viewe-rotary-onboard-lcd"
+      ],
+      "sensors": [
+        "none"
+      ],
+      "inputs": [
+        "none"
+      ],
+      "controls": [
+        "none"
+      ],
+      "expansions": [
+        "none"
+      ],
+      "storage": [
+        "none"
+      ],
+      "communication": [
+        "none"
+      ],
+      "power": [
+        "none"
+      ]
+    },
+    "logicPeripheralIds": {
+      "audio": [
+        "7ec02b5c-dffc-4ad9-849a-9a56dd2fda76"
+      ],
+      "audioIn": [
+        "ca2a820e-965b-4c4e-87d3-2092d19a6c53"
+      ],
+      "display": [
+        "5adb26ec-df72-41ec-9608-aba2436eef09"
+      ],
+      "sensor": [
+        "03590951-f4e9-4b49-8cdc-243532c2fab5"
+      ],
+      "input": [
+        "08f5cbaa-e172-4302-bd14-c4251b5d3349"
+      ],
+      "power": [
+        "2a2e0a6a-1325-48ba-860c-0e752b12aae7"
+      ],
+      "control": [
+        "28d0b4ee-7730-4de2-9dee-61881b9d8f48"
+      ],
+      "expansion": [
+        "ceaf7c62-5f90-48dc-8f37-a6059a171a8f"
+      ],
+      "storage": [
+        "2b85b32b-d96e-4bd2-94d5-0e0bb6d8b0ee"
+      ],
+      "communication": [
+        "8c0b898d-82f7-40cf-ae4c-b117f6de28e3"
+      ]
+    },
+    "logicMode": "playing"
+  },
+  "windowsLogic": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "75fec11f-0b47-4bea-8bb9-21f03bd7cba8",
+        "type": "event.start",
+        "name": "On Start",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "out",
+            "label": "Out",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {},
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "4600fa52-acf6-4641-a230-21cc8dd1fe43",
+        "type": "hardware.hmi.create",
+        "name": "Create circular menu",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "Apply",
+            "type": "execution",
+            "direction": "input",
+            "required": true
+          },
+          {
+            "id": "configuration",
+            "label": "Configuration",
+            "type": "string",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Done",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "configuration": "{\"schemaVersion\": 1, \"stepsPerDetent\": 2, \"sensitivity\": 1, \"reverse\": false, \"accent\": \"#12a6a6\", \"fontSize\": 14, \"showProgress\": true, \"items\": [{\"id\": 1, \"title\": \"Temperature\", \"kind\": \"gauge\", \"value\": 24, \"unit\": \"C\"}, {\"id\": 2, \"title\": \"Wi-Fi\", \"kind\": \"text\"}, {\"id\": 3, \"title\": \"LED Control\", \"kind\": \"value\", \"value\": 50}, {\"id\": 4, \"title\": \"Settings\", \"kind\": \"menu\", \"submenu\": 1}, {\"id\": 5, \"parent\": 1, \"title\": \"Brightness\", \"kind\": \"value\", \"value\": 80}, {\"id\": 6, \"parent\": 1, \"title\": \"Restart\", \"kind\": \"confirm\"}]}"
+        },
+        "position": {
+          "x": 350.0,
+          "y": 0.0
+        },
+        "binding": {
+          "kind": "hmi"
+        }
+      },
+      {
+        "id": "abf6e747-6090-41a4-830b-cc649c8082eb",
+        "type": "hardware.hmi.valueChanged",
+        "name": "Menu value changed",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "out",
+            "label": "Event",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "itemId",
+            "label": "Item ID",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "delta",
+            "label": "Rotation",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "value",
+            "label": "Value",
+            "type": "number",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "x",
+            "label": "Touch X",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "y",
+            "label": "Touch Y",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "direction",
+            "label": "Swipe direction",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "itemIdFilter",
+            "label": "Itemidfilter",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "itemIdFilter": 5
+        },
+        "position": {
+          "x": 781.9234109691286,
+          "y": 8.822643713475031
+        },
+        "binding": {
+          "kind": "transition",
+          "path": "hmi.events.valueChanged",
+          "edge": "change",
+          "availability": "hmi.available"
+        }
+      },
+      {
+        "id": "cf57569e-3712-4fb6-a208-274c6b6792a4",
+        "type": "hardware.hmi.brightness",
+        "name": "Set display brightness",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "Apply",
+            "type": "execution",
+            "direction": "input",
+            "required": true
+          },
+          {
+            "id": "value",
+            "label": "Value",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Done",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "value": 80.0
+        },
+        "position": {
+          "x": 1131.9234109691286,
+          "y": 8.822643713475031
+        },
+        "binding": {
+          "kind": "hmi"
+        }
+      },
+      {
+        "id": "790b5e19-79c7-48a7-b8a8-c98e7ff63298",
+        "type": "timing.timer",
+        "name": "Timer",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "In",
+            "type": "execution",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "enabled",
+            "label": "Enabled",
+            "type": "boolean",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Out",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "seconds",
+            "label": "Seconds",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "seconds": 5.0
+        },
+        "position": {
+          "x": 780.1249871238995,
+          "y": 397.3012797961078
+        }
+      },
+      {
+        "id": "ef0e09e2-50c4-48e6-8a14-dd621ef0f0f8",
+        "type": "mainboard.hardware.temperature",
+        "name": "Hardware monitor \u00b7 Chip temperature (\u00b0C)",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "value",
+            "label": "Chip temperature (\u00b0C)",
+            "type": "number",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {},
+        "position": {
+          "x": 780.1249871238995,
+          "y": 617.3012797961078
+        },
+        "binding": {
+          "kind": "status",
+          "endpoint": "/api/status",
+          "path": "system.chipTemperatureC",
+          "availability": "system.chipTemperatureAvailable"
+        }
+      },
+      {
+        "id": "7053db48-b46b-44fa-876e-b4d4b47d0806",
+        "type": "hardware.hmi.gauge",
+        "name": "Update circular gauge",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "Apply",
+            "type": "execution",
+            "direction": "input",
+            "required": true
+          },
+          {
+            "id": "itemId",
+            "label": "Item Id",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "value",
+            "label": "Value",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Done",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "itemId": 1,
+          "value": 24.0
+        },
+        "position": {
+          "x": 1130.1249871238992,
+          "y": 397.3012797961078
+        },
+        "binding": {
+          "kind": "hmi"
+        }
+      },
+      {
+        "id": "b351dddc-ebf6-4b57-8041-49db2de01e93",
+        "type": "hardware.hmi.valueChanged",
+        "name": "Menu value changed",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "out",
+            "label": "Event",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "itemId",
+            "label": "Item ID",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "delta",
+            "label": "Rotation",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "value",
+            "label": "Value",
+            "type": "number",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "x",
+            "label": "Touch X",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "y",
+            "label": "Touch Y",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "direction",
+            "label": "Swipe direction",
+            "type": "integer",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "itemIdFilter",
+            "label": "Itemidfilter",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "itemIdFilter": 3
+        },
+        "position": {
+          "x": 1481.9234109691286,
+          "y": 8.822643713475031
+        },
+        "binding": {
+          "kind": "transition",
+          "path": "hmi.events.valueChanged",
+          "edge": "change",
+          "availability": "hmi.available"
+        }
+      },
+      {
+        "id": "d9da565b-5a82-4db8-9d66-6e60a9980f7c",
+        "type": "mainboard.mqtt.publish",
+        "name": "MQTT \u00b7 Publish message",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "In",
+            "type": "execution",
+            "direction": "input",
+            "required": true
+          },
+          {
+            "id": "topic",
+            "label": "Topic",
+            "type": "string",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "text",
+            "label": "Text",
+            "type": "string",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "value",
+            "label": "Append value",
+            "type": "scalar",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Out",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          },
+          {
+            "id": "retained",
+            "label": "Retained",
+            "type": "boolean",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "qos",
+            "label": "Qos",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "topic": "elma/rotary/led",
+          "text": "brightness=",
+          "separator": "",
+          "retained": false,
+          "qos": 1
+        },
+        "position": {
+          "x": 1831.9234109691286,
+          "y": 8.822643713475031
+        },
+        "binding": {
+          "kind": "action"
+        }
+      },
+      {
+        "id": "529c30e4-c96a-4108-abb8-10ed3ada5acc",
+        "type": "mainboard.wifi.on_connected",
+        "name": "Wi-Fi \u00b7 On STA connected",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "out",
+            "label": "Out",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {},
+        "position": {
+          "x": 1481.9234109691286,
+          "y": 258.82264371347503
+        },
+        "binding": {
+          "kind": "transition",
+          "endpoint": "/api/status",
+          "path": "network.wifiConnected",
+          "edge": "rising",
+          "equals": true
+        }
+      },
+      {
+        "id": "044ee9a2-7064-495c-ae96-d658733e1ec9",
+        "type": "hardware.hmi.text",
+        "name": "Update menu text",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "Apply",
+            "type": "execution",
+            "direction": "input",
+            "required": true
+          },
+          {
+            "id": "itemId",
+            "label": "Item Id",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "text",
+            "label": "Text",
+            "type": "string",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Done",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "itemId": 2,
+          "text": "Wi-Fi connected"
+        },
+        "position": {
+          "x": 1830.1249871238992,
+          "y": 397.3012797961078
+        },
+        "binding": {
+          "kind": "hmi"
+        }
+      },
+      {
+        "id": "26d345b9-e60a-4774-a397-021eb3c22043",
+        "type": "mainboard.wifi.on_disconnected",
+        "name": "Wi-Fi \u00b7 On STA disconnected",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "out",
+            "label": "Out",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {},
+        "position": {
+          "x": 1480.1249871238992,
+          "y": 617.3012797961078
+        },
+        "binding": {
+          "kind": "transition",
+          "endpoint": "/api/status",
+          "path": "network.wifiConnected",
+          "edge": "falling",
+          "equals": false
+        }
+      },
+      {
+        "id": "8224662d-9e38-4ab8-8cab-9938725bc8d9",
+        "type": "hardware.hmi.text",
+        "name": "Update menu text",
+        "peripheral": null,
+        "ports": [
+          {
+            "id": "in",
+            "label": "Apply",
+            "type": "execution",
+            "direction": "input",
+            "required": true
+          },
+          {
+            "id": "itemId",
+            "label": "Item Id",
+            "type": "number",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "text",
+            "label": "Text",
+            "type": "string",
+            "direction": "input",
+            "required": false
+          },
+          {
+            "id": "out",
+            "label": "Done",
+            "type": "execution",
+            "direction": "output",
+            "required": false
+          }
+        ],
+        "parameters": {
+          "itemId": 2,
+          "text": "Wi-Fi offline"
+        },
+        "position": {
+          "x": 1830.1249871238992,
+          "y": 617.3012797961078
+        },
+        "binding": {
+          "kind": "hmi"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "6cb2c597-a8a3-4980-aca1-948d3a29e5df",
+        "source": {
+          "node": "75fec11f-0b47-4bea-8bb9-21f03bd7cba8",
+          "port": "out"
+        },
+        "target": {
+          "node": "4600fa52-acf6-4641-a230-21cc8dd1fe43",
+          "port": "in"
+        }
+      },
+      {
+        "id": "f9cbb91b-5d23-4c0b-8569-35d338a13b10",
+        "source": {
+          "node": "abf6e747-6090-41a4-830b-cc649c8082eb",
+          "port": "out"
+        },
+        "target": {
+          "node": "cf57569e-3712-4fb6-a208-274c6b6792a4",
+          "port": "in"
+        }
+      },
+      {
+        "id": "46b1be3f-e9f9-4817-b641-66da63ef4bc7",
+        "source": {
+          "node": "abf6e747-6090-41a4-830b-cc649c8082eb",
+          "port": "value"
+        },
+        "target": {
+          "node": "cf57569e-3712-4fb6-a208-274c6b6792a4",
+          "port": "value"
+        }
+      },
+      {
+        "id": "132c764b-f90a-4087-be13-61e0c2effbe6",
+        "source": {
+          "node": "4600fa52-acf6-4641-a230-21cc8dd1fe43",
+          "port": "out"
+        },
+        "target": {
+          "node": "790b5e19-79c7-48a7-b8a8-c98e7ff63298",
+          "port": "in"
+        }
+      },
+      {
+        "id": "5f86e3e3-ab42-404d-aa63-df5722c86312",
+        "source": {
+          "node": "790b5e19-79c7-48a7-b8a8-c98e7ff63298",
+          "port": "out"
+        },
+        "target": {
+          "node": "7053db48-b46b-44fa-876e-b4d4b47d0806",
+          "port": "in"
+        }
+      },
+      {
+        "id": "de8a3940-a0e2-47c2-a3de-f884efbad0e0",
+        "source": {
+          "node": "ef0e09e2-50c4-48e6-8a14-dd621ef0f0f8",
+          "port": "value"
+        },
+        "target": {
+          "node": "7053db48-b46b-44fa-876e-b4d4b47d0806",
+          "port": "value"
+        }
+      },
+      {
+        "id": "1365843d-6968-4b4e-a3f3-835d5061a1b3",
+        "source": {
+          "node": "b351dddc-ebf6-4b57-8041-49db2de01e93",
+          "port": "out"
+        },
+        "target": {
+          "node": "d9da565b-5a82-4db8-9d66-6e60a9980f7c",
+          "port": "in"
+        }
+      },
+      {
+        "id": "d3a6bc78-7027-4a19-a2b7-1984db18cd3f",
+        "source": {
+          "node": "b351dddc-ebf6-4b57-8041-49db2de01e93",
+          "port": "value"
+        },
+        "target": {
+          "node": "d9da565b-5a82-4db8-9d66-6e60a9980f7c",
+          "port": "value"
+        }
+      },
+      {
+        "id": "a10967f2-072a-421e-a0ec-360370e356ef",
+        "source": {
+          "node": "529c30e4-c96a-4108-abb8-10ed3ada5acc",
+          "port": "out"
+        },
+        "target": {
+          "node": "044ee9a2-7064-495c-ae96-d658733e1ec9",
+          "port": "in"
+        }
+      },
+      {
+        "id": "43edce11-1784-4270-a274-a5a00116f217",
+        "source": {
+          "node": "26d345b9-e60a-4774-a397-021eb3c22043",
+          "port": "out"
+        },
+        "target": {
+          "node": "8224662d-9e38-4ab8-8cab-9938725bc8d9",
+          "port": "in"
+        }
+      }
+    ],
+    "view": {
+      "grid": true,
+      "snap": false,
+      "labels": [],
+      "zoom": 0.8456710602646312,
+      "centerX": 1509.4552738895175,
+      "centerY": 393.241980631
+    },
+    "groups": [],
+    "mode": "playing"
+  }
+}

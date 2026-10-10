@@ -1,3 +1,4 @@
+import { updateHeaderClock } from "./device-clock.js";
 export function createStatusRenderModule({
   state,
   elements,
@@ -269,6 +270,7 @@ export function createStatusRenderModule({
     const savedVolumePercent = Number(state.settings?.device?.savedVolumePercent ?? playback.volumePercent ?? 0);
 
     elements.deviceTitle.textContent = device.friendlyName || "ESP32 Notifier";
+    updateHeaderClock(status);
     renderInfoStatus(status);
     setCurrentFirmwareVersion(firmware.version);
     setFirmwareAuthorLink(settings);

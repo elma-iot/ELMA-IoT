@@ -1,3 +1,6 @@
+#if APP_ROTARY_HMI
+#include "rotary_hmi.h"
+#endif
 #include "i2c_validation.h"
 #include "can_contract.h"
 #include <driver/gpio.h>
@@ -717,7 +720,11 @@ SettingsBundle SettingsManager::defaults() const {
     settings.oled.displayType = "panel";
     settings.oled.width = kPanelWidth;
     settings.oled.height = kPanelHeight;
-#if APP_SUNTON_PANEL
+#if APP_ROTARY_HMI
+    // MD80E is knob-only; touch-equipped MD80ET variants opt in.
+    settings.oled.touchEnabled=false;
+    settings.sd.enabled=false;settings.audio.enabled=false;settings.battery.adcPin=0;settings.battery.chargingSensePin=0;
+#elif APP_SUNTON_PANEL
     settings.sd.csPin=5;settings.sd.sckPin=18;settings.sd.mosiPin=23;settings.sd.misoPin=19;
 #else
     settings.sd.csPin = 21;
@@ -802,7 +809,7 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     settings.ui.peripheralHelperBindings="";serializeJson(bindings,settings.ui.peripheralHelperBindings);
 #endif
 
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
     // The VIEWE slot is soldered to this board; migrate old optional/disabled settings.
     settings.sd.enabled=true;settings.sd.sdmmc=true;
     settings.sd.csPin=21;settings.sd.sckPin=14;settings.sd.mosiPin=17;settings.sd.misoPin=16;
@@ -833,6 +840,7 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     settings.wifi.apPassword.trim();
     settings.device.deviceName.trim();
     settings.device.friendlyName.trim();
+    if (settings.device.clockUtcOffsetMinutes < -720 || settings.device.clockUtcOffsetMinutes > 840 || settings.device.clockUtcOffsetMinutes % 15) settings.device.clockUtcOffsetMinutes = 0;
     settings.device.statusLedType.trim();
     settings.device.statusLedType.toLowerCase();
     settings.mqtt.clientId.trim();
@@ -963,6 +971,12 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     if (!settings.audio.rememberLastPlayed) {
         settings.audio.lastPlayback.resumeAfterBoot = false;
     }
+#if APP_ROTARY_HMI
+    // Until adapter GPIOs are verified, no externally wired subsystem may own LCD/encoder pins.
+    settings.audio.enabled=false;settings.sd.enabled=false;settings.battery.adcPin=0;settings.battery.chargingSensePin=0;
+    settings.device.statusLedPin=255;settings.device.statusLedGreenPin=255;settings.device.statusLedBluePin=255;
+    settings.oled.displayType="panel";settings.oled.width=480;settings.oled.height=480;
+#endif
     normalizeEqualizer(settings.audio);
     settings.audio.lastPlayback.type.toLowerCase();
     if (settings.audio.lastPlayback.type != "stream" && settings.audio.lastPlayback.type != "media") {
@@ -1131,6 +1145,7 @@ SettingsBundle SettingsManager::load() {
 
     settings.oled.brightness = readUInt("lcd_light", settings.oled.brightness);
     settings.oled.interfaceMode = readString("lcd_ui", settings.oled.interfaceMode);
+    settings.oled.circularMenu = readString("lcd_menu", settings.oled.circularMenu);
     settings.oled.touchEnabled = readBool("lcd_touch", settings.oled.touchEnabled);
     settings.oled.enabled = readBool("oled_en", settings.oled.enabled);
     settings.oled.displayType = readString("oled_mode", settings.oled.displayType);
@@ -1155,6 +1170,7 @@ SettingsBundle SettingsManager::load() {
 
     settings.device.deviceName = readString("dev_name", settings.device.deviceName);
     settings.device.friendlyName = readString("dev_friendly", settings.device.friendlyName);
+    settings.device.clockUtcOffsetMinutes = readInt("dev_utc_mins", settings.device.clockUtcOffsetMinutes);
     settings.device.statusLedPin = readUInt("dev_led", settings.device.statusLedPin);
     settings.device.statusLedGreenPin = readUInt("dev_led_g", settings.device.statusLedGreenPin);
     settings.device.statusLedBluePin = readUInt("dev_led_b", settings.device.statusLedBluePin);
@@ -1328,6 +1344,7 @@ bool SettingsManager::save(const SettingsBundle& settings) {
 
         changed |= storeUInt("lcd_light", sanitized.oled.brightness, baseline.oled.brightness);
         changed |= storeString("lcd_ui", sanitized.oled.interfaceMode, baseline.oled.interfaceMode);
+        changed |= storeString("lcd_menu", sanitized.oled.circularMenu, baseline.oled.circularMenu);
         changed |= storeBool("lcd_touch", sanitized.oled.touchEnabled, baseline.oled.touchEnabled);
         changed |= storeBool("oled_en", sanitized.oled.enabled, baseline.oled.enabled);
         changed |= storeString("oled_mode", sanitized.oled.displayType, baseline.oled.displayType);
@@ -1351,6 +1368,7 @@ bool SettingsManager::save(const SettingsBundle& settings) {
 
         changed |= storeString("dev_name", sanitized.device.deviceName, baseline.device.deviceName);
         changed |= storeString("dev_friendly", sanitized.device.friendlyName, baseline.device.friendlyName);
+        changed |= storeInt("dev_utc_mins", sanitized.device.clockUtcOffsetMinutes, baseline.device.clockUtcOffsetMinutes);
         changed |= storeUInt("dev_led", sanitized.device.statusLedPin, baseline.device.statusLedPin);
         changed |= storeUInt("dev_led_g", sanitized.device.statusLedGreenPin, baseline.device.statusLedGreenPin);
         changed |= storeUInt("dev_led_b", sanitized.device.statusLedBluePin, baseline.device.statusLedBluePin);
@@ -1522,6 +1540,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     JsonObject oled = root["oled"].to<JsonObject>();
     oled["enabled"] = settings.oled.enabled;
     oled["interfaceMode"] = settings.oled.interfaceMode;
+    oled["circularMenu"] = settings.oled.circularMenu;
     oled["touchEnabled"] = settings.oled.touchEnabled;
     oled["brightness"] = settings.oled.brightness;
     oled["displayType"] = settings.oled.displayType;
@@ -1552,6 +1571,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     JsonObject device = root["device"].to<JsonObject>();
     device["deviceName"] = settings.device.deviceName;
     device["friendlyName"] = settings.device.friendlyName;
+    device["clockUtcOffsetMinutes"] = settings.device.clockUtcOffsetMinutes;
     device["statusLedPin"] = settings.device.statusLedPin == 255 ? -1 : static_cast<int>(settings.device.statusLedPin);
     device["statusLedGreenPin"] = settings.device.statusLedGreenPin;
     device["statusLedBluePin"] = settings.device.statusLedBluePin;
@@ -1743,6 +1763,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     JsonObjectConst oled = object["oled"];
     if (!oled.isNull()) {
         copyString(oled, "interfaceMode", settings.oled.interfaceMode);
+        copyString(oled, "circularMenu", settings.oled.circularMenu);
         copyString(oled, "displayType", settings.oled.displayType);
         copyString(oled, "driver", settings.oled.driver);
         if (oled["brightness"].is<uint8_t>()) settings.oled.brightness = oled["brightness"].as<uint8_t>();
@@ -1774,6 +1795,10 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     if (!device.isNull()) {
         copyString(device, "deviceName", settings.device.deviceName);
         copyString(device, "friendlyName", settings.device.friendlyName);
+        if (device.containsKey("clockUtcOffsetMinutes")) {
+            if (!device["clockUtcOffsetMinutes"].is<int>() || device["clockUtcOffsetMinutes"].as<int>() < -720 || device["clockUtcOffsetMinutes"].as<int>() > 840 || device["clockUtcOffsetMinutes"].as<int>() % 15) { error = "UTC offset must be -720 to 840 minutes in 15-minute steps"; return false; }
+            settings.device.clockUtcOffsetMinutes = device["clockUtcOffsetMinutes"].as<int>();
+        }
         copyString(device, "button1Action", settings.device.button1Action);
         copyString(device, "button2Action", settings.device.button2Action);
         copyString(device, "statusLedType", settings.device.statusLedType);
@@ -1812,7 +1837,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     }
 
     sanitizeInPlace(settings);
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
     // GPIO38 is physically tied to BZ1. Safety override cannot repurpose it.
     bool buzzerConflict=settings.device.statusLedPin==38||settings.device.statusLedGreenPin==38||settings.device.statusLedBluePin==38;
     if(settings.audio.enabled)buzzerConflict|=settings.audio.wsPin==38||settings.audio.bclkPin==38||settings.audio.doutPin==38;
@@ -1838,6 +1863,9 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
             }++index;
         }
     }
+#if APP_ROTARY_HMI
+    if(!RoundHmi::configure(settings.oled.circularMenu,error,true))return false;
+#endif
     if(!validateI2cConfiguration(settings,error))return false;
     return true;
 }

@@ -1,3 +1,6 @@
+#if APP_ROTARY_HMI
+#include "legacy_ledc_compat.h"
+#endif
 #include "buzzer_melody.h"
 #include "plot_telemetry.h"
 #include "plot_storage.h"
@@ -2890,7 +2893,7 @@ void applyRuntimeSettings() {
     applyStorageSettings(*settings);
     initializeButtons();
     motorController.applySettings(*settings);
-    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings);
+    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings, settings->device.clockUtcOffsetMinutes);
     applyStatusLedConfig(settings->device.statusLedPin, settings->device.statusLedGreenPin, settings->device.statusLedBluePin, settings->device.statusLedType);
     logicDevice.configureStatusLed(settings->device);
     configureAlarmClock(*settings);
@@ -3114,7 +3117,7 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
     }
 
     *settings = persisted;
-    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, true);
+    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, true, settings->device.clockUtcOffsetMinutes);
     deferredActions->pendingSettings = persisted;
     deferredActions->settingsApplyWifiPowerOnly = powerOnly &&
         (!deferredActions->settingsApplyPending || deferredActions->settingsApplyWifiPowerOnly);
@@ -3296,10 +3299,19 @@ void serviceCloneProvisioningSerial() {
             }
             Serial.flush();
         } else if (command == "ELMA_DIAGNOSTICS") {
+#if APP_ROTARY_HMI
+            JsonDocument hmiState;
+            RoundHmi::snapshot(hmiState.to<JsonObject>());
+            String hmiJson;serializeJson(hmiState,hmiJson);
+            Serial.print("[health-hmi] ");Serial.println(hmiJson);
+#endif
             DebugLog.printf("[health] uptime=%lu heap=%u min_heap=%u largest=%u wifi=%d rssi=%d mqtt=%d stack_min=%u\n",
                 millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
                 static_cast<int>(WiFi.status()), WiFi.RSSI(), mqttManager != nullptr && mqttManager->isConnected(), unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+            DebugLog.printf("[health-memory] flash=%u psram=%u psram_free=%u flash_fs_mounted=%d\n",
+                ESP.getFlashChipSize(), ESP.getPsramSize(), ESP.getFreePsram(),
+                storageMounted(StorageTarget::Flash));
         }
     }
 }
@@ -3340,7 +3352,7 @@ bool saveMotorRuntimeConfigFromJson(JsonVariantConst root, String& error) {
         *settings = settingsManager->load();
     }
 
-    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, true);
+    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, true, settings->device.clockUtcOffsetMinutes);
     applyRuntimeSettings();
     mqttManager->publishState();
     error = "";
@@ -4077,7 +4089,7 @@ void setup() {
     displayManager->begin(settings->oled);
     displayManager->setBootMessage("Booting");
 
-    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings);
+    appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings, settings->device.clockUtcOffsetMinutes);
 
     wifiManager->begin(*settings, *appState);
 

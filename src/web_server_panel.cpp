@@ -34,17 +34,20 @@ bool selected(JsonVariantConst values,const char* fragment=nullptr){
  for(JsonVariantConst v:values.as<JsonArrayConst>())if(selected(v,fragment))return true;return false;
 }
 }
-void WebServerManager::panelSnapshot(const String& page,JsonObject root){
+void WebServerManager::panelSnapshot(const String& requestedPage,JsonObject root){
+ const bool round=requestedPage.startsWith("round/");
+ const String page=round?requestedPage.substring(6):requestedPage;
  if(panelBrowseJob_&&!page.startsWith("storage-")){auto* job=static_cast<PanelBrowseJob*>(panelBrowseJob_);portENTER_CRITICAL(&browseMux);bool done=job->done;portEXIT_CRITICAL(&browseMux);if(done){delete job;panelBrowseJob_=nullptr;panelStorageDirty_=true;}}
 
  if(page=="info"){root["build"]=__DATE__ " " __TIME__;root["mac"]=WiFi.macAddress();}
  root["version"]=APP_VERSION;security_.status(root["security"].to<JsonObject>());
- if(security_.locked())return;
+ if(security_.locked()&&!round)return;
  root["sdNeedsFormat"]=sdFormatPromptNeeded();
  if(page=="firmware")otaManager_->appendStatusJson(root["ota"].to<JsonObject>());
  std::unique_ptr<SettingsBundle> snapshot(new(std::nothrow) SettingsBundle(settingsGetter_()));if(!snapshot)return;const auto& settings=*snapshot;auto config=root["settings"].to<JsonObject>();
  const char* section=page=="wifi"?"wifi":page=="mqtt"?"mqtt":page=="device"||page=="gpio"?"device":page=="oled"?"oled":page=="battery"?"battery":page=="effects"?"effects":page=="playback"||page.startsWith("storage-")?"audio":page=="firmware"?"ota":nullptr;
  if(section)settingsManager_->toJson(settings,config,section,false);
+ if(round&&page=="security")settingsManager_->toJson(settings,config,"oled",false);
  if(page=="gpio"||page=="wled"||page=="motor")settingsManager_->toJson(settings,config,"ui",false);
  // Passwords stay on the unlocked local panel; other pages never carry them.
  if(page!="mqtt")config["mqtt"].remove("password");config["webAuth"].remove("password");
@@ -67,7 +70,7 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  caps["storage-external"]=settings.sd.enabled||selected(profiles["storage"]);caps["migration"]=false;
  static bool hasPlots=false;static uint32_t graphAt=0;
  if(page=="logics"||page=="plots"||millis()-graphAt>5000){
-  JsonDocument graph(panelJsonAllocator());if(logicsGetter_)logicsGetter_(graph,page=="logics");
+  JsonDocument graph(panelJsonAllocator());if(logicsGetter_)logicsGetter_(graph,page=="logics"&&!round);
   if(page=="logics"||page=="plots")root["logics"].set(graph);
   hasPlots=graph["hasPlots"]|false;
   if(!graph["graph"].isNull()){hasPlots=false;for(JsonObjectConst n:graph["graph"]["nodes"].as<JsonArrayConst>())if(n["type"]=="mainboard.plot")hasPlots=true;}

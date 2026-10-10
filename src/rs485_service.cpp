@@ -2,7 +2,7 @@
 #include "modbus_rtu.h"
 #include <Arduino.h>
 #include <cmath>
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
 #include <HardwareSerial.h>
 #include <Preferences.h>
 #include <freertos/semphr.h>
@@ -54,14 +54,14 @@ void openBus(){
 #endif
 namespace Rs485 {
 bool available(){
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
  return true;
 #else
  return false;
 #endif
 }
 bool command(JsonVariantConst args,String& error){
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
  Guard guard;if(!guard.ok||pending||waiting){error="RS485 is busy";return false;}
  int baud=args["baud"]|int(config.baud),unit=args["unit"]|1,address=args["address"]|0,count=args["count"]|1,function=args["function"]|3,stops=args["stops"]|int(config.stops);String parity=args["parity"]|String(config.parity);
  for(const char* key:{"baud","unit","address","count","function","stops"})if(!args[key].isNull()){double value=args[key].as<double>();if(!args[key].is<double>()||!std::isfinite(value)||std::floor(value)!=value){error="Modbus numeric parameters must be whole numbers";return false;}}
@@ -75,7 +75,7 @@ bool command(JsonVariantConst args,String& error){
 #endif
 }
 void tick(){
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
  Guard guard;if(!guard.ok)return;
  if(!opened)openBus();
  if(pending){
@@ -97,7 +97,7 @@ void tick(){
 #endif
 }
 void snapshot(JsonObject out,bool includeLog){out["available"]=available();
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
  Guard guard;if(!guard.ok){out["busy"]=true;return;}
  out["chip"]="MS1285";out["tx"]=43;out["rx"]=44;out["automaticDirection"]=true;out["busy"]=pending||waiting;out["message"]=message;
  out["baud"]=config.baud;out["parity"]=String(config.parity);out["stops"]=config.stops;out["unit"]=config.unit;out["address"]=config.address;out["count"]=config.count;out["function"]=config.function;out["ready"]=ready;

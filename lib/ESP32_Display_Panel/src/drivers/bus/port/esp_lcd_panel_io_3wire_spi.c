@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "../esp_panel_bus_conf_internal.h"
+#if ESP_PANEL_DRIVERS_BUS_ENABLE_RGB
+
 #include <string.h>
 
 #include "driver/gpio.h"
@@ -447,3 +450,5 @@ static esp_err_t spi_write_package(esp_lcd_panel_io_3wire_spi_t *panel_io, bool 
 
     return ESP_OK;
 }
+
+#endif // ESP_PANEL_DRIVERS_BUS_ENABLE_RGB

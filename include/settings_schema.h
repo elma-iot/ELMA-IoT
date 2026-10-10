@@ -155,6 +155,7 @@ struct AudioSettings {
 
 struct OledSettings {
     String interfaceMode = "lvgl";
+    String circularMenu;
     uint8_t brightness = 100;
     bool touchEnabled = true;
     String displayType = "oled";
@@ -201,6 +202,7 @@ struct EffectSettings {
 };
 
 struct DeviceSettings {
+    int16_t clockUtcOffsetMinutes = 0;
     String deviceName;
     String friendlyName;
     uint8_t statusLedPin = APP_DEFAULT_STATUS_LED_PIN;

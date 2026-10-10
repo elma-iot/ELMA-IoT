@@ -292,6 +292,7 @@ export function createConfigurationSettingsPersistenceModule({
     payload.wifi.apTxPowerDbm = normalizeWifiPower(payload.wifi.apTxPowerDbm);
 
     payload.mqtt.port = Number(payload.mqtt.port || 1883);
+    payload.device.clockUtcOffsetMinutes = Number(payload.device.clockUtcOffsetMinutes ?? state.settings?.device?.clockUtcOffsetMinutes ?? 0);
     payload.device.savedVolumePercent = Number(elements.volumeSlider?.value || payload.device.savedVolumePercent || 5);
     payload.device.statusLedPin = Number(elements.statusLedPin?.value ?? payload.device.statusLedPin ?? state.settings?.device?.statusLedPin ?? -1);
     payload.device.statusLedGreenPin = Number(elements.statusLedGreenPin?.value ?? payload.device.statusLedGreenPin ?? state.settings?.device?.statusLedGreenPin ?? -1);

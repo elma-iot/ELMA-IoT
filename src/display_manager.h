@@ -12,6 +12,9 @@
 #include "settings_schema.h"
 #include "panel_display.h"
 #include "panel_dashboard.h"
+#if APP_ROTARY_HMI
+#include "rotary_hmi.h"
+#endif
 
 class DisplayManager {
   public:
@@ -25,7 +28,11 @@ class DisplayManager {
     bool available() const;
     bool interactivePanelActive() const {
 #if APP_HAS_ONBOARD_PANEL && !APP_DISABLE_DISPLAY
+#if APP_ROTARY_HMI
+        return RoundHmi::available() && !dimmed_;
+#else
         return dashboard_ && !dimmed_;
+#endif
 #else
         return false;
 #endif

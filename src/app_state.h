@@ -48,6 +48,7 @@ struct OtaSnapshot {
 };
 
 struct DeviceSnapshot {
+    int16_t clockUtcOffsetMinutes = 0;
     String deviceName;
     String friendlyName;
 };
@@ -95,7 +96,7 @@ class AppState {
     ~AppState();
         bool begin();
 
-    void setDevice(const String& deviceName, const String& friendlyName, bool usingSaved);
+    void setDevice(const String& deviceName, const String& friendlyName, bool usingSaved, int16_t clockUtcOffsetMinutes = 0);
     void setWiFiStatus(bool connected, bool apMode, const String& ssid, const IPAddress& ip, int32_t rssi, const String& apSsid);
     void setMqttConnected(bool connected);
     void setPlayback(const String& state, const String& type, const String& title, const String& url, const String& source, uint8_t volumePercent);

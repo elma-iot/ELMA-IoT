@@ -1,3 +1,6 @@
+#if APP_ROTARY_HMI
+#include "legacy_ledc_compat.h"
+#endif
 #pragma once
 #include <Arduino.h>
 #include <ArduinoJson.h>

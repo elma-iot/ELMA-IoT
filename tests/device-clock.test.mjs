@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {formatDeviceClock as format} from '../web/modules/device-clock.js';
+const utc = text => Date.parse(text) / 1000;
+assert.deepEqual(format(utc('2026-10-10T22:30:00Z'),180), {time:'01:30:00',date:'2026-10-11',zone:'UTC+03:00'});
+assert.equal(format(utc('2026-10-10T00:00:00Z'),-720).date,'2026-10-09');
+assert.equal(format(utc('2026-12-31T23:59:59Z'),15).date,'2027-01-01');
+assert.equal(format(utc('2026-10-10T00:00:00Z'),345).time,'05:45:00');
+assert.equal(format(0),null);
+assert.equal(format(utc("2026-10-10T00:00:00Z"),NaN),null);
+assert.equal(format(utc("2026-10-10T00:00:00Z"),841),null);
+console.log('Device clock: UTC offsets, date/year rollover and unsynced handling passed');

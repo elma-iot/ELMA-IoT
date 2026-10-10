@@ -9,7 +9,8 @@ const root = fs.realpathSync(path.resolve(process.argv[2]));
 const output = path.resolve(process.argv[3]);
 const boards = ["esp32-2432s028r","esp32-2432s028c","esp32-3248s035c","esp32-cam","esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32-spk-n16r8",
   "esp32-s3-devkit-c1", "esp32-s3-cam-module", "esp32-wrover", "esp32-wroom", "esp32-mini",
-  "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6", "wemos-d1-mini-esp32", "esp32-s2-wemos-mini", "viewe-uedx24320028e-wb-a", "viewe-uedx32480035e-wb-a"];
+  "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6", "wemos-d1-mini-esp32", "esp32-s2-wemos-mini", "viewe-uedx24320028e-wb-a", "viewe-uedx32480035e-wb-a",
+  "viewe-uedx48480021-md80et", "viewe-uedx48480021-md80et-st7701s"];
 const metadata=JSON.parse(fs.readFileSync(path.join(root,"scripts/runtime-board-catalog.json"),"utf8"));
 const boardIds=JSON.parse(fs.readFileSync(path.join(root,"scripts/mainboard-svg-manifest.json"),"utf8"));
 const app = fs.readFileSync(path.join(root, "web/app.js"), "utf8");

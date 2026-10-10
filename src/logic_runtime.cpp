@@ -144,6 +144,7 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
         if(std::string(port)=="available")result.set(available);else if(available)result.set(rs["values"][index]);
     } else if(type=="hardware.modbus.received")result.set(status_["rs485"]["received"][port]);
     else if(type=="hardware.modbus.status")result.set(status_["rs485"][port]);
+    else if(type.compare(0,13,"hardware.hmi.")==0)result.set(status_["hmi"]["data"][type.substr(13)][port]);
     else if(type=="hardware.gpio")result.set(status_["gpio"][id][port]);
     else if(type=="hardware.led")result.set(status_["builtinLed"][port]);
     else if (type == "peripheral.reference") result.set(node(n));
@@ -308,6 +309,7 @@ void Runtime::execute(size_t n, const char* trigger) {
         if (type=="peripheral.volume") args["value"].set(input(n,"volume"));
         else if (linked(n,"value") || !node(n)["parameters"]["value"].isNull()) args["value"].set(input(n,"value"));
         if((type=="mainboard.plot"||type=="mainboard.save_data")&&args["value"].is<bool>())args["value"]=args["value"].as<bool>()?1:0;
+        if(type.compare(0,13,"hardware.hmi.")==0){args["action"]=type.substr(13);for(const char* key:{"itemId","parent","title","kind","submenu","minimum","maximum","step","value","unit","icon","text","navigation","configuration","childId"})args[key].set(input(n,key));}
         if(type=="hardware.gpio" || type=="hardware.led") {
             args["action"]=trigger;
             for(const char* key:{"state","duty","red","green","blue","brightness"})args[key].set(input(n,key));
@@ -397,7 +399,7 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
             uint32_t sequence=status_["rs485"]["rxSequence"]|0u;int unit=input(n,"unitFilter")|0;
             if(sequence&&sequence!=state.wakeSequence){state.wakeSequence=sequence;if(!unit||unit==(status_["rs485"]["received"]["unit"]|-1))emit(n);}
         } else if(node(n)["binding"]["kind"]=="transition") {
-            auto b=node(n)["binding"];if(changed(n,path(b["path"]|""),b["edge"]|"change",b["equals"]))emit(n);
+            auto b=node(n)["binding"];if(changed(n,path(b["path"]|""),b["edge"]|"change",b["equals"]) && (type.compare(0,13,"hardware.hmi.")!=0 || (node(n)["parameters"]["itemIdFilter"]|0)==0 || status_["hmi"]["data"][type.substr(13)]["itemId"]==node(n)["parameters"]["itemIdFilter"]))emit(n);
         } else if(type=="peripheral.rising" || type=="peripheral.falling") {
             JsonVariantConst v=status_["peripherals"][node(n)["peripheral"]["id"].as<std::string>()]["state"];
             if(changed(n,v,type=="peripheral.rising" ? "rising" : "falling"))emit(n);

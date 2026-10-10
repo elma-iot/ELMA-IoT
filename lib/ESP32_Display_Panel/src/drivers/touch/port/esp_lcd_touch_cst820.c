@@ -95,7 +95,12 @@ esp_err_t esp_lcd_touch_new_i2c_cst820(const esp_lcd_panel_io_handle_t io, const
     /* Reset controller */
     ESP_GOTO_ON_ERROR(reset(cst820), err, TAG, "Reset failed");
     /* Read product id */
+#if APP_ROTARY_HMI
+    // Manufacturer CST826 example does not require an optional startup ID read.
+    ESP_LOGI(TAG, "MD80ET: optional startup ID read skipped");
+#else
     ESP_GOTO_ON_ERROR(read_id(cst820), err, TAG, "Read version failed");
+#endif
     *tp = cst820;
 
     return ESP_OK;

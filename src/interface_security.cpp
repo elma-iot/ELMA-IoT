@@ -2,6 +2,9 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <mbedtls/sha256.h>
+#if APP_ROTARY_HMI
+#define mbedtls_sha256_ret mbedtls_sha256
+#endif
 
 namespace {
 struct Guard { SemaphoreHandle_t mutex; explicit Guard(SemaphoreHandle_t m):mutex(m){if(m)xSemaphoreTake(m,portMAX_DELAY);} ~Guard(){if(mutex)xSemaphoreGive(mutex);} };
@@ -11,12 +14,12 @@ String InterfaceSecurity::randomHex(){uint8_t bytes[16];esp_fill_random(bytes,si
 String InterfaceSecurity::digest(const String& salt,const String& pin){String input=salt+":"+pin;uint8_t hash[32];mbedtls_sha256_ret(reinterpret_cast<const uint8_t*>(input.c_str()),input.length(),hash,0);String result;for(auto byte:hash){char hex[3];snprintf(hex,sizeof(hex),"%02x",byte);result+=hex;}return result;}
 bool InterfaceSecurity::validPin(const String& pin){if(pin.length()!=4)return false;for(unsigned i=0;i<4;i++)if(pin[i]<'0'||pin[i]>'9')return false;return true;}
 bool InterfaceSecurity::equal(const String& a,const String& b){if(a.length()!=b.length())return false;uint8_t difference=0;for(unsigned i=0;i<a.length();i++)difference|=a[i]^b[i];return difference==0;}
-void InterfaceSecurity::begin(){
+void InterfaceSecurity::begin(const char* storageNamespace){
     if(mutex_)return;
     mutex_=xSemaphoreCreateMutex();
     if(!mutex_)return;
     Guard guard(mutex_);
-    if(!preferences_.begin("elma-security",false))return;
+    if(!preferences_.begin(storageNamespace,false))return;
     const String stored=preferences_.getString("state","");
     if(stored.length()){
         JsonDocument record;if(deserializeJson(record,stored))return;

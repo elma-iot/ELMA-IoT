@@ -32,7 +32,16 @@
       "+<drivers/touch/esp_panel_touch_factory.cpp>",
       "+<drivers/touch/esp_panel_touch_chsc6540.cpp>",
       "+<drivers/touch/port/esp_lcd_touch.c>",
-      "+<drivers/touch/port/esp_lcd_touch_chsc6540.c>"
+      "+<drivers/touch/port/esp_lcd_touch_chsc6540.c>",
+      "+<drivers/bus/esp_panel_bus_rgb.cpp>",
+      "+<drivers/lcd/esp_panel_lcd_gc9503.cpp>",
+      "+<drivers/lcd/port/esp_lcd_gc9503.c>",
+      "+<drivers/lcd/esp_panel_lcd_st7701.cpp>",
+      "+<drivers/lcd/port/esp_lcd_st7701.c>",
+      "+<drivers/lcd/port/esp_lcd_st7701_rgb.c>",
+      "+<drivers/touch/esp_panel_touch_cst820.cpp>",
+      "+<drivers/touch/port/esp_lcd_touch_cst820.c>",
+      "+<drivers/bus/port/esp_lcd_panel_io_3wire_spi.c>"
     ]
   }
 }

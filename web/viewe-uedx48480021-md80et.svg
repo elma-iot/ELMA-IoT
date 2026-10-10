@@ -1,0 +1,270 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" width="1100" height="1350" viewBox="0 0 1100 1350" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <ns0:title>USB-TEST-MD50-V3.3 with 2.1 inch round display — editable vector illustration</ns0:title>
+  <ns0:desc>All vector artwork; visual reconstruction only. Pin positions are not mechanically verified.</ns0:desc>
+  <ns0:defs>
+    <ns0:linearGradient id="rim" x1="0%" y1="0%" x2="100%" y2="15%">
+      <ns0:stop offset="0" stop-color="#666875"/>
+      <ns0:stop offset=".2" stop-color="#e7e8ef"/>
+      <ns0:stop offset=".48" stop-color="#8c8e9c"/>
+      <ns0:stop offset=".72" stop-color="#d8d9e3"/>
+      <ns0:stop offset="1" stop-color="#53535d"/>
+    </ns0:linearGradient>
+    <ns0:linearGradient id="side" x1="0%" y1="0%" x2="100%" y2="15%">
+      <ns0:stop offset="0" stop-color="#343642"/>
+      <ns0:stop offset=".45" stop-color="#8f909e"/>
+      <ns0:stop offset="1" stop-color="#4d4f59"/>
+    </ns0:linearGradient>
+    <ns0:linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="15%">
+      <ns0:stop offset="0" stop-color="#10161c"/>
+      <ns0:stop offset=".65" stop-color="#010408"/>
+      <ns0:stop offset="1" stop-color="#000000"/>
+    </ns0:linearGradient>
+    <ns0:linearGradient id="ribbon" x1="0%" y1="0%" x2="100%" y2="15%">
+      <ns0:stop offset="0" stop-color="#9c520e"/>
+      <ns0:stop offset=".25" stop-color="#f8bd49"/>
+      <ns0:stop offset=".6" stop-color="#b86b12"/>
+      <ns0:stop offset="1" stop-color="#f7c04c"/>
+    </ns0:linearGradient>
+  </ns0:defs>
+  <ns0:g id="pcb-assembly" transform="translate(250 715) scale(0.58)"><ns0:defs><ns0:linearGradient id="pcb" x2="1" y2="1"><ns0:stop stop-color="#126c47"/><ns0:stop offset=".5" stop-color="#08703c"/><ns0:stop offset="1" stop-color="#07512f"/></ns0:linearGradient><ns0:linearGradient id="metal" x2=".1" y2="0" x1=".9" y1="1"><ns0:stop stop-color="#a7a8a6"/><ns0:stop offset=".45" stop-color="#f2f0e8"/><ns0:stop offset="1" stop-color="#7b807e"/></ns0:linearGradient></ns0:defs>
+<ns0:g id="board"><ns0:rect x="9" y="9" width="1022" height="932" rx="16" fill="url(#pcb)" stroke="#06452c" stroke-width="5"/><ns0:rect x="19" y="19" width="1002" height="912" rx="10" fill="none" stroke="#2f9c6c" stroke-width="2"/></ns0:g>
+<ns0:path id="" d="M 620 155 L 920 155 L 965 230 L 965 415" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 629 155 L 913 155 L 959 245 L 959 431" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 638 155 L 906 155 L 953 260 L 953 447" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 647 155 L 899 155 L 947 275 L 947 463" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 656 155 L 892 155 L 941 290 L 941 479" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 665 155 L 885 155 L 935 305 L 935 495" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 674 155 L 878 155 L 929 320 L 929 511" fill="none" stroke="#094a30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 210 850 L 210 655 L 365 560 L 760 560 L 910 490" fill="none" stroke="#094b30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 224 850 L 224 666 L 379 571 L 765 571 L 915 501" fill="none" stroke="#094b30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 238 850 L 238 677 L 393 582 L 770 582 L 920 512" fill="none" stroke="#094b30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 252 850 L 252 688 L 407 593 L 775 593 L 925 523" fill="none" stroke="#094b30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 266 850 L 266 699 L 421 604 L 780 604 L 930 534" fill="none" stroke="#094b30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 40 815 L 40 620 L 175 515 L 330 515" fill="none" stroke="#0b4c30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 50 815 L 50 620 L 186 515 L 340 515" fill="none" stroke="#0b4c30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 60 815 L 60 620 L 197 515 L 350 515" fill="none" stroke="#0b4c30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 70 815 L 70 620 L 208 515 L 360 515" fill="none" stroke="#0b4c30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 80 815 L 80 620 L 219 515 L 370 515" fill="none" stroke="#0b4c30" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:circle id="mount_1_rim" cx="63" cy="66" r="28" fill="#a4aba5" stroke="#2b332f" stroke-width="3"/>
+<ns0:circle id="mount_1" cx="63" cy="66" r="19" fill="#121c1c" stroke="#d2d7c9" stroke-width="4"/>
+<ns0:circle id="mount_2_rim" cx="977" cy="66" r="28" fill="#a4aba5" stroke="#2b332f" stroke-width="3"/>
+<ns0:circle id="mount_2" cx="977" cy="66" r="19" fill="#121c1c" stroke="#d2d7c9" stroke-width="4"/>
+<ns0:circle id="mount_3_rim" cx="63" cy="875" r="28" fill="#a4aba5" stroke="#2b332f" stroke-width="3"/>
+<ns0:circle id="mount_3" cx="63" cy="875" r="19" fill="#121c1c" stroke="#d2d7c9" stroke-width="4"/>
+<ns0:circle id="mount_4_rim" cx="977" cy="875" r="28" fill="#a4aba5" stroke="#2b332f" stroke-width="3"/>
+<ns0:circle id="mount_4" cx="977" cy="875" r="19" fill="#121c1c" stroke="#d2d7c9" stroke-width="4"/>
+<ns0:rect id="uart_header_outline" x="36" y="40" width="460" height="70" rx="5" fill="none" stroke="#b8d8bc" stroke-width="3"/>
+<ns0:circle id="uart_5V_pad" cx="67" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_5V_hole" cx="67" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_5V_label" x="52" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 52 140)">5V</ns0:text>
+<ns0:circle id="uart_RX2_pad" cx="132" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_RX2_hole" cx="132" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_RX2_label" x="117" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 117 140)">RX2</ns0:text>
+<ns0:circle id="uart_TX2_pad" cx="197" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_TX2_hole" cx="197" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_TX2_label" x="182" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 182 140)">TX2</ns0:text>
+<ns0:circle id="uart_RX1_pad" cx="262" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_RX1_hole" cx="262" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_RX1_label" x="247" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 247 140)">RX1</ns0:text>
+<ns0:circle id="uart_TX1_pad" cx="327" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_TX1_hole" cx="327" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_TX1_label" x="312" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 312 140)">TX1</ns0:text>
+<ns0:circle id="uart_DTR_pad" cx="392" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_DTR_hole" cx="392" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_DTR_label" x="377" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 377 140)">DTR</ns0:text>
+<ns0:circle id="uart_GND_pad" cx="457" cy="75" r="22" fill="#c2c9c4" stroke="#3a4b40" stroke-width="3"/>
+<ns0:circle id="uart_GND_hole" cx="457" cy="75" r="12" fill="#192322" stroke="#eeeeea" stroke-width="3"/>
+<ns0:text id="uart_GND_label" x="442" y="140" fill="#e2f1df" font-family="Arial,sans-serif" font-size="20" transform="rotate(0 442 140)">GND</ns0:text>
+<ns0:circle id="pin_IO1_pad" cx="982" cy="175" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO1_hole" cx="982" cy="175" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO1_label" x="887" y="183" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 183)">IO1</ns0:text>
+<ns0:circle id="pin_IO2_pad" cx="982" cy="234" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO2_hole" cx="982" cy="234" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO2_label" x="887" y="242" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 242)">IO2</ns0:text>
+<ns0:circle id="pin_IO3_pad" cx="982" cy="293" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO3_hole" cx="982" cy="293" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO3_label" x="887" y="301" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 301)">IO3</ns0:text>
+<ns0:circle id="pin_IO4_pad" cx="982" cy="352" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO4_hole" cx="982" cy="352" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO4_label" x="887" y="360" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 360)">IO4</ns0:text>
+<ns0:circle id="pin_IO5_pad" cx="982" cy="411" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO5_hole" cx="982" cy="411" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO5_label" x="887" y="419" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 419)">IO5</ns0:text>
+<ns0:circle id="pin_IO6_pad" cx="982" cy="470" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO6_hole" cx="982" cy="470" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO6_label" x="887" y="478" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 478)">IO6</ns0:text>
+<ns0:circle id="pin_IO7_pad" cx="982" cy="529" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO7_hole" cx="982" cy="529" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO7_label" x="887" y="537" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 537)">IO7</ns0:text>
+<ns0:circle id="pin_IO8_pad" cx="982" cy="588" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO8_hole" cx="982" cy="588" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO8_label" x="887" y="596" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 596)">IO8</ns0:text>
+<ns0:circle id="pin_IO9_pad" cx="982" cy="647" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_IO9_hole" cx="982" cy="647" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_IO9_label" x="887" y="655" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 655)">IO9</ns0:text>
+<ns0:circle id="pin_3V3_pad" cx="982" cy="706" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_3V3_hole" cx="982" cy="706" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_3V3_label" x="887" y="714" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 714)">3V3</ns0:text>
+<ns0:circle id="pin_GND_pad" cx="982" cy="765" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_GND_hole" cx="982" cy="765" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_GND_label" x="887" y="773" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 773)">GND</ns0:text>
+<ns0:circle id="pin_5V_pad" cx="982" cy="824" r="22" fill="#bfc5bc" stroke="#243a31" stroke-width="3"/>
+<ns0:circle id="pin_5V_hole" cx="982" cy="824" r="11" fill="#172120" stroke="#dce2da" stroke-width="3"/>
+<ns0:text id="pin_5V_label" x="887" y="832" fill="#e2f1df" font-family="Arial,sans-serif" font-size="24" transform="rotate(0 887 832)">5V</ns0:text>
+<ns0:rect id="top_fpc_flex" x="598" y="-5" width="150" height="85" rx="3" fill="#d99b10" stroke="none" stroke-width="1"/>
+<ns0:path id="" d="M 606 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 613 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 620 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 627 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 634 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 641 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 648 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 655 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 662 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 669 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 676 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 683 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 690 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 697 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 704 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 711 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 718 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 725 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 732 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:path id="" d="M 739 0 V 76" fill="none" stroke="#f6c849" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ns0:rect id="top_fpc_connector" x="575" y="70" width="208" height="50" rx="6" fill="#303134" stroke="#111a1b" stroke-width="3"/>
+<ns0:rect id="" x="589" y="106" width="180" height="34" rx="3" fill="url(#metal)" stroke="#353737" stroke-width="2"/>
+<ns0:rect id="top_fpc_contact_1" x="600" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_2" x="608" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_3" x="616" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_4" x="624" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_5" x="632" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_6" x="640" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_7" x="648" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_8" x="656" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_9" x="664" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_10" x="672" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_11" x="680" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_12" x="688" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_13" x="696" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_14" x="704" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_15" x="712" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_16" x="720" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_17" x="728" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_18" x="736" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_19" x="744" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="top_fpc_contact_20" x="752" y="132" width="4" height="21" rx="1" fill="#9baca6" stroke="none" stroke-width="1"/>
+<ns0:rect id="micro_usb_port" x="10" y="205" width="142" height="163" rx="8" fill="url(#metal)" stroke="#52585a" stroke-width="4"/>
+<ns0:rect id="" x="13" y="238" width="48" height="96" rx="7" fill="#7b8280" stroke="#303739" stroke-width="2"/>
+<ns0:rect id="usb_solder_1" x="149" y="252" width="20" height="6" rx="1" fill="#c3c5b9" stroke="none" stroke-width="1"/>
+<ns0:rect id="usb_solder_2" x="149" y="265" width="20" height="6" rx="1" fill="#c3c5b9" stroke="none" stroke-width="1"/>
+<ns0:rect id="usb_solder_3" x="149" y="278" width="20" height="6" rx="1" fill="#c3c5b9" stroke="none" stroke-width="1"/>
+<ns0:rect id="usb_solder_4" x="149" y="291" width="20" height="6" rx="1" fill="#c3c5b9" stroke="none" stroke-width="1"/>
+<ns0:rect id="usb_solder_5" x="149" y="304" width="20" height="6" rx="1" fill="#c3c5b9" stroke="none" stroke-width="1"/>
+<ns0:text id="" x="180" y="285" fill="#e2f1df" font-family="Arial,sans-serif" font-size="25" transform="rotate(90 180 285)">USB1</ns0:text>
+<ns0:circle id="pcb_hole_1" cx="526" cy="390" r="43" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_2" cx="650" cy="275" r="21" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_3" cx="779" cy="356" r="42" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_4" cx="669" cy="420" r="22" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_5" cx="450" cy="610" r="48" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_6" cx="462" cy="740" r="39" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_7" cx="736" cy="755" r="44" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_8" cx="737" cy="580" r="23" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_9" cx="599" cy="400" r="18" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="pcb_hole_10" cx="695" cy="316" r="23" fill="#10251d" stroke="#64aa80" stroke-width="3"/>
+<ns0:circle id="via_1" cx="300" cy="320" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_2" cx="380" cy="305" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_3" cx="470" cy="265" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_4" cx="810" cy="245" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_5" cx="824" cy="690" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_6" cx="602" cy="665" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_7" cx="354" cy="430" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="via_8" cx="800" cy="520" r="4" fill="#123b2b" stroke="#2e9a60" stroke-width="1"/>
+<ns0:circle id="left_mount_pad_1" cx="82" cy="610" r="25" fill="url(#metal)" stroke="#52675d" stroke-width="3"/>
+<ns0:circle id="" cx="82" cy="610" r="9" fill="#92988f" stroke="#d3d6cd" stroke-width="2"/>
+<ns0:circle id="left_mount_pad_2" cx="184" cy="610" r="25" fill="url(#metal)" stroke="#52675d" stroke-width="3"/>
+<ns0:circle id="" cx="184" cy="610" r="9" fill="#92988f" stroke="#d3d6cd" stroke-width="2"/>
+<ns0:circle id="left_mount_pad_3" cx="82" cy="810" r="25" fill="url(#metal)" stroke="#52675d" stroke-width="3"/>
+<ns0:circle id="" cx="82" cy="810" r="9" fill="#92988f" stroke="#d3d6cd" stroke-width="2"/>
+<ns0:circle id="left_mount_pad_4" cx="184" cy="810" r="25" fill="url(#metal)" stroke="#52675d" stroke-width="3"/>
+<ns0:circle id="" cx="184" cy="810" r="9" fill="#92988f" stroke="#d3d6cd" stroke-width="2"/>
+<ns0:rect id="ic_pad_1" x="185" y="640" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_2" x="185" y="650" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_3" x="185" y="660" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_4" x="185" y="670" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_5" x="185" y="680" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_6" x="185" y="690" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_7" x="185" y="700" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_8" x="185" y="710" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_9" x="185" y="720" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_10" x="185" y="730" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_11" x="185" y="740" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="ic_pad_12" x="185" y="750" width="29" height="5" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="" x="192" y="643" width="18" height="111" rx="2" fill="#333b37" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_connector" x="256" y="846" width="244" height="81" rx="8" fill="#252b2a" stroke="#111a1b" stroke-width="3"/>
+<ns0:rect id="" x="275" y="851" width="206" height="52" rx="6" fill="url(#metal)" stroke="#6d706b" stroke-width="2"/>
+<ns0:rect id="bottom_fpc_pin_1" x="293" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_2" x="304" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_3" x="315" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_4" x="326" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_5" x="337" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_6" x="348" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_7" x="359" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_8" x="370" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_9" x="381" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_10" x="392" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_11" x="403" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_12" x="414" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_13" x="425" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_14" x="436" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_15" x="447" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="bottom_fpc_pin_16" x="458" y="821" width="6" height="29" rx="1" fill="#c8c8c0" stroke="none" stroke-width="1"/>
+<ns0:rect id="right_footprint_1" x="719" y="806" width="9" height="37" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="right_footprint_2" x="734" y="806" width="9" height="37" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="right_footprint_3" x="749" y="806" width="9" height="37" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="right_footprint_4" x="764" y="806" width="9" height="37" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="right_footprint_5" x="779" y="806" width="9" height="37" rx="1" fill="url(#metal)" stroke="none" stroke-width="1"/>
+<ns0:rect id="led_1" x="641" y="863" width="48" height="51" rx="4" fill="#bcb9aa" stroke="#565b52" stroke-width="3"/>
+<ns0:rect id="" x="652" y="874" width="26" height="26" rx="3" fill="#f1f0e5" stroke="#d4ba8d" stroke-width="2"/>
+<ns0:rect id="led_2" x="853" y="863" width="48" height="51" rx="4" fill="#bcb9aa" stroke="#565b52" stroke-width="3"/>
+<ns0:rect id="" x="864" y="874" width="26" height="26" rx="3" fill="#f1f0e5" stroke="#d4ba8d" stroke-width="2"/>
+<ns0:text id="board_revision" x="285" y="295" fill="#e2f1df" font-family="Arial,sans-serif" font-size="26" transform="rotate(90 285 295)">USB-TEST-MD50-V3.3</ns0:text>
+<ns0:text id="board_date" x="251" y="405" fill="#e2f1df" font-family="Arial,sans-serif" font-size="25" transform="rotate(90 251 405)">202405</ns0:text>
+<ns0:text id="board_secondary_marking" x="565" y="540" fill="#e2f1df" font-family="Arial,sans-serif" font-size="22" transform="rotate(90 565 540)">U12737A_Y14_250312</ns0:text>
+<ns0:text id="orientation" x="328" y="820" fill="#e2f1df" font-family="Arial,sans-serif" font-size="26" transform="rotate(0 328 820)">MO-UP</ns0:text>
+<ns0:text id="top_3v3" x="515" y="159" fill="#e2f1df" font-family="Arial,sans-serif" font-size="23" transform="rotate(0 515 159)">3V3</ns0:text>
+<ns0:text id="" x="182" y="530" fill="#e2f1df" font-family="Arial,sans-serif" font-size="23" transform="rotate(90 182 530)">LG2</ns0:text>
+</ns0:g>
+  <ns0:g id="display-fpc-ribbon">
+    <ns0:path d="M 548 492 C 549 585 620 601 620 715 L 689 715 C 689 600 619 576 619 492 Z" fill="url(#ribbon)" stroke="#8e4b09" stroke-width="2"/>
+    <ns0:path d="M 553.0 502 C 553.0 587 620.0 606 620.0 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 556.8 502 C 556.8 587 623.7 606 623.7 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 560.6 502 C 560.6 587 627.4 606 627.4 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 564.4 502 C 564.4 587 631.2 606 631.2 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 568.2 502 C 568.2 587 634.9 606 634.9 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 572.0 502 C 572.0 587 638.6 606 638.6 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 575.8 502 C 575.8 587 642.3 606 642.3 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 579.6 502 C 579.6 587 646.1 606 646.1 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 583.4 502 C 583.4 587 649.8 606 649.8 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 587.2 502 C 587.2 587 653.5 606 653.5 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 591.0 502 C 591.0 587 657.2 606 657.2 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 594.8 502 C 594.8 587 661.0 606 661.0 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 598.6 502 C 598.6 587 664.7 606 664.7 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 602.4 502 C 602.4 587 668.4 606 668.4 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 606.2 502 C 606.2 587 672.1 606 672.1 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 610.0 502 C 610.0 587 675.9 606 675.9 715" fill="none" stroke="#ffe08c" stroke-width="1.3" opacity=".9"/>
+    <ns0:path d="M 613.8 502 C 613.8 587 679.6 606 679.6 715" fill="none" stroke="#925016" stroke-width="1.3" opacity=".9"/>
+  </ns0:g>
+  <ns0:g id="round-2_1-inch-display">
+    <ns0:ellipse cx="562" cy="338" rx="276" ry="282" fill="url(#side)" stroke="#555864" stroke-width="3"/>
+    <ns0:circle cx="550" cy="289" r="267" fill="url(#rim)" stroke="#4e505c" stroke-width="3"/>
+    <ns0:circle cx="550" cy="289" r="230" fill="#161b21" stroke="#9c9eab" stroke-width="3"/>
+    <ns0:circle cx="550" cy="289" r="220" fill="url(#glass)" stroke="#40f2e9" stroke-width="5"/>
+    <ns0:circle cx="550" cy="289" r="210" fill="none" stroke="#132b30" stroke-width="2"/>
+    <ns0:text x="550" y="235" text_anchor="middle" fill="#54fff4" font_family="Arial, sans-serif" font_size="76" font_weight="bold" font_style="italic">0:58</ns0:text>
+    <ns0:text x="550" y="316" text_anchor="middle" fill="#4df9ef" font_family="Arial, sans-serif" font_size="27" font_style="italic">long press to end</ns0:text>
+    <ns0:path d="M 367 394 C 419 342 458 374 483 395 C 511 422 546 414 585 397 C 623 378 663 380 733 414 L 733 442 C 660 463 606 452 563 469 C 490 493 424 465 367 432 Z" fill="#39f4e9"/>
+    <ns0:path d="M 378 413 C 422 368 458 388 482 411 C 516 444 545 435 590 417 C 628 399 663 404 720 433 C 650 452 600 444 554 459 C 492 477 426 453 378 413 Z" fill="#ffffff"/>
+  </ns0:g>
+</ns0:svg>

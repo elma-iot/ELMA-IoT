@@ -1,3 +1,4 @@
+#include "rotary_hmi.h"
 #include <driver/gpio.h>
 #include <WiFi.h>
 #include "logic_device.h"
@@ -202,6 +203,16 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
         return false;
     }
     devices_.set(compiled["devices"]);
+#if APP_ROTARY_HMI
+    {
+        if(devices_.isNull())devices_.to<JsonArray>();JsonDocument filter,catalog;
+        for(const char* key:{"rotated","clockwise","counterclockwise","pressed","longPressed","doublePressed","touchPressed","touchReleased","touchLong","swipe","selected","valueChanged","create","add","submenu","navigate","select","text","icon","gauge","progress","value","brightness","confirm"})filter[String("hardware.hmi.")+key]=true;
+        if(!deserializeJson(catalog,ELMA_LOGIC_CATALOG,DeserializationOption::Filter(filter)))for(JsonPairConst entry:catalog.as<JsonObjectConst>()){
+            bool exists=false;for(JsonObjectConst old:devices_.as<JsonArrayConst>())if(old["type"]==entry.key().c_str())exists=true;
+            if(!exists){auto item=devices_.as<JsonArray>().add<JsonObject>();item.set(entry.value());item["type"]=entry.key().c_str();item["title"]=String("Circular Menu ")+String(entry.key().c_str()).substring(13);item["category"]="Circular Menu";}
+        }
+    }
+#endif
     if(Rs485::available()){
         if(devices_.isNull())devices_.to<JsonArray>();
         JsonDocument filter,catalog;for(const char* key:{"read","received","value","status"})filter[String("hardware.modbus.")+key]=true;
@@ -272,6 +283,7 @@ bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::strin
     activityStableAt_=millis()+kLogicActionStableMs;
     if(String(node["type"]|"").startsWith("hardware.can.")){String problem;bool ok=CanBus::command(args,problem);error=problem.c_str();return ok;}
     if(String(node["type"]|"")=="hardware.modbus.read"){String problem;bool ok=Rs485::command(args,problem);error=problem.c_str();return ok;}
+    if(String(node["type"]|"").startsWith("hardware.hmi.")){String problem;bool ok=RoundHmi::command(args,problem);error=problem.c_str();return ok;}
     if(LedArrays::matches(node))return LedArrays::action(node,args,error);
  if(PortablePeripherals::output(node))return PortablePeripherals::action(node,args,error);
     if (node["binding"]["group"]=="control" && std::string(node["peripheral"]["profile"]|"").find("relay")!=std::string::npos) {
@@ -303,6 +315,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     JsonDocument snapshot;JsonObject root=snapshot.to<JsonObject>();state_->toJson(root);appendSystemMetricsJson(root);
     root["system"]["lastError"]=state_->snapshot().system.lastError;
     if(status_)status_(root);
+    RoundHmi::snapshot(root["hmi"].to<JsonObject>());
     for(JsonObjectConst n:runtime_.nodes())if(String(n["type"]|"").startsWith("hardware.can.")){CanBus::snapshot(root["can"].to<JsonObject>());break;}
     for(JsonObjectConst n:runtime_.nodes())if(String(n["type"]|"").startsWith("hardware.modbus.")){Rs485::snapshot(root["rs485"].to<JsonObject>(),false);break;}
     for(JsonObjectConst n:runtime_.nodes()) {

@@ -1,3 +1,4 @@
+import { ONBOARD_BOARDS } from "./onboard-boards.js";
 export function createHardwareTab({
   state,
   elements,
@@ -32,7 +33,10 @@ export function createHardwareTab({
       hardware.sketchSizeBytes ? `fw ${formatBytes(hardware.sketchSizeBytes)}` : "",
     ].filter(Boolean).join(" • ") : "Waiting for live status";
     const displayType = String(oled.displayType || "oled").toLowerCase();
-    const displayLabel = displayType === "wape"
+    const board = ONBOARD_BOARDS[settings.ui?.gpioBoardSelection];
+    const displayLabel = displayType === "panel"
+      ? board?.roundHmi ? "480 x 480 round LCD / rotary encoder" : "Onboard LCD"
+      : displayType === "wape"
       ? `Wape • trigger ${pinSummary(oled.wapeTriggerPin || 0)}`
       : `${oled.enabled ? "OLED" : "OLED off"} • SDA ${pinSummary(oled.sdaPin)} • SCL ${pinSummary(oled.sclPin)}`;
     const audioLabel = audio.enabled === false

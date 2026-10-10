@@ -1,0 +1,14 @@
+{
+  "version": "0.1.59-test.5",
+  "profile": "viewe_rotary_gc9503",
+  "appBytes": 2818464,
+  "sha256": "135928a6969bd694190054e37ef1e232d647d70df422041b6f2e6b607ee77d5b",
+  "build": "passed",
+  "ota": "passed",
+  "webClock": "passed",
+  "offsetPersistence": "passed",
+  "invalidOffsetRejection": "passed",
+  "diagnosticSmokeBranchSyntax": "passed",
+  "physicalST7701S": "unverified",
+  "physicalTouch": "not present on tested MD80E"
+}

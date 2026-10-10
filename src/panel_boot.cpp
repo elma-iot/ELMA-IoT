@@ -17,7 +17,11 @@ void drawPanelBootLogo(PanelDisplay& panel) {
             }
             const auto* color=elmaBootPixels+index*4;
             uint16_t rgb=((color[2]&248)<<8)|((color[1]&252)<<3)|(color[0]>>3);
+#if APP_ROTARY_HMI
+            row[x*2]=rgb&255;row[x*2+1]=rgb>>8;
+#else
             row[x*2]=rgb>>8;row[x*2+1]=rgb&255;
+#endif
         }
         if(!panel.drawColor(0,y,kPanelWidth,1,row))break;
     }

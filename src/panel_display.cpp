@@ -2,6 +2,9 @@
 #if APP_HAS_ONBOARD_PANEL
 #include "device_log.h"
 #include "panel_boot.h"
+#if APP_ROTARY_HMI
+#include <Wire.h>
+#endif
 
 bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
     if (!getBuffer()) return false;
@@ -11,11 +14,56 @@ bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
 #else
     esp_panel::board::Board defaults;
     auto config = defaults.getConfig();
+#if APP_ROTARY_HMI
+    if (config.touch) {
+        auto* bus = std::get_if<esp_panel::drivers::BusI2C::Config>(&config.touch->bus_config);
+        if (bus && bus->host) {
+            if (auto* host=std::get_if<esp_panel::drivers::BusI2C::HostPartialConfig>(&bus->host.value())) host->clk_speed=100000;
+            else if (auto* host=std::get_if<esp_panel::drivers::BusI2C::HostFullConfig>(&bus->host.value())) host->master.clk_speed=100000;
+        }
+    }
+#endif
     if (!touchEnabled) config.touch.reset();
     board_.reset(new esp_panel::board::Board(config));
-    if (!board_->init() || !board_->begin()) { board_.reset(); return false; }
+    if (!board_->init() || !board_->begin()) {
+        board_.reset();
+#if APP_ROTARY_HMI
+        if (!touchEnabled) return false;
+        // Touch is optional: a missing/sleeping controller must not prevent
+        // the LCD and backlight from starting on the rotary board.
+        DebugLog.println("[display] Touch-enabled startup failed; checking documented I2C pins SDA=16 SCL=15");
+        if (Wire.begin(16, 15, 100000)) {
+            for (uint8_t address=1; address<127; ++address) {
+                Wire.beginTransmission(address);
+                if (Wire.endTransmission()==0) {
+                    DebugLog.printf("[display] I2C device address=0x%02x\n", address);
+                    for (uint8_t reg : {uint8_t(0xa7), uint8_t(0xa8), uint8_t(0xa9)}) {
+                        Wire.beginTransmission(address); Wire.write(reg);
+                        if (Wire.endTransmission(false)==0 && Wire.requestFrom(address, uint8_t(1))==1)
+                            DebugLog.printf("[display] I2C 0x%02x register 0x%02x=0x%02x\n", address, reg, Wire.read());
+                    }
+                }
+            }
+            Wire.end();
+        }
+        config.touch.reset();
+        board_.reset(new esp_panel::board::Board(config));
+        if (!board_->init() || !board_->begin()) { board_.reset(); return false; }
+        touchEnabled=false;
+        DebugLog.println("[display] LCD running without touch; encoder navigation remains available");
+#else
+        return false;
+#endif
+    }
 #endif
     setRotation(rotation);
+#if APP_ROTARY_HMI
+    if (board_->getTouch()) {
+        auto* bus=static_cast<esp_panel::drivers::BusI2C*>(board_->getTouch()->getBus());
+        bus->getConfig().printHostConfig();
+        bus->getConfig().printControlPanelConfig();
+    }
+#endif
     brightness(percent);
     drawPanelBootLogo(*this);
     DebugLog.printf("[display] Panel %dx%d ready; PSRAM=%u; touch=%s\n",

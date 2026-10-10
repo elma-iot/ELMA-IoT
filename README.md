@@ -1,6 +1,6 @@
 # ELMA IoT
 
-Current testing source adds the VIEWE LCD settings-stack repair, readable SD confirmation, built-in MS1285 Modbus monitor/Logics, correct no-DAC VIEWE defaults, and MCP2551 classic CAN Logics with the supplied module artwork. The Windows testing bundle is 0.1.84. Bus hardware still requires physical verification. The public assembled-firmware repository is https://github.com/elma-iot/ELMA-IoT-Firmware; only individually tested board images are published there.
+Current testing source adds the VIEWE LCD settings-stack repair, readable SD confirmation, built-in MS1285 Modbus monitor/Logics, correct no-DAC VIEWE defaults, and MCP2551 classic CAN Logics with the supplied module artwork. The Windows testing bundle is 0.1.87, bundling firmware source 0.1.59-test.5. The MD80E round dashboard uses twelve Web icons on one ring, a saved clock UTC offset, and a continuous 15-second push reboot. Bus hardware still requires physical verification. The public assembled-firmware repository is https://github.com/elma-iot/ELMA-IoT-Firmware; only individually tested board images are published there.
 
 
 ## Sleep / Wake GPIO / On Wake — 2026-10-03
@@ -68,12 +68,12 @@ Project story and current device write-up:
 
 ## Current Release
 
-- Firmware version: `v0.1.59-test.2`
+- Firmware version: `v0.1.59-test.4`
 - Primary release repository: `elma-iot/ELMA-IoT`
 - GitHub Releases feed: `https://api.github.com/repos/elma-iot/ELMA-IoT/releases`
-- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.59-test.2.bin`
+- Default ESP32-S3 HACS asset: `esp32s3-notifier-hacs-v0.1.59-test.4.bin`
 
-v0.1.59-test.2 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
+v0.1.59-test.4 is the current firmware source version. Compile configured images using the Windows or Android application. No generic firmware binary release is published for this source version. Windows application bundles are available only in the private ELMA-IoT-Windows repository.
 
 ### VIEWE updates — 2026-10-05
 
@@ -84,24 +84,24 @@ in-progress edits. The 3.5-inch panel selection resolved the reported black
 picture. See [VIEWE validation](Docs/VIEWE-LCD-BRINGUP.md) and the
 [online touchscreen guide](https://elma-iot.github.io/elma-iot-docs/en/guides/viewe-touchscreen/).
 
-Release asset names for `v0.1.59-test.2`:
+Release asset names for `v0.1.59-test.4`:
 
 These are expected naming conventions when building a generic release, not a
 claim that all binaries are published. Configured images remain target-specific.
 
-- `esp32-notifier-v0.1.59-test.2.bin`
-- `esp32-notifier-hacs-v0.1.59-test.2.bin`
-- `esp32-notifier-hacs-slim-v0.1.59-test.2.bin`
-- `esp32-notifier-hacs-legacy-ota-v0.1.59-test.2.bin`
-- `esp32s3-notifier-v0.1.59-test.2.bin`
-- `esp32s3-notifier-hacs-v0.1.59-test.2.bin`
-- `esp32s3-notifier-hacs-slim-v0.1.59-test.2.bin`
-- `esp32c3-notifier-hacs-v0.1.59-test.2.bin`
-- `esp32-ota-bridge-v0.1.59-test.2.bin`
-- `esp32s3-ota-bridge-v0.1.59-test.2.bin`
-- `esp32c3-ota-bridge-v0.1.59-test.2.bin`
+- `esp32-notifier-v0.1.59-test.4.bin`
+- `esp32-notifier-hacs-v0.1.59-test.4.bin`
+- `esp32-notifier-hacs-slim-v0.1.59-test.4.bin`
+- `esp32-notifier-hacs-legacy-ota-v0.1.59-test.4.bin`
+- `esp32s3-notifier-v0.1.59-test.4.bin`
+- `esp32s3-notifier-hacs-v0.1.59-test.4.bin`
+- `esp32s3-notifier-hacs-slim-v0.1.59-test.4.bin`
+- `esp32c3-notifier-hacs-v0.1.59-test.4.bin`
+- `esp32-ota-bridge-v0.1.59-test.4.bin`
+- `esp32s3-ota-bridge-v0.1.59-test.4.bin`
+- `esp32c3-ota-bridge-v0.1.59-test.4.bin`
 
-- [release-assets/v0.1.59-test.2/release-notes.md](release-assets/v0.1.59-test.2/release-notes.md)
+- [release-assets/v0.1.59-test.4/release-notes.md](release-assets/v0.1.59-test.4/release-notes.md)
 
 ### Device source changes after v0.1.56
 

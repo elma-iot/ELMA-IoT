@@ -4,7 +4,7 @@ export function boardChipFamily(board = "") {
     try { return JSON.parse(localStorage.getItem("elma.custom.board") || "{}").chipFamily || "esp32"; }
     catch { return "esp32"; }
   }
-  if (board === "viewe-uedx24320028e-wb-a" || board === "viewe-uedx32480035e-wb-a" || board === "esp32-spk-n16r8" || board.startsWith("esp32-s3")) return "esp32s3";
+  if (board.startsWith("viewe-uedx48480021-md80et") || board === "viewe-uedx24320028e-wb-a" || board === "viewe-uedx32480035e-wb-a" || board === "esp32-spk-n16r8" || board.startsWith("esp32-s3")) return "esp32s3";
   if (board.startsWith("esp32-s2")) return "esp32s2";
   if (board.startsWith("esp32-c2")) return "esp32c2";
   if (board === "esp32-c3") return "esp32c3";
@@ -17,6 +17,7 @@ export function supportedBoard(board) {
   return ["esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c6", "esp32c2", "esp8266", "esp8285"].includes(boardChipFamily(board));
 }
 export function chipPins(chip, output = false, board = "") {
+  if (board.startsWith("viewe-uedx48480021-md80et")) return []; // Adapter GPIO mapping is unverified.
   let pins = [];
   if (chip === "esp32") pins = [0,1,2,3,4,5,12,13,14,15,16,17,18,19,21,22,23,25,26,27,32,33,34,35,36,39];
   if (chip === "esp32s3") pins = [...Array.from({length:22}, (_,i)=>i), ...Array.from({length:16}, (_,i)=>i+33)];

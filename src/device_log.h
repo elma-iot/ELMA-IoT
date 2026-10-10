@@ -16,6 +16,8 @@ public:
     size_t write(const uint8_t* data, size_t size) override;
     using Print::write;
     void capture(const char* data, size_t size);
+    // Read the existing bounded RAM ring without filesystem access or allocation.
+    size_t readTail(char* destination, size_t capacity, uint64_t& sequence);
 private:
     static constexpr size_t RingBytes = 4096;
     char ring_[RingBytes] = {};

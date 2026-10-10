@@ -4,6 +4,9 @@
 #include <Wire.h>
 #include "shared_i2c.h"
 #include "device_log.h"
+#if APP_HAS_ONBOARD_PANEL
+#include "rotary_hmi.h"
+#endif
 
 namespace {
 uint8_t charsForWidth(int16_t width, uint8_t textSize) {
@@ -48,7 +51,7 @@ void DisplayManager::applySettings(const OledSettings& settings) {
 #endif
 #if APP_HAS_ONBOARD_PANEL
     // Backlight and idle settings do not invalidate LVGL, its widgets or DMA buffers.
-    if(keepPanel && dashboard_ && settings.interfaceMode==settings_.interfaceMode && settings.rotation==settings_.rotation){
+    if(keepPanel && (dashboard_ || RoundHmi::available()) && settings.circularMenu==settings_.circularMenu && settings.interfaceMode==settings_.interfaceMode && settings.rotation==settings_.rotation){
         settings_=settings;dimmed_=false;lastActivityAt_=millis();
         panel_->brightness(settings_.brightness);return;
     }
@@ -57,6 +60,7 @@ void DisplayManager::applySettings(const OledSettings& settings) {
     ssd1306_.reset();
     sh1106_.reset();
 #if APP_HAS_ONBOARD_PANEL
+    RoundHmi::end();
     dashboard_.reset();
     if(!keepPanel)panel_.reset();
 #endif
@@ -79,8 +83,12 @@ void DisplayManager::applySettings(const OledSettings& settings) {
         // service has allocated its task and the real snapshot provider exists.
         if(panel_ && settings_.interfaceMode=="lvgl" && panelSnapshot_) {
             panel_->releaseTextBuffer();
+#if APP_ROTARY_HMI
+            if(!RoundHmi::begin(*panel_,rotationIndex(),settings_.circularMenu)){panel_->ensureTextBuffer();DebugLog.println("[display] Circular menu initialization failed");}
+#else
             dashboard_.reset(new PanelDashboard(*panel_));
             if(!dashboard_->begin(rotationIndex())) { dashboard_.reset(); panel_->ensureTextBuffer(); DebugLog.println("[display] LVGL allocation failed; using text interface"); }
+#endif
         }
         lastSignature_ = "";
         lastCenterText_ = "";
@@ -117,6 +125,9 @@ void DisplayManager::setBootMessage(const String& message) {
 }
 
 void DisplayManager::showTemporaryCenterText(const String& message, unsigned long durationMs) {
+#if APP_ROTARY_HMI
+    if(RoundHmi::available())RoundHmi::temporaryText(message,durationMs);
+#endif
     temporaryCenterText_ = message;
     temporaryCenterTextUntilMs_ = millis() + durationMs;
     lastSignature_ = "";
@@ -283,6 +294,11 @@ void DisplayManager::drawWrappedLine(Adafruit_GFX& display, const String& text, 
 void DisplayManager::loop(const AppStateSnapshot& state) {
     SharedI2c::Guard bus(0); if(!bus)return;
 #if APP_HAS_ONBOARD_PANEL
+    if(RoundHmi::available()) {
+        RoundHmi::systemState(state,panelSnapshot_,panelCommand_);
+        RoundHmi::networkStatus(state.network.wifiConnected,state.network.mqttConnected);RoundHmi::loop();if(RoundHmi::takeActivity())markActivity();
+        setDimmed(settings_.dimTimeoutSeconds>0 && millis()-lastActivityAt_>settings_.dimTimeoutSeconds*1000UL);return;
+    }
     if(dashboard_) {
         const bool temporary=temporaryCenterTextUntilMs_ && static_cast<int32_t>(temporaryCenterTextUntilMs_-millis())>0;
         dashboard_->loop(state,panelSnapshot_,panelCommand_,temporary?temporaryCenterText_:String(""));
@@ -364,6 +380,9 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
 bool DisplayManager::available() const {return isEnabled();}
 bool DisplayManager::clearLogicText() {
     if(!isEnabled())return false;
+#if APP_ROTARY_HMI
+    if(RoundHmi::available()){RoundHmi::temporaryText("",0);markActivity();return true;}
+#endif
     temporaryCenterText_="";temporaryCenterTextUntilMs_=0;lastSignature_="";
     markActivity();
 #if APP_HAS_ONBOARD_PANEL

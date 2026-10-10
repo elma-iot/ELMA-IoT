@@ -44,7 +44,7 @@
             </button>
           </div>
         </div>
-        <h1 id="deviceTitle">ELMA IoT</h1>
+        <div class="hero-device"><div id="headerClock" class="header-clock" aria-live="off"><strong id="headerClockTime">--:--:--</strong><span id="headerClockDate">Waiting for time sync</span></div><h1 id="deviceTitle">ELMA IoT</h1></div>
         <div class="hero-firmware" aria-label="Current firmware version">
           <div class="hero-firmware-line">
             <span class="hero-firmware-label">ELMA IoT FW</span>
@@ -620,6 +620,7 @@
               </label>
             </div>
             <div class="row">
+              <label>Clock timezone (UTC offset)<select form="settingsForm" name="device.clockUtcOffsetMinutes"><option value="-720">UTC-12:00</option><option value="-705">UTC-11:45</option><option value="-690">UTC-11:30</option><option value="-675">UTC-11:15</option><option value="-660">UTC-11:00</option><option value="-645">UTC-10:45</option><option value="-630">UTC-10:30</option><option value="-615">UTC-10:15</option><option value="-600">UTC-10:00</option><option value="-585">UTC-09:45</option><option value="-570">UTC-09:30</option><option value="-555">UTC-09:15</option><option value="-540">UTC-09:00</option><option value="-525">UTC-08:45</option><option value="-510">UTC-08:30</option><option value="-495">UTC-08:15</option><option value="-480">UTC-08:00</option><option value="-465">UTC-07:45</option><option value="-450">UTC-07:30</option><option value="-435">UTC-07:15</option><option value="-420">UTC-07:00</option><option value="-405">UTC-06:45</option><option value="-390">UTC-06:30</option><option value="-375">UTC-06:15</option><option value="-360">UTC-06:00</option><option value="-345">UTC-05:45</option><option value="-330">UTC-05:30</option><option value="-315">UTC-05:15</option><option value="-300">UTC-05:00</option><option value="-285">UTC-04:45</option><option value="-270">UTC-04:30</option><option value="-255">UTC-04:15</option><option value="-240">UTC-04:00</option><option value="-225">UTC-03:45</option><option value="-210">UTC-03:30</option><option value="-195">UTC-03:15</option><option value="-180">UTC-03:00</option><option value="-165">UTC-02:45</option><option value="-150">UTC-02:30</option><option value="-135">UTC-02:15</option><option value="-120">UTC-02:00</option><option value="-105">UTC-01:45</option><option value="-90">UTC-01:30</option><option value="-75">UTC-01:15</option><option value="-60">UTC-01:00</option><option value="-45">UTC-00:45</option><option value="-30">UTC-00:30</option><option value="-15">UTC-00:15</option><option value="0" selected>UTC+00:00</option><option value="15">UTC+00:15</option><option value="30">UTC+00:30</option><option value="45">UTC+00:45</option><option value="60">UTC+01:00</option><option value="75">UTC+01:15</option><option value="90">UTC+01:30</option><option value="105">UTC+01:45</option><option value="120">UTC+02:00</option><option value="135">UTC+02:15</option><option value="150">UTC+02:30</option><option value="165">UTC+02:45</option><option value="180">UTC+03:00</option><option value="195">UTC+03:15</option><option value="210">UTC+03:30</option><option value="225">UTC+03:45</option><option value="240">UTC+04:00</option><option value="255">UTC+04:15</option><option value="270">UTC+04:30</option><option value="285">UTC+04:45</option><option value="300">UTC+05:00</option><option value="315">UTC+05:15</option><option value="330">UTC+05:30</option><option value="345">UTC+05:45</option><option value="360">UTC+06:00</option><option value="375">UTC+06:15</option><option value="390">UTC+06:30</option><option value="405">UTC+06:45</option><option value="420">UTC+07:00</option><option value="435">UTC+07:15</option><option value="450">UTC+07:30</option><option value="465">UTC+07:45</option><option value="480">UTC+08:00</option><option value="495">UTC+08:15</option><option value="510">UTC+08:30</option><option value="525">UTC+08:45</option><option value="540">UTC+09:00</option><option value="555">UTC+09:15</option><option value="570">UTC+09:30</option><option value="585">UTC+09:45</option><option value="600">UTC+10:00</option><option value="615">UTC+10:15</option><option value="630">UTC+10:30</option><option value="645">UTC+10:45</option><option value="660">UTC+11:00</option><option value="675">UTC+11:15</option><option value="690">UTC+11:30</option><option value="705">UTC+11:45</option><option value="720">UTC+12:00</option><option value="735">UTC+12:15</option><option value="750">UTC+12:30</option><option value="765">UTC+12:45</option><option value="780">UTC+13:00</option><option value="795">UTC+13:15</option><option value="810">UTC+13:30</option><option value="825">UTC+13:45</option><option value="840">UTC+14:00</option></select><small>Applies to displayed time. Logics schedules remain UTC. Adjust manually for daylight saving.</small></label>
               <label>Saved Volume (%)
                 <input form="settingsForm" name="device.savedVolumePercent" type="number" min="0" max="100">
               </label>
@@ -734,6 +735,11 @@
               <label>LCD interface<select form="settingsForm" name="oled.interfaceMode"><option value="lvgl">LVGL mobile interface</option><option value="text">Status / Logics text</option></select></label>
               <label>Backlight %<input form="settingsForm" name="oled.brightness" type="number" min="0" max="100"></label>
               <label class="check"><input form="settingsForm" name="oled.touchEnabled" type="checkbox"> CHSC6540 touchscreen</label>
+              <div id="roundSystemControls" hidden>
+                <label class="check"><input id="roundSystemDashboard" type="checkbox"> Live round system dashboard</label>
+                <label>Return to UTC clock after seconds<input id="roundSystemTimeout" type="number" min="15" max="3600" value="60"></label>
+                <small>Turn to browse, press to enter, hold to go back. Hold the knob for 15 seconds to reboot.</small>
+              </div>
               <p>240 x 320 pixels; rotation below also rotates touch. LCD controls share the live web settings.</p>
             </div>
             <div id="oledPreviewCard" class="oled-preview-card">
@@ -813,7 +819,7 @@
               </label>
               <div></div>
             </div>
-            <p class="note">Button 1 defaults to GPIO5. Button 2 defaults to GPIO6 on ESP32-S3 builds and GPIO18 on regular ESP32 builds, because GPIO6 is part of the flash bus on ESP32. Both inputs are treated as active-high touch/button inputs, and the Home Assistant Previous and Next actions publish MQTT events on the button-action topic so you can bind those touches to Home Assistant automations. When rotated 90 or 270 degrees the renderer automatically uses the effective portrait resolution so text and OTA progress fit the rotated screen. OLED SDA, SCL, and RESET must not reuse the active I2S pins used by the MAX98357A.</p>
+            <p id="displayWiringHelp" class="note">Button 1 defaults to GPIO5. Button 2 defaults to GPIO6 on ESP32-S3 builds and GPIO18 on regular ESP32 builds, because GPIO6 is part of the flash bus on ESP32. Both inputs are treated as active-high touch/button inputs, and the Home Assistant Previous and Next actions publish MQTT events on the button-action topic so you can bind those touches to Home Assistant automations. When rotated 90 or 270 degrees the renderer automatically uses the effective portrait resolution so text and OTA progress fit the rotated screen. OLED SDA, SCL, and RESET must not reuse the active I2S pins used by the MAX98357A.</p>
             </div>
             <div id="wapeModeSection" hidden>
               <div class="row">
@@ -883,6 +889,8 @@
 <option value="esp32-2432s028c">ESP32-2432S028C · 2.8-inch capacitive</option>
 <option value="esp32-3248s035c">ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive</option>
 <option value="esp32-cam">ESP32-CAM · AI-Thinker / OV2640</option>
+<option value="viewe-uedx48480021-md80et">VIEWE 2.1-inch rotary 480 × 480 · GC9503</option>
+<option value="viewe-uedx48480021-md80et-st7701s">VIEWE 2.1-inch rotary 480 × 480 · ST7701S experimental</option>
 <option value="viewe-uedx24320028e-wb-a">VIEWE 2.8-inch 240×320 · UEDX24320028E-WB-A</option>
                   <option value="viewe-uedx32480035e-wb-a">VIEWE 3.5-inch 320×480 · UEDX32480035E-WB-A</option>
                   <option value="esp32-s3-super-mini" selected>ESP32-S3 Super Mini</option>

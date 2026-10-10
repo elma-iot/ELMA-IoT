@@ -1,3 +1,6 @@
+#if APP_ROTARY_HMI
+#include "legacy_ledc_compat.h"
+#endif
 #include "logic_gpio.h"
 #include <cmath>
 #include <set>

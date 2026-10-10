@@ -43,6 +43,9 @@
  * @brief LCD controller selection
  */
 #define ESP_PANEL_BOARD_LCD_CONTROLLER      GC9503
+#if APP_ROTARY_HMI && !ELMA_ROTARY_ST7701
+#define ELMA_MD80ET_USE_WORKING_GC9503_INIT 1
+#endif
 
 /**
  * @brief LCD bus type selection
@@ -81,7 +84,12 @@
     #define ESP_PANEL_BOARD_LCD_RGB_SPI_USE_DC_BIT          (1) // 0/1. Typically set to 1
 #endif // ESP_PANEL_BOARD_LCD_RGB_USE_CONTROL_PANEL
     /* For refresh panel (RGB) */
+    #if APP_ROTARY_HMI
+    // Direct PSRAM DMA shares bandwidth with web assets and flash writes.
+    #define ESP_PANEL_BOARD_LCD_RGB_CLK_HZ          (8 * 1000 * 1000)
+    #else
     #define ESP_PANEL_BOARD_LCD_RGB_CLK_HZ          (16 * 1000 * 1000)
+    #endif
                                                             // To increase the upper limit of the PCLK, see: https://docs.espressif.com/projects/esp-faq/en/latest/software-framework/peripherals/lcd.html#how-can-i-increase-the-upper-limit-of-pclk-settings-on-esp32-s3-while-ensuring-normal-rgb-screen-display
     #define ESP_PANEL_BOARD_LCD_RGB_HPW             (8)
     #define ESP_PANEL_BOARD_LCD_RGB_HBP             (20)
@@ -97,7 +105,14 @@
     #define ESP_PANEL_BOARD_LCD_RGB_PIXEL_BITS      (ESP_PANEL_LCD_COLOR_BITS_RGB565)   // | ESP_PANEL_LCD_COLOR_BITS_RGB565 | ESP_PANEL_LCD_COLOR_BITS_RGB888 |
                                                                                         // ┗---------------------------------┻---------------------------------┛
                                                             // To understand color format of RGB LCD, see: https://docs.espressif.com/projects/esp-iot-solution/en/latest/display/lcd/rgb_lcd.html#color-formats
+    // Arduino's prebuilt SDK does not keep PSRAM accessible during flash writes.
+    // A bounce-buffer ISR copying from PSRAM then faults with cache disabled.
+    // Use direct RGB DMA for ELMA, which writes NVS/filesystem while displaying.
+    #if APP_ROTARY_HMI
+    #define ESP_PANEL_BOARD_LCD_RGB_BOUNCE_BUF_SIZE (0)
+    #else
     #define ESP_PANEL_BOARD_LCD_RGB_BOUNCE_BUF_SIZE (ESP_PANEL_BOARD_WIDTH * 10)
+    #endif
                                                             // Bounce buffer size in bytes. It is used to avoid screen drift
                                                             // for ESP32-S3. Typically set to `ESP_PANEL_BOARD_WIDTH * 10`
                                                             // The size should satisfy `size * N = LCD_width * LCD_height`,
@@ -380,3 +395,6 @@
 #define ESP_PANEL_BOARD_CUSTOM_FILE_VERSION_PATCH 0
 
 // *INDENT-ON*
+#if ELMA_MD80ET_USE_WORKING_GC9503_INIT
+#include "rotary_gc9503_init.h"
+#endif

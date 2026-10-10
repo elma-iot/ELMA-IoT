@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "model": "USB-TEST-MD50-V3.3",
+  "revision": "202405",
+  "mappingVerified": false,
+  "hotspots": [
+    {
+      "svgId": "uart_5V_hole",
+      "x": "67",
+      "y": "75",
+      "label": "uart_5V",
+      "espGpio": null
+    },
+    {
+      "svgId": "uart_RX2_hole",
+      "x": "132",
+      "y": "75",
+      "label": "uart_RX2",
+      "espGpio": null
+    },
+    {
+      "svgId": "uart_TX2_hole",
+      "x": "197",
+      "y": "75",
+      "label": "uart_TX2",
+      "espGpio": null
+    },
+    {
+      "svgId": "uart_RX1_hole",
+      "x": "262",
+      "y": "75",
+      "label": "uart_RX1",
+      "espGpio": null
+    },
+    {
+      "svgId": "uart_TX1_hole",
+      "x": "327",
+      "y": "75",
+      "label": "uart_TX1",
+      "espGpio": null
+    },
+    {
+      "svgId": "uart_DTR_hole",
+      "x": "392",
+      "y": "75",
+      "label": "uart_DTR",
+      "espGpio": null
+    },
+    {
+      "svgId": "uart_GND_hole",
+      "x": "457",
+      "y": "75",
+      "label": "uart_GND",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO1_hole",
+      "x": "982",
+      "y": "175",
+      "label": "pin_IO1",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO2_hole",
+      "x": "982",
+      "y": "234",
+      "label": "pin_IO2",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO3_hole",
+      "x": "982",
+      "y": "293",
+      "label": "pin_IO3",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO4_hole",
+      "x": "982",
+      "y": "352",
+      "label": "pin_IO4",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO5_hole",
+      "x": "982",
+      "y": "411",
+      "label": "pin_IO5",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO6_hole",
+      "x": "982",
+      "y": "470",
+      "label": "pin_IO6",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO7_hole",
+      "x": "982",
+      "y": "529",
+      "label": "pin_IO7",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO8_hole",
+      "x": "982",
+      "y": "588",
+      "label": "pin_IO8",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_IO9_hole",
+      "x": "982",
+      "y": "647",
+      "label": "pin_IO9",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_3V3_hole",
+      "x": "982",
+      "y": "706",
+      "label": "pin_3V3",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_GND_hole",
+      "x": "982",
+      "y": "765",
+      "label": "pin_GND",
+      "espGpio": null
+    },
+    {
+      "svgId": "pin_5V_hole",
+      "x": "982",
+      "y": "824",
+      "label": "pin_5V",
+      "espGpio": null
+    }
+  ],
+  "moduleConnectors": {
+    "J1": {
+      "contacts": 10,
+      "pitchMM": 0.5,
+      "pinout": {
+        "1": "USB D-",
+        "2": "USB D+",
+        "3": "EN",
+        "4": "UART TX",
+        "5": "UART RX",
+        "6": "GND",
+        "7": "GPIO4 ADC",
+        "8": "5V",
+        "9": "GND",
+        "10": "GND"
+      }
+    },
+    "J2": {
+      "contacts": 12,
+      "pitchMM": null
+    }
+  },
+  "adapterFpcConnectors": {
+    "upper": {
+      "illustratedContacts": 20,
+      "pitchMM": null
+    },
+    "lower": {
+      "illustratedContacts": 16,
+      "pitchMM": null
+    }
+  },
+  "compatibility": "unverified; contact counts in artwork differ from module schematic; do not connect based on artwork"
+}

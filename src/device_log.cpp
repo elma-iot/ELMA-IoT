@@ -86,6 +86,16 @@ String DeviceLogger::tail(size_t limit, uint64_t* end, uint64_t after) {
     return String(buffer.get(), count);
 }
 
+size_t DeviceLogger::readTail(char* destination,size_t capacity,uint64_t& sequence){
+    if(!destination||!capacity)return 0;
+    portENTER_CRITICAL(&ringMux_);
+    const size_t count=min(uint64_t(min(capacity-1,RingBytes)),sequence_);
+    for(size_t i=0;i<count;++i)destination[i]=ring_[(sequence_-count+i)%RingBytes];
+    sequence=sequence_;
+    portEXIT_CRITICAL(&ringMux_);
+    destination[count]=0;return count;
+}
+
 String DeviceLogger::currentBoot(uint64_t* end) {
     String text = tail(InternalBootBytes - strlen(bootHeader_), end);
     if (!text.startsWith(bootHeader_)) text = String(bootHeader_) + text;

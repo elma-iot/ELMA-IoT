@@ -4742,7 +4742,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028r.svg",
-      "alt": "ESP32-2432S028R · 2.8-inch resistive"
+      "alt": "ESP32-2432S028R В· 2.8-inch resistive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4814,7 +4814,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028c.svg",
-      "alt": "ESP32-2432S028C · 2.8-inch capacitive"
+      "alt": "ESP32-2432S028C В· 2.8-inch capacitive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4886,7 +4886,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-3248s035c.svg",
-      "alt": "ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive"
+      "alt": "ESP32-48S035 / ESP32-3248S035C В· 3.5-inch capacitive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4947,7 +4947,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-cam.svg",
-      "alt": "ESP32-CAM · AI-Thinker / OV2640"
+      "alt": "ESP32-CAM В· AI-Thinker / OV2640"
     },
     "defaults": {
       "statusLedPin": 33,
@@ -5037,6 +5037,62 @@
         15,
         16
       ]
+    }
+  },
+  "viewe-uedx48480021-md80et": {
+    "chip": "esp32s3",
+    "asset": {
+      "src": "/viewe-uedx48480021-md80et.svg",
+      "alt": "VIEWE 2.1-inch rotary touch display - GC9503"
+    },
+    "defaults": {
+      "statusLedPin": -1,
+      "statusLedType": "regular",
+      "statusLedActiveLow": false,
+      "statusLedGreenPin": -1,
+      "statusLedBluePin": -1,
+      "preserveExternalLed": false
+    },
+    "gpio": [],
+    "capabilities": {
+      "false:output": [],
+      "false:input": [],
+      "false:adc": [],
+      "false:touch": [],
+      "false:pull-input": [],
+      "true:output": [],
+      "true:input": [],
+      "true:adc": [],
+      "true:touch": [],
+      "true:pull-input": []
+    }
+  },
+  "viewe-uedx48480021-md80et-st7701s": {
+    "chip": "esp32s3",
+    "asset": {
+      "src": "/viewe-uedx48480021-md80et-st7701s.svg",
+      "alt": "VIEWE 2.1-inch rotary touch display - ST7701S"
+    },
+    "defaults": {
+      "statusLedPin": -1,
+      "statusLedType": "regular",
+      "statusLedActiveLow": false,
+      "statusLedGreenPin": -1,
+      "statusLedBluePin": -1,
+      "preserveExternalLed": false
+    },
+    "gpio": [],
+    "capabilities": {
+      "false:output": [],
+      "false:input": [],
+      "false:adc": [],
+      "false:touch": [],
+      "false:pull-input": [],
+      "true:output": [],
+      "true:input": [],
+      "true:adc": [],
+      "true:touch": [],
+      "true:pull-input": []
     }
   }
 }

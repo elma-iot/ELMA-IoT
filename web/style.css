@@ -4786,7 +4786,7 @@ body {
       grid-area: actions;
     }
 
-    .hero-header h1 {
+    .hero-header .hero-device {
       grid-area: title;
     }
 
@@ -5459,3 +5459,8 @@ h2 {color:var(--ink)}
 .device-audio-unavailable .storage-preview-progress-wrap,
 .device-audio-unavailable .storage-preview-volume-card,
 .device-audio-unavailable .storage-preview-actions { display: none !important; }
+
+.hero-device { display:flex;align-items:center;justify-content:center;gap:20px;min-width:0;flex-wrap:wrap; }
+.header-clock {display:flex;flex-direction:column;align-items:center;white-space:nowrap;}
+.header-clock strong {font-size:1.45rem;font-variant-numeric:tabular-nums;}
+.header-clock span {font-size:.75rem;opacity:.75;}

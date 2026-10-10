@@ -1,6 +1,7 @@
 #include "app_state.h"
 
 #include <cstring>
+#include <ctime>
 
 namespace {
 void lockAppState(SemaphoreHandle_t mutex) {
@@ -36,13 +37,14 @@ bool AppState::ensureMutex() const {
     return mutex_ != nullptr;
 }
 
-void AppState::setDevice(const String& deviceName, const String& friendlyName, bool usingSaved) {
+void AppState::setDevice(const String& deviceName, const String& friendlyName, bool usingSaved, int16_t clockUtcOffsetMinutes) {
     if (!ensureMutex()) {
         return;
     }
     lockAppState(mutex_);
     state_.device.deviceName = deviceName;
     state_.device.friendlyName = friendlyName;
+    state_.device.clockUtcOffsetMinutes = clockUtcOffsetMinutes;
     state_.settings.usingSaved = usingSaved;
     unlockAppState(mutex_);
 }
@@ -193,6 +195,11 @@ void AppState::toJson(JsonObject root) const {
     JsonObject device = root["device"].to<JsonObject>();
     device["deviceName"] = copy.device.deviceName;
     device["friendlyName"] = copy.device.friendlyName;
+    device["clockUtcOffsetMinutes"] = copy.device.clockUtcOffsetMinutes;
+    const time_t clockNow = time(nullptr);
+    JsonObject clock = root["clock"].to<JsonObject>();
+    clock["synced"] = clockNow > 1577836800;
+    clock["utc"] = clockNow > 1577836800 ? int64_t(clockNow) : int64_t(0);
 
     JsonObject network = root["network"].to<JsonObject>();
     network["wifiConnected"] = copy.network.wifiConnected;

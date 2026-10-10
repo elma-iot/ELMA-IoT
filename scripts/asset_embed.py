@@ -11,6 +11,12 @@ import json
 Import("env")
 
 ROOT = Path(env["PROJECT_DIR"])
+if env.get("PIOENV", "").startswith("viewe_rotary_"):
+    # Compatibility headers in project/include are visible to every library.
+    # Arduino 3 networking headers must therefore be visible there as well.
+    framework = Path(env.PioPlatform().get_package_dir("framework-arduinoespressif32"))
+    env.Append(CPPPATH=[str(framework / "libraries" / name / "src")
+                        for name in ("Network", "NetworkClientSecure")])
 sys.path.insert(0,str(ROOT / "scripts"))
 from project_defaults import generate_defaults
 from fit_features import apply as apply_fit_features
@@ -68,6 +74,9 @@ def audit_board_assets(source, target, env):
     print("[size-fit] Mainboard SVG audit passed for board " + str(selected_board_id))
 
 default_board_ids = {
+    "viewe_rotary_gc9503": "30", "viewe_rotary_st7701s": "31",
+    "viewe_rotary_gc9503_uart":"30", "viewe_rotary_st7701s_uart":"31",
+    "viewe_rotary_gc9503_smoke":"30", "viewe_rotary_st7701s_smoke":"31",
     "esp32s3_spk_n16r8": "4",
     "sunton_2432s028r":"26", "sunton_2432s028c":"27", "sunton_3248s035c":"28", "esp32_cam":"29",
     "viewe_uedx24320028e": "14",
@@ -85,6 +94,8 @@ default_board_ids = {
     "esp32s3_designer_noaudio_hacs": "1", "esp32s3_designer_noaudio_slim": "1",
     "esp32s3_designer_noaudio_hacs_slim": "1",
 }
+if env.get("PIOENV", "").startswith("esp32s3_devkitc1_n"):
+    default_board_ids[env["PIOENV"]] = "5"
 selected_board_id_text = os.environ.get("ELMA_SELECTED_BOARD_PROFILE_ID", default_board_ids.get(env.get("PIOENV"), "0")).strip()
 if not selected_board_id_text.isdigit():
     raise SystemExit("ELMA_SELECTED_BOARD_PROFILE_ID must be a numeric board identifier")

@@ -30,6 +30,15 @@ bool validateLogicHardware(JsonObject n,std::string& error) {
         else if(type=="hardware.modbus.received")valid=integer("unitFilter",0,247);
         if(!valid){error="Invalid Modbus RTU parameters";return false;}return true;
     }
+    if(type.find("hardware.hmi.")==0){
+        auto p=n["parameters"];bool valid=true;
+        for(const char* key:{"itemId","itemIdFilter","parent","submenu","childId"})if(!p[key].isNull()){double v=p[key]|-1.;valid&=p[key].is<int>()&&v>=(std::string(key)=="itemId"?1:0)&&v<=65535;}
+        for(const char* key:{"value","minimum","maximum","step"})if(!p[key].isNull())valid&=p[key].is<double>()&&std::isfinite(p[key].as<double>());
+        for(const char* key:{"title","text","icon","unit"})if(!p[key].isNull())valid&=p[key].is<const char*>()&&p[key].as<std::string>().size()<=((std::string(key)=="icon")?32:(std::string(key)=="unit"?16:48));
+        if(type=="hardware.hmi.create")valid&=p["configuration"].is<const char*>()&&p["configuration"].as<std::string>().size()<=16384;
+        if(type=="hardware.hmi.navigate")valid&=p["navigation"]=="next"||p["navigation"]=="previous"||p["navigation"]=="back"||p["navigation"]=="activate";
+        if(!valid){error="Invalid circular HMI parameters";return false;}return true;
+    }
     if(type!="hardware.gpio"&&type!="hardware.led")return true;
     std::set<std::string> enabled;
     if(type=="hardware.gpio") {
