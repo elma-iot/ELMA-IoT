@@ -3,6 +3,8 @@
 #include "panel_display.h"
 #include "panel_settings.h"
 #include "panel_forms.h"
+#include "panel_theme.h"
+#include "panel_boot.h"
 #include "device_log.h"
 #include "storage_backend.h"
 #include <ctime>
@@ -10,7 +12,7 @@
 namespace {
 struct Tab {const char* key;const char* title;bool conditional;};
 const Tab tabList[]={
- {"bno055","Orientation sensor",true},
+ {"rs485","RS485 / Modbus RTU",true},{"bno055","Orientation sensor",true},
  {"gpio","Configuration",false},{"logics","Logics",false},{"wled","WLED",true},{"motor","Motor",true},
  {"playback","Audio",true},{"effects","Audio Effects",true},{"wifi","Wi-Fi",false},{"mqtt","MQTT",false},
  {"battery","Battery",true},{"device","Device",false},{"oled","DISPLAY",true},{"hardware","Hardware Monitor",false},
@@ -26,7 +28,7 @@ bool PanelDashboard::begin(uint8_t rotation){
  pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*rows*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));if(!pixels_)return false;
  lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*rows);lv_disp_drv_init(&displayDriver_);
  displayDriver_.hor_res=kPanelWidth;displayDriver_.ver_res=kPanelHeight;displayDriver_.draw_buf=&drawBuffer_;displayDriver_.flush_cb=flush;displayDriver_.user_data=this;displayDriver_.sw_rotate=1;
- display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_theme(display_,lv_theme_basic_init(display_));lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
+ display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_theme(display_,elmaPanelTheme(display_));lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
  lv_indev_drv_init(&inputDriver_);inputDriver_.type=LV_INDEV_TYPE_POINTER;inputDriver_.read_cb=touch;inputDriver_.user_data=this;inputDriver_.disp=display_;inputDriver_.scroll_limit=8;inputDriver_.scroll_throw=12;input_=lv_indev_drv_register(&inputDriver_);
  screen_=lv_disp_get_scr_act(display_);lv_obj_set_style_bg_color(screen_,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(screen_,lv_color_hex(0xf3f4f6),0);lv_obj_set_style_pad_all(screen_,6,0);lv_obj_set_style_pad_row(screen_,5,0);lv_obj_set_flex_flow(screen_,LV_FLEX_FLOW_COLUMN);lv_obj_clear_flag(screen_,LV_OBJ_FLAG_SCROLLABLE);
  auto* bar=lv_obj_create(screen_);lv_obj_set_style_text_color(bar,lv_color_hex(0xf3f4f6),0);lv_obj_set_size(bar,LV_PCT(100),28);lv_obj_set_style_pad_all(bar,0,0);lv_obj_set_style_border_width(bar,0,0);lv_obj_set_style_bg_opa(bar,LV_OPA_TRANSP,0);lv_obj_clear_flag(bar,LV_OBJ_FLAG_SCROLLABLE);
@@ -38,7 +40,7 @@ bool PanelDashboard::begin(uint8_t rotation){
  lv_obj_add_event_cb(speaker_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));if(s->state_["security"]["locked"]==true)return;
   if(lv_obj_has_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN))lv_obj_clear_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s->volumeOverlay_,LV_OBJ_FLAG_HIDDEN);
  },LV_EVENT_CLICKED,this);
- menu_=lv_dropdown_create(screen_);lv_obj_set_style_text_color(menu_,lv_color_hex(0x111827),0);lv_obj_set_size(menu_,LV_PCT(100),44);lv_obj_add_event_cb(menu_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));auto i=lv_dropdown_get_selected(s->menu_);if(i<s->tabs_.size())s->page(s->tabs_[i]);},LV_EVENT_VALUE_CHANGED,this);
+ menu_=lv_dropdown_create(screen_);lv_obj_set_size(menu_,LV_PCT(100),44);lv_obj_add_event_cb(menu_,[](lv_event_t* e){auto* s=static_cast<PanelDashboard*>(lv_event_get_user_data(e));auto i=lv_dropdown_get_selected(s->menu_);if(i<s->tabs_.size())s->page(s->tabs_[i]);},LV_EVENT_VALUE_CHANGED,this);
  body_=lv_obj_create(screen_);lv_obj_set_scroll_dir(body_,LV_DIR_VER);lv_obj_add_flag(body_,LV_OBJ_FLAG_SCROLL_MOMENTUM);lv_obj_clear_flag(body_,LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_set_width(body_,LV_PCT(100));lv_obj_set_flex_grow(body_,1);lv_obj_set_flex_flow(body_,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(body_,8,0);lv_obj_set_style_pad_row(body_,9,0);lv_obj_set_style_bg_color(body_,lv_color_hex(0x1f2937),0);lv_obj_set_style_text_color(body_,lv_color_hex(0xf3f4f6),0);
  notice_=lv_label_create(screen_);lv_obj_set_width(notice_,LV_PCT(100));lv_label_set_long_mode(notice_,LV_LABEL_LONG_WRAP);lv_label_set_text(notice_,"");
  keyboard_=lv_keyboard_create(lv_disp_get_layer_top(display_));lv_obj_set_height(keyboard_,LV_PCT(48));lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);
@@ -52,7 +54,7 @@ bool PanelDashboard::begin(uint8_t rotation){
   lv_label_set_text(s->volumeLabel_,("Volume: "+String(value)+"%").c_str());
   if(lv_event_get_code(e)==LV_EVENT_RELEASED){JsonDocument args;args["value"]=value;s->queue("volume",args);}
  },LV_EVENT_ALL,this);
- tick_=millis();syncMenu();page("gpio");return true;
+ tick_=millis();syncMenu();page("gpio");animatePanelBootLogo(display_);return true;
 }
 void PanelDashboard::flush(lv_disp_drv_t* d,const lv_area_t* a,lv_color_t* c){auto* s=static_cast<PanelDashboard*>(d->user_data);bool ok=s->panel_.drawColor(a->x1,a->y1,a->x2-a->x1+1,a->y2-a->y1+1,reinterpret_cast<uint8_t*>(c));if(!s->frameReported_){DebugLog.printf("[display] Portrait web tabs ready; LVGL flush %s\n",ok?"completed":"FAILED");s->frameReported_=true;}lv_disp_flush_ready(d);}
 void PanelDashboard::touch(lv_indev_drv_t* d,lv_indev_data_t* data){auto* s=static_cast<PanelDashboard*>(d->user_data);int16_t x,y;if(s->panel_.readRawTouch(x,y)){data->point.x=x;data->point.y=y;data->state=LV_INDEV_STATE_PRESSED;s->touched_=true;}else data->state=LV_INDEV_STATE_RELEASED;}
@@ -230,6 +232,16 @@ void PanelDashboard::page(const String& key){
  page_=key;refreshNow_=true;lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));fields_.clear();buttons_.clear();labels_.clear();meters_.clear();lv_obj_clean(body_);
  for(size_t i=0;i<tabs_.size();i++)if(tabs_[i]==key)lv_dropdown_set_selected(menu_,i);
  if(key=="bno055"){labels_["bno055"]=label("");button("Compass + motion","bno:ndof");button("Motion only","bno:imu");button("Start sampling","bno:on");button("Pause sampling","bno:off");button("Reinitialize sensor","bno:reset");}
+ if(key=="rs485"){
+  if(!drafts_.count("@rsunit"))drafts_["@rsunit"]=String(state_["rs485"]["unit"]|1);
+  if(!drafts_.count("@rsaddress"))drafts_["@rsaddress"]=String(state_["rs485"]["address"]|0);
+  if(!drafts_.count("@rscount"))drafts_["@rscount"]=String(state_["rs485"]["count"]|1);
+  label("MS1285 / UART TX43 RX44");labels_["rs485"]=label("");
+  field("Baud rate","@rsbaud","select","9600\n19200\n38400\n57600\n115200\n4800\n2400\n1200");
+  field("Parity","@rsparity","select","N\nE\nO");field("Stop bits","@rsstops","select","1\n2");
+  field("Unit (1-247)","@rsunit","number");field("Address (zero based)","@rsaddress","number");field("Count (1-32)","@rscount","number");
+  field("Function","@rsfunction","select","3 Holding registers\n4 Input registers\n1 Coils\n2 Discrete inputs");button("Read","rs485:read");
+ }
  if(key=="gpio")wiring();
  if(key=="logics"){
   labels_["logics"]=label("");for(const char* mode:{"playing","paused","stopped"})button(mode,String("logic:")+mode);
@@ -267,16 +279,17 @@ void PanelDashboard::page(const String& key){
  }
  if(key.startsWith("storage-")){
   if(key=="storage-external"){button("Mount SD card","mountSd");button("Eject SD card","ejectSd");}
-  player();labels_["storage"]=label("");String path=state_["storage"]["path"]|"/";section(path);
+  if(state_["caps"]["playback"]==true)player();labels_["storage"]=label("");String path=state_["storage"]["path"]|"/";section(path);
   button("Refresh files","folder:refresh");button("Root folder","folder:/");
   if(path!="/"){String parent=path.substring(0,path.lastIndexOf('/'));button(LV_SYMBOL_UP " Parent folder","folder:"+(parent.length()?parent:String("/")));}
   int i=0;for(JsonObjectConst f:state_["files"].as<JsonArrayConst>()){
    if(f["directory"]==true)button(String(LV_SYMBOL_DIRECTORY " ")+(f["name"]|""),"folder:"+String(f["path"]|"/"));
-   else {String name=f["name"]|"",lower=name;lower.toLowerCase();if(lower.endsWith(".mp3")||lower.endsWith(".wav")||lower.endsWith(".aac")||lower.endsWith(".m4a")||lower.endsWith(".flac")||lower.endsWith(".ogg")||lower.endsWith(".opus"))button(String(LV_SYMBOL_PLAY " ")+name,"file:"+String(i));else label(name);}
+   else {String name=f["name"]|"",lower=name;lower.toLowerCase();if(state_["caps"]["playback"]==true&&(lower.endsWith(".mp3")||lower.endsWith(".wav")||lower.endsWith(".aac")||lower.endsWith(".m4a")||lower.endsWith(".flac")||lower.endsWith(".ogg")||lower.endsWith(".opus")))button(String(LV_SYMBOL_PLAY " ")+name,"file:"+String(i));else label(name);}
    i++;
   }
   if((state_["storage"]["offset"]|0)>0)button("Previous files","files:previous");
   if(state_["storage"]["more"]==true)button("More files","files:next");
+  if(key=="storage-external")button("Format SD Card","formatSdPrompt");
  }
  if(key=="firmware"){labels_["firmware"]=label("");button("Check for updates","otaCheck");button("Install selected update","confirm:otaInstall");}
  if(key=="logs")labels_["logs"]=label("");
@@ -286,7 +299,7 @@ void PanelDashboard::page(const String& key){
   if(!(state_["security"]["locked"]|false)){if(state_["security"]["enabled"]|false){button("Lock now","security:lock");button("Disable PIN (current PIN)","security:disable");}else{field("New four-digit PIN","@newPin","secret");field("Confirm PIN","@confirmPin","secret");button("Set PIN","security:set");}}
  }
  if(key=="info")labels_["info"]=label("");
- settingsFields();DebugLog.printf("[display] page=%s fields=%u heap=%u\n",key.c_str(),unsigned(fields_.size()),ESP.getFreeHeap());if(!fields_.empty()&&key!="security")button("Save changes","save");update();
+ settingsFields();DebugLog.printf("[display] page=%s fields=%u heap=%u\n",key.c_str(),unsigned(fields_.size()),ESP.getFreeHeap());if(!fields_.empty()&&key!="security"&&key!="rs485")button("Save changes","save");update();
 }
 void PanelDashboard::queue(const String& action,JsonVariantConst args){if(commands_.size()>=8){lv_label_set_text(notice_,"Please wait for pending changes");return;}JsonDocument q;q["action"]=action;q["args"].set(args);String text;serializeJson(q,text);commands_.push_back(text);}
 void PanelDashboard::submit(int index){
@@ -331,6 +344,10 @@ void PanelDashboard::event(lv_event_t* e){
  }
  if(code!=LV_EVENT_CLICKED)return;String key;for(auto& pair:s->buttons_)if(pair.second==object){key=pair.first;break;}if(key.isEmpty())return;
  auto text=[s](const char* path){for(auto& f:s->fields_)if(f.path==path)return s->fieldText(f);return String("");};JsonDocument a;
+ if(key=="rs485:read"){
+  a["baud"]=text("@rsbaud").toInt();a["parity"]=text("@rsparity");a["stops"]=text("@rsstops").toInt();
+  a["unit"]=text("@rsunit").length()?text("@rsunit").toInt():1;a["address"]=text("@rsaddress").toInt();a["count"]=text("@rscount").length()?text("@rscount").toInt():1;a["function"]=text("@rsfunction").toInt();s->queue("rs485",a);return;
+ }
  if(key.startsWith("bno:")){String value=key.substring(4);if(value=="on"||value=="off")a["enabled"]=value=="on";else if(value=="reset")a["reinitialize"]=true;else a["mode"]=value;s->queue("bno055",a);return;}
  if(key.startsWith("folder:")||key.startsWith("files:")){
   a["path"]=key.startsWith("folder:")&&key!="folder:refresh"?key.substring(7):String(s->state_["storage"]["path"]|"/");
@@ -377,15 +394,17 @@ void PanelDashboard::event(lv_event_t* e){
  if(key=="play")a["url"]=text("@url");s->queue(key,a);
 }
 void PanelDashboard::statusBar(const AppStateSnapshot& app){
- String signature=String(app.network.wifiConnected)+String(app.network.apMode)+String(app.network.wifiRssi/5)+String(app.network.mqttConnected)+String(app.playback.volumePercent)+app.playback.state+String(app.battery.voltage,1)+String(time(nullptr)/60)+String(state_["security"]["locked"]|false)+String(state_["caps"]["playback"]|false)+String(state_["caps"]["battery"]|false)+String(state_["caps"]["storage-external"]|false);
+ const auto sd=getStorageSummary(StorageTarget::Sd);
+ String signature=String(sd.mounted)+String(sd.needsFormat)+String(app.network.wifiConnected)+String(app.network.apMode)+String(app.network.wifiRssi/5)+String(app.network.mqttConnected)+String(app.playback.volumePercent)+app.playback.state+String(app.battery.voltage,1)+String(time(nullptr)/60)+String(state_["security"]["locked"]|false)+String(state_["caps"]["playback"]|false)+String(state_["caps"]["battery"]|false)+String(state_["caps"]["storage-external"]|false);
  if(signature==statusSignature_)return;statusSignature_=signature;
  bool sta=app.network.wifiConnected,ap=app.network.apMode;lv_label_set_text(wifi_,(String(LV_SYMBOL_WIFI)+(sta?(ap?" S+A":" STA"):ap?" AP":" " LV_SYMBOL_CLOSE)).c_str());lv_obj_set_style_text_color(wifi_,lv_color_hex(sta?0x72dc9e:ap?0x60a5fa:0xf87171),0);
  int level=sta?(app.network.wifiRssi>=-55?4:app.network.wifiRssi>=-67?3:app.network.wifiRssi>=-78?2:1):0;
  for(int i=0;i<4;i++)lv_obj_set_style_bg_color(bars_[i],lv_color_hex(i<level?0x72dc9e:0x475569),0);
  lv_label_set_text(mqtt_,lv_disp_get_hor_res(display_)<300?(app.network.mqttConnected?LV_SYMBOL_SHUFFLE:LV_SYMBOL_SHUFFLE LV_SYMBOL_CLOSE):(app.network.mqttConnected?LV_SYMBOL_SHUFFLE " MQTT":LV_SYMBOL_SHUFFLE " MQTT" LV_SYMBOL_CLOSE));lv_obj_set_style_text_color(mqtt_,lv_color_hex(app.network.mqttConnected?0x72dc9e:0xf87171),0);
- String extra;if(app.playback.state=="playing")extra=LV_SYMBOL_PLAY;if(state_["caps"]["battery"]==true)extra+=" "+String(app.battery.voltage,1)+"V";else if(state_["caps"]["storage-external"]==true)extra+=" SD";lv_label_set_text(extra_,extra.c_str());
- // Keep connection indicators and the clock readable on the 240 px panel.
- if(lv_disp_get_hor_res(display_)<360)lv_obj_add_flag(extra_,LV_OBJ_FLAG_HIDDEN);else lv_obj_clear_flag(extra_,LV_OBJ_FLAG_HIDDEN);
+ lv_label_set_text(extra_,LV_SYMBOL_SD_CARD);
+ lv_obj_set_pos(extra_,lv_disp_get_hor_res(display_)<300?137:185,5);
+ lv_obj_set_style_text_color(extra_,lv_color_hex(sd.mounted?0x72dc9e:0xfbbf24),0);
+ if(sd.mounted||sd.needsFormat)lv_obj_clear_flag(extra_,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(extra_,LV_OBJ_FLAG_HIDDEN);
  lv_label_set_text(lv_obj_get_child(speaker_,0),app.playback.volumePercent?LV_SYMBOL_VOLUME_MAX:LV_SYMBOL_MUTE);
  bool audio=state_["caps"]["playback"]==true&&state_["security"]["locked"]!=true;
  if(audio)lv_obj_clear_flag(speaker_,LV_OBJ_FLAG_HIDDEN);else{lv_obj_add_flag(speaker_,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(volumeOverlay_,LV_OBJ_FLAG_HIDDEN);}
@@ -395,6 +414,7 @@ void PanelDashboard::statusBar(const AppStateSnapshot& app){
 void PanelDashboard::update(){
  if(!snapshotReady_)return;
  updating_=true;auto set=[this](const char* key,const String& text){auto it=labels_.find(key);if(it!=labels_.end()&&String(lv_label_get_text(it->second))!=text)lv_label_set_text(it->second,text.c_str());};
+ if(page_=="rs485"){auto d=state_["rs485"];String text=d["message"]|"Ready";int address=d["address"]|0;for(int value:d["values"].as<JsonArrayConst>())text+="\n"+String(address++)+": "+String(value);set("rs485",text);}
  if(page_=="bno055"){
   auto d=state_["bno055"];String text=d["error"]|"";
   if(d["ready"]==true&&(d["ageMs"]|9999)<2000){text=String(d["mode"]|"")+"\n";if(d["compass"]==true)text+="Heading: "+String(d["heading"].as<float>(),1)+" deg\n";
@@ -403,7 +423,7 @@ void PanelDashboard::update(){
   }else if(!text.length())text="No live readings";set("bno055",text);
  }
  if(page_=="wifi"&&!metricsLogged_){DebugLog.printf("[display] Wi-Fi snapshot ssidPresent=%u passwordPresent=%u heap=%u\n",String(state_["settings"]["wifi"]["ssid"]|"").length()>0,String(state_["settings"]["wifi"]["password"]|"").length()>0,ESP.getFreeHeap());metricsLogged_=true;}
- auto live=state_["live"];set("network",String(live["wifiConnected"]==true?"Connected":"Offline / AP")+"\n"+String(state_["wifiLive"]["ssid"]|"")+"\n"+(live["ip"]|"")+" / "+String(live["rssi"]|0)+" dBm\nMQTT: "+(live["mqttConnected"]==true?"connected":"disconnected"));
+ auto live=state_["live"];set("network",String(live["wifiConnected"]==true?"Connected":"Offline / AP")+"\n"+String(state_["wifiLive"]["ssid"]|"")+"\nIP: "+(live["ip"]|"Not connected")+" / "+String(live["rssi"]|0)+" dBm\nMQTT: "+(live["mqttConnected"]==true?"connected":"disconnected"));
  set("wifiScan",state_["wifiScan"]["scanning"]==true?"Scanning...":state_["wifiScan"]["failed"]==true?"Scan failed. Try again.":state_["wifiScan"]["complete"]==true?(state_["wifiScan"]["networks"].size()?"Select a network, enter its password, then Connect":"No networks found"):"Scan or enter a network name below");
  set("radio",state_["radio"]["busy"]==true?String("Loading radio directory..."):String(state_["radio"]["error"]|"Choose a station to play"));
  set("device",String(live["name"]|"ELMA")+"\n"+(live["ip"]|""));set("playback",String(live["title"]|"Idle")+"\n"+(live["playbackState"]|"idle")+" / "+String(live["volume"]|0)+"%");
@@ -431,7 +451,7 @@ void PanelDashboard::update(){
  }
 
  set("info",String("Device: ")+(live["name"]|"ELMA IoT")+"\nFirmware: "+(state_["version"]|"unknown")+"\nBuilt: "+(state_["build"]|"")+"\nBoard: "+(hardware["boardProfile"]|"")+"\nChip: "+(hardware["chipModel"]|"")+" rev "+String(hardware["chipRevision"]|0)+"\nCPU: "+String(hardware["cpuCores"]|0)+" cores / "+String(hardware["cpuFreqMHz"]|0)+" MHz\nFlash: "+String((hardware["flashSizeBytes"]|0)/1024)+" KB\nFirmware size: "+String((hardware["sketchSizeBytes"]|0)/1024)+" KB\nFree heap: "+String(system["freeHeap"]|0)+" B\nUptime: "+String(millis()/1000)+" s\nIP: "+(live["ip"]|"")+"\nMAC: "+(state_["mac"]|"")+"\nDisplay: "+String(kPanelWidth)+" x "+String(kPanelHeight)+"\nTouch: "+kPanelTouchName+(panel_.spiClock()?"\nLCD SPI: "+String(panel_.spiClock()/1000000)+" MHz":""));
- set("firmware",String("Installed: ")+(state_["version"]|"")+"\n"+(live["otaPhase"]|"idle")+" "+String(live["otaProgress"]|0)+"%\n"+(live["lastError"]|""));
+ set("firmware",String("Installed: ")+(state_["version"]|"")+"\nRepository: "+(state_["ota"]["repository"]|"")+"\nLatest for this board: "+(String(state_["ota"]["latestVersion"]|"").isEmpty()?String("Not available"):String(state_["ota"]["latestVersion"]|""))+"\n"+(state_["ota"]["message"]|"")+"\n"+(live["otaPhase"]|"idle")+" "+String(live["otaProgress"]|0)+"%\n"+(live["lastError"]|""));
  set("storage",String(state_["storage"]["busy"]==true?"Loading folder...\n":"")+String(state_["storage"]["mounted"]==true?"Mounted":"Unavailable")+"\nFree: "+valueText(state_["storage"]["free"])+" / "+valueText(state_["storage"]["total"])+" bytes");
  set("logs",state_["logText"]|"No log entries");
  String samples;for(JsonObjectConst sample:state_["plots"]["samples"].as<JsonArrayConst>()){samples+=String(sample["plot"]|"")+" / "+(sample["series"]|"")+": "+valueText(sample["value"])+" "+(sample["unit"]|"")+"\n";}set("plots",samples.isEmpty()?String("Waiting for samples"):samples);
@@ -452,8 +472,9 @@ void PanelDashboard::update(){
 }
 void PanelDashboard::sdFormatEvent(lv_event_t* event){
  auto* self=static_cast<PanelDashboard*>(lv_event_get_user_data(event));
+ if(!self->sdFormatPrompt_ || lv_event_get_target(event)!=lv_msgbox_get_btns(self->sdFormatPrompt_))return;
  const char* choice=lv_msgbox_get_active_btn_text(self->sdFormatPrompt_);
- if(choice && strcmp(choice,"Erase and format")==0){JsonDocument args;args["confirmed"]=true;self->queue("formatSd",args);}
+ if(choice && strcmp(choice,"Erase and format")==0){JsonDocument args;args["confirmed"]=true;args["filesystem"]="FAT32";self->queue("formatSd",args);}
  else {JsonDocument args;self->queue("dismissSdFormat",args);}
  lv_msgbox_close(self->sdFormatPrompt_);self->sdFormatPrompt_=nullptr;
 }
@@ -480,12 +501,11 @@ void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,c
   if(overlay.length())lv_label_set_text(notice_,overlay.c_str());else if(int32_t(now-noticeUntil_)>=0 && *lv_label_get_text(notice_))lv_label_set_text(notice_,"");
  }
  if(sdFormatPrompt_ && !sdFormatPromptNeeded()){lv_msgbox_close(sdFormatPrompt_);sdFormatPrompt_=nullptr;}
+ if(!sdFormatPromptNeeded())sdFormatPromptShown_=false;
  if(!sdFormatPromptShown_ && sdFormatPromptNeeded() && !(state_["security"]["locked"]|false)){
   sdFormatPromptShown_=true;
   touched_=true;
-  static const char* choices[]={"Cancel","Erase and format",""};
-  sdFormatPrompt_=lv_msgbox_create(nullptr,"SD card", "Card detected, but no supported filesystem. Formatting erases all files. Back up the card first. Format now?",choices,false);
-  lv_obj_set_width(sdFormatPrompt_,lv_disp_get_hor_res(display_)-16);lv_obj_center(sdFormatPrompt_);
+  sdFormatPrompt_=elmaSdFormatDialog(display_,&sdFormatType_);
   lv_obj_add_event_cb(sdFormatPrompt_,sdFormatEvent,LV_EVENT_VALUE_CHANGED,this);
  }
  auto formatting=sdFormatState();

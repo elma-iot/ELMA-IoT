@@ -7,6 +7,8 @@
 #include "logic_audio_dispatch.h"
 #include "led_microphone.h"
 #include "bno055_service.h"
+#include "can_service.h"
+#include "rs485_service.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
 #include <Arduino.h>
@@ -325,6 +327,7 @@ SoundEffectsManager* soundEffects = nullptr;
 struct DeferredActions {
     bool settingsApplyPending = false;
     bool settingsApplyWifiPowerOnly = false;
+    bool settingsApplyDisplayOnly = false;
     SettingsBundle pendingSettings;
     bool mqttConnectionChangePending = false;
     bool mqttConnectRequested = false;
@@ -2896,6 +2899,7 @@ void applyRuntimeSettings() {
     batteryMonitor->applySettings(settings->battery, settings->battery.adcPin);
     displayManager->applySettings(settings->oled);
     Bno055::configure(*settings);
+    CanBus::configure(*settings);
     if (!settings->audio.enabled) {
         if (activeAudioOutputEnabled) {
             audioPlayer->disableOutput();
@@ -3079,7 +3083,9 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
     const bool hasPostedMotorRuntimeConfig = extractMotorRuntimeConfigFromJson(root, postedMotorRuntimeConfig);
     postedMotorRuntimeConfig.trim();
 
-    SettingsBundle updated = *settings;
+    std::unique_ptr<SettingsBundle> updatedStorage(new(std::nothrow) SettingsBundle(*settings));
+    if(!updatedStorage){error="Not enough memory to save settings";return false;}
+    auto& updated=*updatedStorage;
     if (!settingsManager->updateFromJson(updated, root, error)) {
         return false;
     }
@@ -3094,7 +3100,9 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
         return false;
     }
 
-    SettingsBundle persisted = settingsManager->load();
+    std::unique_ptr<SettingsBundle> persistedStorage(new(std::nothrow) SettingsBundle(settingsManager->load()));
+    if(!persistedStorage){error="Not enough memory to reload settings";return false;}
+    auto& persisted=*persistedStorage;
     if (hasPostedMotorRuntimeConfig && persisted.ui.motorRuntimeConfig != updated.ui.motorRuntimeConfig) {
         persisted.ui.motorRuntimeConfig = updated.ui.motorRuntimeConfig;
         persisted.usingSavedSettings = true;
@@ -3110,6 +3118,8 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
     deferredActions->pendingSettings = persisted;
     deferredActions->settingsApplyWifiPowerOnly = powerOnly &&
         (!deferredActions->settingsApplyPending || deferredActions->settingsApplyWifiPowerOnly);
+    deferredActions->settingsApplyDisplayOnly = object.size()==1 && object["oled"].is<JsonObjectConst>() &&
+        (!deferredActions->settingsApplyPending || deferredActions->settingsApplyDisplayOnly);
     deferredActions->settingsApplyPending = true;
     return true;
 }
@@ -3286,10 +3296,10 @@ void serviceCloneProvisioningSerial() {
             }
             Serial.flush();
         } else if (command == "ELMA_DIAGNOSTICS") {
-            DebugLog.printf("[health] uptime=%lu heap=%u min_heap=%u largest=%u wifi=%d rssi=%d mqtt=%d\n",
+            DebugLog.printf("[health] uptime=%lu heap=%u min_heap=%u largest=%u wifi=%d rssi=%d mqtt=%d stack_min=%u\n",
                 millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
-                static_cast<int>(WiFi.status()), WiFi.RSSI(), mqttManager != nullptr && mqttManager->isConnected());
+                static_cast<int>(WiFi.status()), WiFi.RSSI(), mqttManager != nullptr && mqttManager->isConnected(), unsigned(uxTaskGetStackHighWaterMark(nullptr)));
         }
     }
 }
@@ -3651,6 +3661,7 @@ void executePlaybackCommand(const PlaybackCommand& command) {
         }
         deferredActions->settingsApplyPending = true;
         deferredActions->settingsApplyWifiPowerOnly = false;
+        deferredActions->settingsApplyDisplayOnly = false;
         appState->setLastError("");
     } else if (command.action == "ota_install_latest") {
         if (otaManager != nullptr && otaManager->triggerCheck(true)) {
@@ -4078,6 +4089,7 @@ void setup() {
     activeAudioOutputEnabled = settings->audio.enabled;
     audioPlayer->begin(activeI2sBclkPin, activeI2sWsPin, activeI2sDoutPin, settings->device.savedVolumePercent, activeAudioOutputEnabled, *appState);
     configureAlarmClock(*settings);
+    CanBus::configure(*settings);
     logicDevice.begin(ELMA_COMPILED_LOGICS,*appState,[](JsonObject root){
         alarmClockSnapshot(root["clock"].to<JsonObject>());
         logicSleepSnapshot(root["power"].to<JsonObject>());
@@ -4312,14 +4324,17 @@ void flushPendingSettingsNow() {
         return;
     }
     settingsManager->save(deferredActions->pendingSettings);
-    *settings = settingsManager->load();
-    if (deferredActions->settingsApplyWifiPowerOnly) {
+    *settings = deferredActions->pendingSettings; // Already validated; avoid nested defaults/load on loopTask.
+    if (deferredActions->settingsApplyDisplayOnly) {
+        displayManager->applySettings(settings->oled);
+    } else if (deferredActions->settingsApplyWifiPowerOnly) {
         wifiManager->applySettings(*settings);
     } else {
         applyRuntimeSettings();
     }
     deferredActions->settingsApplyPending = false;
     deferredActions->settingsApplyWifiPowerOnly = false;
+    deferredActions->settingsApplyDisplayOnly = false;
     mqttManager->publishState();
 }
 }
@@ -4743,6 +4758,8 @@ void loop() {
         applyCpuFrequencyPolicy();
     }
 
+    Rs485::tick();
+    CanBus::tick();
     if (!runtimeStateSnapshotInitialized || now - lastRuntimeStateServiceAt >= kRuntimeStateServiceIntervalMs) {
         lastRuntimeStateServiceAt = now;
         runtimeStateSnapshot = appState->snapshot();

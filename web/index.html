@@ -103,9 +103,11 @@
     </section>
 
     <div class="grid security-blocked">
-      <section class="panel panel-wide">
+      
+<section class="panel panel-wide">
         <div class="tabs" role="tablist" aria-label="ELMA IoT tabs">
           <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-camera" data-tab="camera" title="Camera" data-tooltip="Camera" aria-label="Camera" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
+          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-rs485" data-tab="rs485" title="RS485 / Modbus RTU" data-tooltip="RS485 / Modbus RTU" aria-label="RS485 / Modbus RTU" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-4-4M20 17H4l4 4M5 4v6M19 14v6"/></svg></button>
           <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-bno055" data-tab="bno055" title="Orientation sensor" data-tooltip="Orientation sensor" aria-label="Orientation sensor" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m16 8-2 6-6 2 2-6z"/></svg></button>
           <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-microphones" data-tab="microphones" title="Microphones" data-tooltip="Microphones" aria-label="Microphones" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></button>
           <button class="tab-button tab-button-icon tab-gpio" type="button" role="tab" aria-label="Configuration" data-tooltip="Configuration" title="Configuration" aria-selected="true" aria-controls="tab-gpio" data-tab="gpio">
@@ -162,6 +164,18 @@
           </button>
         </div>
 
+        <section id="tab-rs485" class="tab-panel" role="tabpanel" hidden>
+<h2>RS485 / Modbus RTU</h2><p>Built-in MS1285. TX GPIO43 / RX GPIO44, automatic direction. The UART connector shares this port.</p>
+<form class="settings-grid">
+<label>Baud rate<select name="baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option><option>4800</option><option>2400</option><option>1200</option></select></label>
+<label>Parity<select name="parity"><option value="N">None</option><option value="E">Even</option><option value="O">Odd</option></select></label>
+<label>Stop bits<select name="stops"><option>1</option><option>2</option></select></label>
+<label>Unit<input name="unit" type="number" min="1" max="247" value="1" required></label>
+<label>Address (zero based)<input name="address" type="number" min="0" max="65535" value="0" required></label>
+<label>Count<input name="count" type="number" min="1" max="32" value="1" required></label>
+<label>Function<select name="function"><option value="3">03 Holding registers</option><option value="4">04 Input registers</option><option value="1">01 Coils</option><option value="2">02 Discrete inputs</option></select></label>
+<button type="submit" value="configure">Apply serial settings / Listen</button><button type="submit" value="read">Read</button></form><p data-notice role="status">Listening. No request sent.</p><pre data-values aria-label="Modbus values"></pre>
+<h3>Live messages</h3><label><input type="checkbox" data-pause> Pause log</label><button type="button" data-clear>Clear log</button><pre data-monitor aria-label="RS485 received and transmitted frames" style="max-height:18rem;overflow:auto;white-space:pre-wrap">Listening for frames...</pre></section>
         <div id="tab-bno055" class="tab-panel" role="tabpanel" aria-label="Orientation sensor">
           <h2>DFRobot BNO055</h2><canvas width="480" height="300" style="width:100%;max-width:600px" aria-label="Live compass and X Y Z measurements"></canvas>
           <label><input type="checkbox" data-enabled>Live sampling</label>
@@ -1321,6 +1335,7 @@
               <div id="storageProgressLabel" class="progress-label">Storage operation</div>
             </div>
             <div id="storageFileList" class="storage-file-list"></div>
+            <button id="storageFormatButton" type="button" class="secondary storage-tool-danger" hidden>Format SD Card</button>
           </div>
         </div>
 

@@ -1,4 +1,6 @@
 #include "i2c_validation.h"
+#include "can_contract.h"
+#include <driver/gpio.h>
 #include "settings_manager.h"
 #include "panel_geometry.h"
 #include "generated_project_defaults.h"
@@ -320,6 +322,22 @@ bool usesLegacyOtaRepository(const String& owner, const String& repository) {
 }
 
 String defaultOtaAssetTemplate() {
+#if APP_COMPILED_BOARD_PROFILE_ID > 0
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    const char* chip="esp32s3";
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+    const char* chip="esp32c3";
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+    const char* chip="esp32c6";
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+    const char* chip="esp32c2";
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+    const char* chip="esp32s2";
+#else
+    const char* chip="esp32";
+#endif
+    return String("elma-")+chip+"-board"+String(APP_COMPILED_BOARD_PROFILE_ID)+"-${version}.bin";
+#endif
 #if APP_SUNTON_PANEL == 1
     return "sunton-2432s028r-${version}.bin";
 #elif APP_SUNTON_PANEL == 2
@@ -744,8 +762,9 @@ SettingsBundle SettingsManager::defaults() const {
     return settings;
 }
 
-SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
-    SettingsBundle settings = input;
+void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
+    if(settings.ota.owner=="elma-iot" && settings.ota.repository=="ELMA-IoT" && settings.ota.manifestUrl.isEmpty())
+        settings.ota.repository="ELMA-IoT-Firmware";
 #if defined(APP_SPK_BOARD) || APP_SUNTON_PANEL
     // These are physically fitted chips, not optional external peripherals.
     settings.audio.enabled=true;settings.sd.enabled=true;settings.sd.sdmmc=false;
@@ -783,6 +802,21 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     settings.ui.peripheralHelperBindings="";serializeJson(bindings,settings.ui.peripheralHelperBindings);
 #endif
 
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+    // The VIEWE slot is soldered to this board; migrate old optional/disabled settings.
+    settings.sd.enabled=true;settings.sd.sdmmc=true;
+    settings.sd.csPin=21;settings.sd.sckPin=14;settings.sd.mosiPin=17;settings.sd.misoPin=16;
+    JsonDocument panelProfiles;
+    deserializeJson(panelProfiles,settings.ui.peripheralProfileSelections);
+    panelProfiles["storage"][0]="viewe-sdmmc";
+    panelProfiles["communication"][0]="viewe-ms1285";
+    String audioProfile=panelProfiles["audioProfiles"][0]|panelProfiles["audioProfile"]|"none";
+    if(audioProfile=="none"||audioProfile.isEmpty()||audioProfile.indexOf("buzzer")>=0||audioProfile.indexOf("bluetooth")>=0){
+        settings.audio.enabled=false;
+        if(audioProfile=="none"||audioProfile.isEmpty()){panelProfiles["audioProfiles"][0]="none";panelProfiles["audioProfile"]="none";}
+    }
+    settings.ui.peripheralProfileSelections="";serializeJson(panelProfiles,settings.ui.peripheralProfileSelections);
+#endif
 #if APP_HAS_CAMERA && !defined(APP_SPK_BOARD)
     settings.sd.enabled=true;settings.sd.sdmmc=true;
     settings.sd.csPin=13;settings.sd.sckPin=14;settings.sd.mosiPin=15;settings.sd.misoPin=2;
@@ -854,6 +888,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
         settings.ota.assetTemplate == "esp32s3-notifier-hacs-slim-${version}.bin") {
         settings.ota.assetTemplate = defaultOtaAssetTemplate();
     }
+    if(settings.ota.owner=="elma-iot" && settings.ota.repository=="ELMA-IoT-Firmware")settings.ota.assetTemplate=defaultOtaAssetTemplate();
     if (settings.ota.autoUpdate) {
         settings.ota.autoCheck = true;
     }
@@ -1004,8 +1039,7 @@ SettingsBundle SettingsManager::sanitize(const SettingsBundle& input) const {
     if (settings.ui.motorRuntimeConfig.isEmpty()) {
         settings.ui.motorRuntimeConfig = defaultMotorRuntimeConfig();
     }
-    settings.usingSavedSettings = input.usingSavedSettings;
-    return settings;
+
 }
 
 SettingsBundle SettingsManager::load() {
@@ -1013,7 +1047,7 @@ SettingsBundle SettingsManager::load() {
     settings.usingSavedSettings = readBool(PREF_MARKER, false);
     if (!settings.usingSavedSettings) {
         settings.mqtt.clientId = settings.device.deviceName;
-        return sanitize(settings);
+        sanitizeInPlace(settings);return settings;
     }
 
     const String storedMotorRuntimeConfig = readString("ui_motor", settings.ui.motorRuntimeConfig);
@@ -1160,7 +1194,7 @@ SettingsBundle SettingsManager::load() {
     settings.ui.peripheralProfileSelections = readString("ui_profiles", settings.ui.peripheralProfileSelections);
     settings.ui.motorRuntimeConfig = storedMotorRuntimeConfig.isEmpty() ? defaultMotorRuntimeConfig() : storedMotorRuntimeConfig;
 
-    settings = sanitize(settings);
+    sanitizeInPlace(settings);
     settings.ui.motorRuntimeConfig = storedMotorRuntimeConfig.isEmpty() ? defaultMotorRuntimeConfig() : storedMotorRuntimeConfig;
     settings.mqtt.clientId = fallbackIfEmpty(settings.mqtt.clientId, settings.device.deviceName);
     settings.usingSavedSettings = true;
@@ -1175,8 +1209,9 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         !preferences_.clear()) {
         return false;
     }
-    const std::unique_ptr<SettingsBundle> sanitizedStorage(new (std::nothrow) SettingsBundle(sanitize(settings)));
+    const std::unique_ptr<SettingsBundle> sanitizedStorage(new (std::nothrow) SettingsBundle(settings));
     if (!sanitizedStorage) return false;
+    sanitizeInPlace(*sanitizedStorage);
     const SettingsBundle& sanitized = *sanitizedStorage;
     const String rawMotorRuntimeConfig = settings.ui.motorRuntimeConfig.isEmpty()
         ? defaultMotorRuntimeConfig()
@@ -1776,7 +1811,33 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         copyJsonStringOrObject(ui, "motorRuntimeConfig", settings.ui.motorRuntimeConfig);
     }
 
-    settings = sanitize(settings);
+    sanitizeInPlace(settings);
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL
+    // GPIO38 is physically tied to BZ1. Safety override cannot repurpose it.
+    bool buzzerConflict=settings.device.statusLedPin==38||settings.device.statusLedGreenPin==38||settings.device.statusLedBluePin==38;
+    if(settings.audio.enabled)buzzerConflict|=settings.audio.wsPin==38||settings.audio.bclkPin==38||settings.audio.doutPin==38;
+    JsonDocument profiles,bindings;deserializeJson(profiles,settings.ui.peripheralProfileSelections);deserializeJson(bindings,settings.ui.peripheralHelperBindings);
+    for(JsonPairConst slot:bindings.as<JsonObjectConst>()){
+        String key=slot.key().c_str();int split=key.indexOf(':');if(split<0)continue;String group=key.substring(0,split);int index=key.substring(split+1).toInt();
+        const char* list=group=="control"?"controls":group=="audio"?"audioProfiles":group=="audioIn"?"audioInProfiles":group=="sensor"?"sensors":group=="input"?"inputs":group=="display"?"displayProfiles":group=="expansion"?"expansions":group.c_str();
+        String profile=profiles[list][index]|"none";if(profile=="none"||((group=="audio"||group=="control")&&profile=="buzzer"))continue;
+        for(JsonPairConst pin:slot.value().as<JsonObjectConst>()){
+            String signal=pin.key().c_str();if(signal.startsWith("LED_")||signal=="I2C_ADDRESS")continue;
+            if(pin.value()==38||(pin.value().is<const char*>()&&pin.value().as<String>()=="38"))buzzerConflict=true;
+        }
+    }
+    if(buzzerConflict){error="GPIO38 is dedicated to the BZ1 buzzer connector";return false;}
+#endif
+    {
+        JsonDocument canProfiles,canBindings;deserializeJson(canProfiles,settings.ui.peripheralProfileSelections);deserializeJson(canBindings,settings.ui.peripheralHelperBindings);
+        int index=0,count=0;for(JsonVariantConst profile:canProfiles["communication"].as<JsonArrayConst>()){
+            if(profile=="mcp2551"){
+                if(++count>1){error="Only one MCP2551 CAN transceiver is supported";return false;}
+                auto pins=canBindings["communication:"+String(index)];int tx=CanContract::pin(pins["CTX"]),rx=CanContract::pin(pins["CRX"]);
+                if(tx==rx||!GPIO_IS_VALID_OUTPUT_GPIO(tx)||!GPIO_IS_VALID_GPIO(rx)){error="Assign separate valid CTX output and CRX input GPIOs for CAN";return false;}
+            }++index;
+        }
+    }
     if(!validateI2cConfiguration(settings,error))return false;
     return true;
 }

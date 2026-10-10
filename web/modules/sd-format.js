@@ -20,14 +20,15 @@ export function createSdFormatDialog({ request, document = globalThis.document }
     }
     previous = state.state;
     if (modal?.dataset.mode === mode) return;
-    close();modal = document.createElement('dialog');modal.dataset.mode = mode;
+    close();modal = document.createElement('dialog');modal.dataset.mode = mode;modal.className='sd-format-dialog';
     const title = document.createElement('h2');title.textContent = busy ? 'Formatting SD card' : 'SD card detected';
     const text = document.createElement('p');
-    text.textContent = busy ? 'Keep power connected. Please wait…' : 'No supported filesystem was found. Formatting erases all files. Back up the card first. Format now?';
+    text.textContent = busy ? 'Keep power connected. Please wait…' : 'Formatting erases all files on the SD card. Back up the card first. Format now?';
     modal.append(title,text);
     modal.addEventListener('cancel', event => event.preventDefault());
     if (busy) { const progress=document.createElement('progress');progress.setAttribute('aria-label','Formatting SD card');modal.append(progress); }
-    else for (const [label,action] of [['Cancel','cancel'],['Erase and format','confirm&erase=yes']]) {
+    else {const formats=document.createElement('select');formats.setAttribute('aria-label','Filesystem');const option=document.createElement('option');option.value='FAT32';option.textContent='FAT32';formats.append(option);modal.append(formats);}
+    if (!busy) for (const [label,action] of [['Cancel','cancel'],['Erase and format','confirm&erase=yes&filesystem=FAT32']]) {
       const button=document.createElement('button');button.textContent=label;
       button.onclick=async()=>{
         const current=modal;for(const b of current.querySelectorAll('button'))b.disabled=true;

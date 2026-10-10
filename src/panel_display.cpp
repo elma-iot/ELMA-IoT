@@ -1,6 +1,7 @@
 #include "panel_display.h"
 #if APP_HAS_ONBOARD_PANEL
 #include "device_log.h"
+#include "panel_boot.h"
 
 bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
     if (!getBuffer()) return false;
@@ -16,12 +17,7 @@ bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
 #endif
     setRotation(rotation);
     brightness(percent);
-    fillScreen(0);
-    setTextColor(1);
-    setTextSize(2);
-    setCursor(12, height()/2-8);
-    print("ELMA-IoT");
-    flush();
+    drawPanelBootLogo(*this);
     DebugLog.printf("[display] Panel %dx%d ready; PSRAM=%u; touch=%s\n",
                     kPanelWidth, kPanelHeight, ESP.getPsramSize(), touchEnabled ? kPanelTouchName : "disabled");
     return true;

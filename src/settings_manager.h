@@ -22,7 +22,7 @@ class SettingsManager {
     Preferences preferences_;
     bool writeFailed_ = false;
 
-    SettingsBundle sanitize(const SettingsBundle& input) const;
+    void sanitizeInPlace(SettingsBundle& settings) const;
     bool writeStringIfChanged(const char* key, const String& value);
     bool writeBoolIfChanged(const char* key, bool value);
     bool writeUIntIfChanged(const char* key, uint32_t value);

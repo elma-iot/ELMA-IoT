@@ -93,7 +93,7 @@ constexpr char MQTT_BASE_TOPIC[] = "elma_iot";
 constexpr bool MQTT_DISCOVERY_ENABLED = true;
 
 constexpr char OTA_OWNER[] = "elma-iot";
-constexpr char OTA_REPOSITORY[] = "ELMA-IoT";
+constexpr char OTA_REPOSITORY[] = "ELMA-IoT-Firmware";
 constexpr char OTA_CHANNEL[] = "stable";
 constexpr char OTA_ASSET_TEMPLATE[] = "esp32-notifier-${version}.bin";
 constexpr char OTA_MANIFEST_URL[] = "";

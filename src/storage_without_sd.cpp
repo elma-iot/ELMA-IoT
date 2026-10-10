@@ -30,7 +30,8 @@ bool requestStorageBackgroundJob(void (*work)(void*),void* context){
     return false;
 #endif
 }
-bool requestSdFormat(bool, String& error) { error="SD storage is unavailable";return false; }
+bool requestSdFormatPrompt(String& error){error="SD storage is unavailable";return false;}
+bool requestSdFormat(bool, String& error, const String&) { error="SD storage is unavailable";return false; }
 SdFormatState sdFormatState(){return SdFormatState::Idle;}
 bool sdFormatPromptNeeded(){return false;}
 void dismissSdFormatPrompt(){}

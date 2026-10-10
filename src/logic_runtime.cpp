@@ -137,7 +137,14 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
         auto binding = node(n)["binding"];
         if (binding["kind"] == "status" && (binding["availability"].isNull() || path(binding["availability"]).as<bool>()))
             result.set(path(binding["path"] | ""));
-    } else if(type=="hardware.gpio")result.set(status_["gpio"][id][port]);
+    } else if(type=="hardware.can.received")result.set(status_["can"]["received"][port]);
+    else if(type=="hardware.can.status")result.set(status_["can"][port]);
+    else if(type=="hardware.modbus.value"){
+        int index=input(n,"index")|0;auto rs=status_["rs485"];bool available=rs["ready"]==true&&index>=0&&index<int(rs["values"].size());
+        if(std::string(port)=="available")result.set(available);else if(available)result.set(rs["values"][index]);
+    } else if(type=="hardware.modbus.received")result.set(status_["rs485"]["received"][port]);
+    else if(type=="hardware.modbus.status")result.set(status_["rs485"][port]);
+    else if(type=="hardware.gpio")result.set(status_["gpio"][id][port]);
     else if(type=="hardware.led")result.set(status_["builtinLed"][port]);
     else if (type == "peripheral.reference") result.set(node(n));
     else if (type=="peripheral.low" || type=="peripheral.critical") {
@@ -274,6 +281,13 @@ void Runtime::execute(size_t n, const char* trigger) {
         JsonDocument args; auto target = node(n);
         if (type.compare(0,7,"action.")==0) { auto ref=input(n,"device");target=ref.as<JsonObjectConst>();args["action"]=type.substr(7); }
         else args["action"]=type.substr(type.find('.')+1);
+        if(type=="hardware.can.configure"||type=="hardware.can.send"){
+            args["action"]=type=="hardware.can.configure"?"configure":"send";
+            for(const char* key:{"bitrate","listenOnly","identifier","extended","remote","data","length"})args[key].set(input(n,key));
+        }
+        if(type=="hardware.modbus.read"){
+            args["action"]="read";for(const char* key:{"baud","parity","stops","unit","function","address","count"})args[key].set(input(n,key));
+        }
         if (type=="peripheral.play") {
             auto source=input(n,"source");
             if(source.is<const char*>()&&strlen(source.as<const char*>()))args["source"]["path"].set(source);
@@ -376,6 +390,12 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
         if((type=="event.start" || (node(n)["binding"]["kind"]=="lifecycle" && node(n)["binding"]["event"]=="started")) && !state.startSent){state.startSent=true;emit(n);}
         if(type.compare(0,6,"event.")==0 && type!="event.start" && type!="event.wake") {
             if(changed(n,input(n,"value"),type=="event.rising" ? "rising" : type=="event.falling" ? "falling" : "change"))emit(n);
+        } else if(type=="hardware.can.received") {
+            uint32_t sequence=status_["can"]["rxSequence"]|0u;int64_t identifier=input(n,"identifierFilter")|int64_t(-1);
+            if(sequence&&sequence!=state.wakeSequence){state.wakeSequence=sequence;if(identifier<0||identifier==(status_["can"]["received"]["identifier"]|int64_t(-2)))emit(n);}
+        } else if(type=="hardware.modbus.received") {
+            uint32_t sequence=status_["rs485"]["rxSequence"]|0u;int unit=input(n,"unitFilter")|0;
+            if(sequence&&sequence!=state.wakeSequence){state.wakeSequence=sequence;if(!unit||unit==(status_["rs485"]["received"]["unit"]|-1))emit(n);}
         } else if(node(n)["binding"]["kind"]=="transition") {
             auto b=node(n)["binding"];if(changed(n,path(b["path"]|""),b["edge"]|"change",b["equals"]))emit(n);
         } else if(type=="peripheral.rising" || type=="peripheral.falling") {

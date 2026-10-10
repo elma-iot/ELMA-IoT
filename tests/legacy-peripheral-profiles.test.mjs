@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const source = fs.readFileSync(new URL('../web/modules/legacy-peripheral-profiles.js', import.meta.url));
-const {restoreLegacyPeripheralProfiles: restore} = await import('data:text/javascript;base64,' + source.toString('base64'));
+import {restoreLegacyPeripheralProfiles as restore} from '../web/modules/legacy-peripheral-profiles.js';
 
 test('legacy hardware flags restore dropdowns without changing pins or settings', () => {
   const settings = {audio: {enabled:true, doutPin:25}, oled:{enabled:true, displayType:'oled', sdaPin:23}, sd:{enabled:true}, ui:{peripheralProfiles:{}}};
@@ -28,4 +27,11 @@ test('disabled and Waveshare devices retain the appropriate profiles', () => {
 
 test('VIEWE panel survives legacy inference without becoming an I2C OLED', () => {
   assert.deepEqual(restore({oled:{enabled:true,displayType:'panel'}}).displayProfiles,['viewe-onboard-lcd']);
+});
+
+test('VIEWE does not invent a DAC from legacy audio flag; explicit DAC survives',()=>{
+ const settings={audio:{enabled:true},ui:{gpioBoardSelection:'viewe-uedx32480035e-wb-a',peripheralProfiles:{}}};
+ assert.deepEqual(restore(settings).audioProfiles,['none']);
+ settings.ui.peripheralProfiles.audioProfiles=['max98357a-i2s-amp'];
+ assert.deepEqual(restore(settings).audioProfiles,['max98357a-i2s-amp']);
 });

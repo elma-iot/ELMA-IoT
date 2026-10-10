@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include "web_server.h"
 #include "bno055_service.h"
+#include "rs485_service.h"
 #include "microphone_service.h"
 #include "device_log.h"
 
@@ -1097,6 +1098,16 @@ void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocume
 }
 
 void WebServerManager::registerApiRoutes() {
+    server_.on("/api/rs485",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        JsonDocument doc;Rs485::snapshot(doc.to<JsonObject>());sendJson(request,doc);
+    });
+    auto* rsHandler=new AsyncCallbackJsonWebHandler("/api/rs485",[this](AsyncWebServerRequest* request,JsonVariant& json){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        String error;JsonDocument result;bool ok=Rs485::command(json,error);result["queued"]=ok;if(!ok)result["error"]=error;
+        String data;serializeJson(result,data);request->send(ok?202:400,"application/json",data);
+    });rsHandler->setMaxContentLength(512);rsHandler->setMethod(HTTP_POST);server_.addHandler(rsHandler);
+
     server_.on("/api/bno055",HTTP_GET,[this](AsyncWebServerRequest* request){
         if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
         JsonDocument doc;Bno055::snapshot(doc.to<JsonObject>());sendJson(request,doc);
@@ -2055,9 +2066,10 @@ void WebServerManager::registerApiRoutes() {
         if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
         String action=request->hasParam("action")?request->getParam("action")->value():String();
         JsonDocument result;String error;
-        if(action=="cancel"){dismissSdFormatPrompt();result["ok"]=true;}
+        if(action=="prompt"){if(!requestSdFormatPrompt(error)){result["error"]=error;sendJson(request,result,409);return;}result["ok"]=true;}
+        else if(action=="cancel"){dismissSdFormatPrompt();result["ok"]=true;}
         else if(action=="confirm" && request->hasParam("erase") && request->getParam("erase")->value()=="yes"){
-            if(!requestSdFormat(true,error)){result["error"]=error;sendJson(request,result,409);return;}
+            if(!requestSdFormat(true,error,request->hasParam("filesystem")?request->getParam("filesystem")->value():String("FAT32"))){result["error"]=error;sendJson(request,result,409);return;}
             result["ok"]=true;
         }else{result["error"]="Explicit erase confirmation required";sendJson(request,result,400);return;}
         sendJson(request,result);

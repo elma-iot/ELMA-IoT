@@ -9,7 +9,7 @@ $buildRoot = Join-Path $projectRoot '.elma-flasher-build'
 $assetRoot = Join-Path $buildRoot 'assets'
 $venvRoot = Join-Path $buildRoot 'venv310'
 $versionHeader = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'include\version.h')
-if ($versionHeader -notmatch '#define APP_VERSION "(\d+\.\d+\.\d+)"') {
+if ($versionHeader -notmatch '#define APP_VERSION "(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"') {
     throw 'Unable to read APP_VERSION from include/version.h.'
 }
 $releaseVersion = $Matches[1]

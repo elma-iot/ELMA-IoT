@@ -46,6 +46,13 @@ void DisplayManager::applySettings(const OledSettings& settings) {
 #if APP_HAS_ONBOARD_PANEL
     const bool keepPanel=panel_&&settings.enabled&&settings.displayType=="panel"&&settings.touchEnabled==settings_.touchEnabled;
 #endif
+#if APP_HAS_ONBOARD_PANEL
+    // Backlight and idle settings do not invalidate LVGL, its widgets or DMA buffers.
+    if(keepPanel && dashboard_ && settings.interfaceMode==settings_.interfaceMode && settings.rotation==settings_.rotation){
+        settings_=settings;dimmed_=false;lastActivityAt_=millis();
+        panel_->brightness(settings_.brightness);return;
+    }
+#endif
     settings_ = settings;
     ssd1306_.reset();
     sh1106_.reset();

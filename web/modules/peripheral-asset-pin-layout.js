@@ -5,6 +5,7 @@ import { canonicalSignalKey } from "./peripheral-pin-model.js";
 // image. Aliases let the electrical model use canonical application names even
 // when a board silkscreen uses BCK/LCK/VDD/VIN.
 const ASSET_CONTACTS = {
+ "mcp2551-breadboard.svg":{"5V":[0.06205816,0.10312085,"left"], "GND":[0.06205816,0.26187024,"left"], "CTX":[0.06205816,0.42061962,"left"], "CRX":[0.06205816,0.57936901,"left"], "CANH":[0.06205816,0.73811839,"left"], "CANL":[0.06205816,0.89686778,"left"]},
   "pcm5102a-breadboard.svg": {
     SCK: [0.0445, 0.1021, "left"],
     BCLK: [0.0445, 0.2373, "left"],

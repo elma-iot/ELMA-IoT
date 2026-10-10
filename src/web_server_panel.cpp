@@ -9,6 +9,8 @@
 #include "version.h"
 #include "panel_radio.h"
 #include "bno055_service.h"
+#include "rs485_service.h"
+#include <memory>
 namespace {
 portMUX_TYPE browseMux=portMUX_INITIALIZER_UNLOCKED;
 struct PanelBrowseJob{StorageTarget target;String path,result;int offset;bool done=false;};
@@ -39,7 +41,8 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
  root["version"]=APP_VERSION;security_.status(root["security"].to<JsonObject>());
  if(security_.locked())return;
  root["sdNeedsFormat"]=sdFormatPromptNeeded();
- SettingsBundle settings=settingsGetter_();auto config=root["settings"].to<JsonObject>();
+ if(page=="firmware")otaManager_->appendStatusJson(root["ota"].to<JsonObject>());
+ std::unique_ptr<SettingsBundle> snapshot(new(std::nothrow) SettingsBundle(settingsGetter_()));if(!snapshot)return;const auto& settings=*snapshot;auto config=root["settings"].to<JsonObject>();
  const char* section=page=="wifi"?"wifi":page=="mqtt"?"mqtt":page=="device"||page=="gpio"?"device":page=="oled"?"oled":page=="battery"?"battery":page=="effects"?"effects":page=="playback"||page.startsWith("storage-")?"audio":page=="firmware"?"ota":nullptr;
  if(section)settingsManager_->toJson(settings,config,section,false);
  if(page=="gpio"||page=="wled"||page=="motor")settingsManager_->toJson(settings,config,"ui",false);
@@ -54,9 +57,10 @@ void WebServerManager::panelSnapshot(const String& page,JsonObject root){
   if(scan.complete)wifiManager_->appendScanResultsJson(result["networks"].to<JsonArray>());
  }
  auto caps=root["caps"].to<JsonObject>();
+ caps["rs485"]=Rs485::available();if(page=="rs485")Rs485::snapshot(root["rs485"].to<JsonObject>(),false);
  caps["bno055"]=selected(profiles["sensors"],"bno055");if(page=="bno055")Bno055::snapshot(root["bno055"].to<JsonObject>());
  caps["wled"]=selected(profiles["controls"],"ws2812");caps["motor"]=selected(profiles["controls"],"motor-driver");
- caps["playback"]=settings.audio.enabled||selected(profiles["audioProfiles"])||selected(profiles["audioProfile"]);caps["effects"]=caps["playback"];
+ caps["playback"]=settings.audio.enabled;caps["effects"]=caps["playback"];
  caps["battery"]=selected(profiles["sensors"],"voltage-divider")&&settings.battery.adcPin>0;
  caps["oled"]=selected(profiles["displayProfiles"])||selected(profiles["displayProfile"])||settings.oled.enabled;
  // Slot capability is independent of whether a card is inserted or mounted.
@@ -99,7 +103,7 @@ bool WebServerManager::panelCommand(const String& action,JsonVariantConst args,S
  {JsonDocument activity,result;activity["action"]="activity";security_.command(activity,result.to<JsonObject>());}
  if(action=="patch"){
   // Resolve against current settings here, not the older screen snapshot.
-  JsonDocument latest(panelJsonAllocator()),patch(panelJsonAllocator());auto current=settingsGetter_();auto latestRoot=latest.to<JsonObject>();
+  JsonDocument latest(panelJsonAllocator()),patch(panelJsonAllocator());std::unique_ptr<SettingsBundle> currentStorage(new(std::nothrow) SettingsBundle(settingsGetter_()));if(!currentStorage){error="Not enough memory to apply settings";return false;}const auto& current=*currentStorage;auto latestRoot=latest.to<JsonObject>();
   for(JsonObjectConst change:args["changes"].as<JsonArrayConst>()){
    std::string path=change["path"]|"";size_t split=path.find('/');if(split==std::string::npos){error="Invalid setting";return false;}
    const std::string section=path.substr(0,split);if(patch[section].isNull()){settingsManager_->toJson(current,latestRoot,section.c_str());if(latest.overflowed()){error="Not enough memory to apply settings";return false;}patch[section].set(latest[section]);}
@@ -109,10 +113,12 @@ bool WebServerManager::panelCommand(const String& action,JsonVariantConst args,S
   return settingsSaver_(patch,error);
  }
  if(action=="logics"){JsonDocument result;return logicsHandler_&&logicsHandler_(args,result,error);}
+ if(action=="rs485")return Rs485::command(args,error);
  if(action=="bno055")return Bno055::command(args,error);
  if(action=="wifiScan"){if(wifiManager_->startScan())return true;error="Wi-Fi scan could not start; try again";return false;}
  if(action=="radio")return PanelRadio::request(args,error);
- if(action=="formatSd")return requestSdFormat(args["confirmed"]|false,error);
+ if(action=="formatSdPrompt")return requestSdFormatPrompt(error);
+ if(action=="formatSd")return requestSdFormat(args["confirmed"]|false,error,args["filesystem"]|"FAT32");
  if(action=="dismissSdFormat"){dismissSdFormatPrompt();return true;}
  if(action=="mountSd")return requestSdMount(true,error);
  if(action=="ejectSd")return requestSdMount(false,error);

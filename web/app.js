@@ -1,3 +1,4 @@
+import {createRs485Tab} from "./modules/rs485-tab.js";
 import {createBno055Tab} from "./modules/bno055-tab.js";
 import {I2C_PROFILES,i2cAddresses,i2cCompatible,i2cIssues} from "./modules/i2c-policy.js";
 import {ONBOARD_BOARDS} from "./modules/onboard-boards.js";
@@ -333,6 +334,8 @@ const PERIPHERAL_STORAGE_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_COMMUNICATION_PROFILE_OPTIONS = [
+  {value:"mcp2551",label:"MCP2551 CAN (5 V; CRX level shifter required)"},
+  {value:"viewe-ms1285",label:"Onboard MS1285 RS485 / Modbus RTU"},
   { value: "none", label: "None" },
   { value: "uart", label: "UART" },
   { value: "rs485", label: "RS485" },
@@ -348,6 +351,7 @@ const PERIPHERAL_POWER_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_DIAGRAM_ASSET_MAP = {
+  communication: {mcp2551:{src:"/mcp2551-breadboard.svg",label:"MCP2551 CAN"}},
   audio: {
     "max98357a-i2s-amp": { src: "/max98357a-breadboard.svg", label: "Audio Out" },
     "pcm5102-i2s-dac": { src: "/pcm5102a-breadboard.svg", label: "Audio Out" },
@@ -1334,6 +1338,7 @@ const elements = {
   storageNewFolderButton: document.getElementById("storageNewFolderButton"),
   storageRemountButton: document.getElementById("storageRemountButton"),
   storageEjectButton: document.getElementById("storageEjectButton"),
+  storageFormatButton: document.getElementById("storageFormatButton"),
   storageReindexButton: document.getElementById("storageReindexButton"),
   storageSelectModeButton: document.getElementById("storageSelectModeButton"),
   storageSelectAllButton: document.getElementById("storageSelectAllButton"),
@@ -2066,7 +2071,7 @@ function hasConfiguredProfile(profiles) {
 function hasConfiguredAudioOutput() {
   const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
   if (ONBOARD_BOARDS[board]?.builtinProfiles?.audio) return true;
-  return hasConfiguredProfile(normalizedPeripheralAudioProfiles());
+  return normalizedPeripheralAudioProfiles().some(p=>p!=="none" && !p.includes("buzzer") && !p.includes("bluetooth"));
 }
 
 function hasConfiguredDisplayPeripheral() {
@@ -2122,6 +2127,7 @@ function restoreSavedActiveTabIfVisible() {
 
 function updateConfiguredFeatureVisibility() {
   const audioConfigured = hasConfiguredAudioOutput();
+  document.body.classList.toggle("device-audio-unavailable",!audioConfigured);
   const batteryConfigured = hasConfiguredBatterySensePeripheral();
   const displayConfigured = hasConfiguredDisplayPeripheral();
   const externalStorageConfigured = hasConfiguredExternalStoragePeripheral();
@@ -2250,7 +2256,7 @@ function normalizedPeripheralExpansionProfiles() {
 
 function appendPeripheralOptions(select, options, selectedValue) {
   const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
-  options=options.filter(o=>!['spk-ns4168','spk-dual-mic'].includes(o.value)||ONBOARD_BOARDS[board]?.audioProfile==='spk-ns4168').filter(o=>o.value!=='sunton-speaker'||ONBOARD_BOARDS[board]?.audioProfile==='sunton-speaker').filter(o=>o.value!=='camera-sdmmc'||!!(ONBOARD_BOARDS[board]?.cameraPins&&ONBOARD_BOARDS[board]?.sdmmcPins)).filter(o=>o.value!=='viewe-sdmmc'||board.startsWith('viewe-')).filter(o=>o.value!=='viewe-onboard-lcd'||!!ONBOARD_BOARDS[board]?.displayProfile);
+  options=options.filter(o=>o.value!=="mcp2551"||["esp32","esp32s2","esp32s3","esp32c3"].includes(boardChipFamily(board))).filter(o=>!['spk-ns4168','spk-dual-mic'].includes(o.value)||ONBOARD_BOARDS[board]?.audioProfile==='spk-ns4168').filter(o=>o.value!=='sunton-speaker'||ONBOARD_BOARDS[board]?.audioProfile==='sunton-speaker').filter(o=>o.value!=='camera-sdmmc'||!!(ONBOARD_BOARDS[board]?.cameraPins&&ONBOARD_BOARDS[board]?.sdmmcPins)).filter(o=>o.value!=='viewe-sdmmc'||board.startsWith('viewe-')).filter(o=>o.value!=='viewe-ms1285'||!!ONBOARD_BOARDS[board]?.rs485).filter(o=>o.value!=='viewe-onboard-lcd'||!!ONBOARD_BOARDS[board]?.displayProfile);
   options=options.filter(o=>o.value!=="ldr"||ONBOARD_BOARDS[board]?.builtinProfiles?.sensor==="ldr");
   for (const optionConfig of options) {
     const option = document.createElement("option");
@@ -2736,6 +2742,10 @@ function peripheralGpioAssignments() {
       if (!assignments.some(assignment=>assignment.key===alias)) assignments.push({key:alias,pin:Number(value),label:`${peripheralHelperProfileLabel(group,profile,index)} ${signal}`});
     }
   }
+  const buzzer=ONBOARD_BOARDS[activeGpioBoardProfile()]?.buzzerPin;
+  if(buzzer!==undefined&&!normalizedPeripheralAudioProfiles().includes('buzzer')&&!normalizedPeripheralControlProfiles().includes('buzzer')) assignments.push({key:'onboard.buzzer',pin:buzzer,label:'BZ1 buzzer only'});
+  const rs485=ONBOARD_BOARDS[activeGpioBoardProfile()]?.rs485;
+  if(rs485) for(const key of ["tx","rx"]) assignments.push({key:`onboard.rs485.${key}`,pin:rs485[key],label:`Onboard MS1285 ${key.toUpperCase()}`});
   const charge=Number(state.settings?.battery?.chargingSensePin);
   if(charge>0) assignments.push({key:"battery.chargingSensePin",pin:charge,label:"Charging sense"});
   return assignments;
@@ -2761,7 +2771,7 @@ function peripheralGpioOptions(group, profile, signal, ownKey, selected="") {
   if(group === "input" && ["SIG","TOUCH","COM"].includes(signal)) ownKey=`ui.input.${ownKey.split(".")[2]}.pin`;
   const layout=GPIO_BOARD_LAYOUTS[activeGpioBoardProfile()] || {};
   const exposedPins=new Set([...(layout.left || []),...(layout.right || [])].filter(entry=>entry.pin!==null && entry.pin!==undefined).map(entry=>Number(entry.pin)));
-  const pins=safePeripheralPins({chip:activeChipFamily(),inputPins:validBoardPins(false),outputPins:validBoardPins(true),exposedPins,blocked:motorUnsafePins(),touchPins:touchCapablePins(),requirement:peripheralPinRequirement(group,profile,signal),override:Boolean(elements.gpioSafetyOverride?.checked) && !assigningPeripheralDefaults});
+  const pins=safePeripheralPins({chip:activeChipFamily(),inputPins:validBoardPins(false),outputPins:validBoardPins(true),exposedPins,blocked:motorUnsafePins(),touchPins:touchCapablePins(),requirement:peripheralPinRequirement(group,profile,signal),override:Boolean(elements.gpioSafetyOverride?.checked) && !assigningPeripheralDefaults}).filter(pin=>pin!==ONBOARD_BOARDS[activeGpioBoardProfile()]?.buzzerPin || profile==="buzzer");
   return occupiedPinChoices(pins,peripheralGpioAssignments(),ownKey,selected,a=>shareI2cRoles(ownKey,a.key));
 }
 
@@ -2856,6 +2866,7 @@ function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
 }
 
 function helperSignalLabels(groupKey, profileValue) {
+  if(groupKey==="communication"&&profileValue==="mcp2551")return ["CTX","CRX"];
   const profile = String(profileValue || "none");
   if (!profile || profile === "none" || profile.includes("bluetooth")) {
     return [];
@@ -3857,6 +3868,7 @@ function peripheralDiagramTemplatePins(groupKey, profileValue) {
       }
       return ["IN1", "IN2", "ENA", "VCC", "GND"];
     case "communication":
+      if(profile==="mcp2551")return ["5V","GND","CTX","CRX","CANH","CANL"];
       if (profile.includes("uart")) {
         return ["TX", "RX", "VCC", "GND"];
       }
@@ -4708,11 +4720,12 @@ function renderPeripheralDiagramNow() {
 
   communicationProfiles.slice(0, 4).forEach((profile, index) => {
     const normalizedProfile = String(profile || "none");
-    if (normalizedProfile === "none") {
+    if (normalizedProfile === "none" || isBuiltinPeripheral("communication",normalizedProfile,index)) {
       return;
     }
     nodes.push({
       id: `communication-${index}`,
+      src: PERIPHERAL_DIAGRAM_ASSET_MAP.communication?.[normalizedProfile]?.src,
       className: "peripheral-diagram-node",
       style: peripheralDiagramSlotStyle("communication", index),
       groupKey: "communication",
@@ -6189,9 +6202,9 @@ function storageBadgeLabel(entry) {
 
 function storageItemSubtitle(entry) {
   if (entry?.isDirectory) {
-    return `Folder Р Р†Р вЂљРЎС› ${entry.path || ""}`;
+    return `Folder | ${entry.path || ""}`;
   }
-  return `${formatBytes(entry?.sizeBytes || 0)} Р Р†Р вЂљРЎС› ${entry?.path || ""}`;
+  return `${formatBytes(entry?.sizeBytes || 0)} | ${entry?.path || ""}`;
 }
 
 function updateStorageToolbar(storage = state.storageInfoByTarget[state.activeStorageTarget] || {}) {
@@ -6246,6 +6259,7 @@ function updateStorageToolbar(storage = state.storageInfoByTarget[state.activeSt
   }
   if (elements.storageRemountButton) {
     if(elements.storageEjectButton)elements.storageEjectButton.hidden=state.activeStorageTarget!=="sd";
+    if(elements.storageFormatButton)elements.storageFormatButton.hidden=state.activeStorageTarget!=="sd";
     const isSdTarget = state.activeStorageTarget === "sd";
     elements.storageRemountButton.hidden = !isSdTarget;
     elements.storageRemountButton.disabled = !isSdTarget;
@@ -6767,7 +6781,7 @@ function setStoragePreviewSummary({ title, artist, album, fileName, sizeBytes, p
     elements.storagePreviewTitle.textContent = resolvedTitle;
   }
   if (elements.storagePreviewMeta) {
-    elements.storagePreviewMeta.textContent = `${resolvedArtist} Р Р†Р вЂљРЎС› ${resolvedAlbum} Р Р†Р вЂљРЎС› ${formatBytes(sizeBytes || 0)}`;
+    elements.storagePreviewMeta.textContent = `${resolvedArtist} | ${resolvedAlbum} | ${formatBytes(sizeBytes || 0)}`;
   }
   updateStoragePreviewPath(path || resolvedFileName);
   if (elements.storagePreviewAlbum) {
@@ -7388,7 +7402,7 @@ async function openStoragePreview(entry) {
     elements.storagePreviewTitle.textContent = entry.name || "Track Preview";
   }
   if (elements.storagePreviewMeta) {
-    elements.storagePreviewMeta.textContent = `${formatBytes(entry.sizeBytes || 0)} Р Р†Р вЂљРЎС› ${storageBadgeLabel(entry)}`;
+    elements.storagePreviewMeta.textContent = `${formatBytes(entry.sizeBytes || 0)} | ${storageBadgeLabel(entry)}`;
   }
   updateStoragePreviewPath(entry.path);
   if (elements.storagePreviewAlbum) {
@@ -7439,16 +7453,12 @@ function renderStorageManager(payload) {
     const loadedCount = entries.length;
     const progressSummary = formatLoadProgress(loadedCount, meta.totalEntries || loadedCount);
     const progressLabel = meta.loadingMore || meta.hasMore
-      ? ` Р Р†Р вЂљРЎС› showing ${progressSummary}${meta.loadingMore ? ", loading more..." : ""}`
-      : "";
+      ? ` | showing ${progressSummary}${meta.loadingMore ? ", loading more..." : ""}` : "";
     const cardLabel = target === "sd" && Number(storage.cardSizeBytes || 0) > 0
-      ? ` Р Р†Р вЂљРЎС› card ${formatBytes(storage.cardSizeBytes || 0)}`
-      : "";
+      ? ` | card ${formatBytes(storage.cardSizeBytes || 0)}` : "";
     elements.storageSummary.textContent = storage.mounted
-      ? `${formatBytes(storage.usedBytes || 0)} used of ${formatBytes(storage.totalBytes || 0)} filesystem Р Р†Р вЂљРЎС› ${formatBytes(storage.freeBytes || 0)} free${cardLabel} Р Р†Р вЂљРЎС› ${currentPath}${progressLabel}`
-      : (target === "sd"
-        ? "SD card unavailable. Insert a card and try mounting it again."
-        : "Flash filesystem is not mounted.");
+      ? `${formatBytes(storage.usedBytes || 0)} used of ${formatBytes(storage.totalBytes || 0)} filesystem | ${formatBytes(storage.freeBytes || 0)} free${cardLabel} | ${currentPath}${progressLabel}`
+      : (target === "sd" ? "SD card unavailable. Insert a card and try mounting it again." : "Flash filesystem is not mounted.");
   }
   if (elements.storageLimit) {
     elements.storageLimit.textContent = storage.mounted
@@ -7549,7 +7559,7 @@ async function refreshStorageManager(target = state.activeStorageTarget, directo
   } else {
     setStorageMeta({ loadingMore: false, requestId }, resolvedTarget);
     rerenderStorageManager(resolvedTarget);
-    setStorageStatus(`Ready Р Р†Р вЂљРЎС› ${formatLoadProgress(activeStorageEntries(resolvedTarget).length, Number(payload?.totalEntries || activeStorageEntries(resolvedTarget).length))}`);
+    setStorageStatus(`Ready | ${formatLoadProgress(activeStorageEntries(resolvedTarget).length, Number(payload?.totalEntries || activeStorageEntries(resolvedTarget).length))}`);
   }
   queueMicrotask(() => ensureStorageListFilled(resolvedTarget).catch((error) => console.error(error)));
   return payload;
@@ -7974,7 +7984,7 @@ function setFirmwareAuthorLink(settings = state.settings) {
     return;
   }
   const owner = String(settings?.ota?.owner || "elma-iot").trim() || "elma-iot";
-  const repository = String(settings?.ota?.repository || "ELMA-IoT").trim() || "ELMA-IoT";
+  const repository = String(settings?.ota?.repository || "ELMA-IoT-Firmware").trim() || "ELMA-IoT-Firmware";
   elements.heroFirmwareAuthorLink.href = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`;
 }
 
@@ -9242,10 +9252,11 @@ function updatePlaybackActionButton() {
   updatePlaybackHeroControls();
 }
 
-let cameraTab,microphonesTab,bno055Tab;
+let cameraTab,microphonesTab,bno055Tab,rs485Tab;
 function setupTabs() {
   cameraTab ||= createCameraTab({request});
   microphonesTab ||= createMicrophonesTab({request});
+  rs485Tab ||= createRs485Tab({request});
   bno055Tab ||= createBno055Tab({request});
   logsTab ||= createLogsTab({ request });
   plotsTab ||= createPlotsTab({ request });
@@ -9254,6 +9265,7 @@ function setupTabs() {
     onActivate(resolvedTabName) {
       cameraTab?.setActive(resolvedTabName === "camera");
       microphonesTab?.setActive(resolvedTabName === "microphones");
+      rs485Tab?.setActive(resolvedTabName === "rs485");
       bno055Tab?.setActive(resolvedTabName === "bno055");
       logsTab.setActive(resolvedTabName === "logs");
       plotsTab.setActive(resolvedTabName === "plots");
@@ -9305,6 +9317,8 @@ async function loadStatus() {
     cameraTab?.update(status);
     sdFormatDialog.update(status);
     microphonesTab?.update(status);
+    rs485Tab?.update(state.settings,status?.system?.webUiLocked);
+    document.querySelectorAll(".storage-playback-strip").forEach(el=>el.hidden=!hasConfiguredAudioOutput());
     bno055Tab?.update(state.settings,status?.system?.webUiLocked);
     if (status.firmware?.touchscreen && !status.system?.webUiLocked && !document.hidden) {
       // A transient settings read must not discard an otherwise valid status update.

@@ -5436,3 +5436,26 @@ select option, select optgroup {background-color:var(--panel);color:var(--ink)}
 .led-array-compact .led-array-number{opacity:.65}
 
 .camera-viewport{position:relative;min-height:240px;background:#080c12;display:grid;place-items:center;overflow:hidden;border-radius:10px}.camera-viewport img{max-width:100%;max-height:72vh;object-fit:contain}.camera-settings-overlay{position:absolute;right:12px;top:12px;width:44px;height:44px;font-size:25px;opacity:.9}.camera-controls-dialog{color:inherit;background:#1f2937;border:1px solid #586879;border-radius:12px;width:min(420px,90vw);max-height:85vh}.camera-controls-dialog::backdrop{background:#0009}.camera-controls-dialog label{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:14px 0}
+
+/* Storage surfaces use paired foreground/background variables in every theme. */
+.storage-embedded-shell,.storage-modal,.storage-preview-modal,.sd-format-dialog {
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);
+}
+.storage-crumb-trail,.storage-command-deck,.storage-file-list {
+  background:var(--panel-soft);color:var(--ink);border-color:var(--line);
+}
+.storage-embedded-shell h3,.storage-modal h3 {color:var(--ink)}
+#storageSummary,.storage-embedded-shell .scan-status {color:var(--muted)}
+.sd-format-dialog {border-radius:16px;max-width:min(440px,94vw);padding:20px}
+.sd-format-dialog select,.sd-format-dialog progress {display:block;width:100%;margin:16px 0}
+.sd-format-dialog button {margin:6px;min-height:44px}
+.sd-format-dialog::backdrop {background:rgba(0,0,0,.6)}
+
+h2 {color:var(--ink)}
+
+/* The SD browser remains useful on boards without an audio output. */
+.device-audio-unavailable .storage-playback-strip,
+.device-audio-unavailable #storagePlayButton,
+.device-audio-unavailable .storage-preview-progress-wrap,
+.device-audio-unavailable .storage-preview-volume-card,
+.device-audio-unavailable .storage-preview-actions { display: none !important; }

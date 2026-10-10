@@ -151,6 +151,7 @@ export function defaultPeripheralPins(groupKey, profileValue, bindingPins = []) 
     ? ["CLK", "CMD", "D0", "D1", "D2", "D3", "VCC", "GND"]
     : ["CS", "SCK", "MOSI", "MISO", "VCC", "GND"];
   if (group === "communication") {
+    if(profile==="mcp2551")return ["5V","GND","CTX","CRX","CANH","CANL"];
     if (profile.includes("uart")) return ["TX", "RX", "VCC", "GND"];
     if (profile.includes("rs485")) return ["TX", "RX", "DE", "RE", "VCC", "GND"];
     if (profile.includes("lora")) return ["TX", "RX", "AUX", "M0", "M1", "VCC", "GND"];

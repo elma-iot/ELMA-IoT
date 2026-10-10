@@ -9,6 +9,7 @@ export function adcGpioPins(chip) {
 }
 export function peripheralPinRequirement(group, profile, signal) {
   profile=String(profile).toLowerCase(); signal=String(signal).toUpperCase();
+  if(profile==="mcp2551")return signal==="CRX"?"input":"output";
   if (group === "sensor" && profile === "ldr" && signal === "SIG") return "adc";
   if (signal === "TOUCH" && profile.includes("native-touch")) return "touch";
   if (["ADC","AOUT","VRX","VRY"].includes(signal)

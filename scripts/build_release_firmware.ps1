@@ -3,7 +3,7 @@ param([string]$PlatformIO = 'pio')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $versionHeader = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'include/version.h')
-if ($versionHeader -notmatch '#define APP_VERSION "(\d+\.\d+\.\d+)"') { throw 'Missing APP_VERSION.' }
+if ($versionHeader -notmatch '#define APP_VERSION "(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"') { throw 'Missing APP_VERSION.' }
 $releaseVersion = $Matches[1]
 $releaseRoot = Join-Path $projectRoot "release-assets/v$releaseVersion"
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null

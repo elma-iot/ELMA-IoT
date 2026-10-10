@@ -171,6 +171,10 @@ export function createStorageTab({
         state.currentStoragePathByTarget[state.activeStorageTarget] || "/",
       ).catch(handleError);
     });
+    elements.storageFormatButton?.addEventListener("click", async () => {
+      try{await request('/api/storage/format?action=prompt',{method:'POST'});setStorageStatus('Confirm formatting in the SD card dialog.');}
+      catch(error){handleError(error);}
+    });
     elements.storageEjectButton?.addEventListener("click", async () => {
       try{await request('/api/storage/eject',{method:'POST'});setStorageStatus('Eject requested. Wait for the card to become unavailable before removing it.');}
       catch(error){handleError(error);}

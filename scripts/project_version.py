@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 
 
-VERSION_PATTERN = re.compile(r'^#define APP_VERSION "(\d+\.\d+\.\d+)"$', re.MULTILINE)
-FLASHER_VERSION_PATTERN = re.compile(r'^APP_VERSION = "(\d+\.\d+\.\d+)"$', re.MULTILINE)
+VERSION_PATTERN = re.compile(r'^#define APP_VERSION "(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"$', re.MULTILINE)
+FLASHER_VERSION_PATTERN = re.compile(r'^APP_VERSION = "(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"$', re.MULTILINE)
 ASSET_PREFIXES = (
     "esp32-notifier",
     "esp32-notifier-hacs",
@@ -57,7 +57,7 @@ def validate(project_dir: Path, expected_tag: str = "", validate_release_metadat
     if metadata.is_file():
         text=metadata.read_text(encoding="utf-8")
         desktop=FLASHER_VERSION_PATTERN.search(text)
-        payload=re.search(r'^FIRMWARE_VERSION = "(\d+\.\d+\.\d+)"$',text,re.MULTILINE)
+        payload=re.search(r'^FIRMWARE_VERSION = "(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"$',text,re.MULTILINE)
         if desktop:desktop_version=desktop.group(1)
         if not payload or payload.group(1)!=version:errors.append("Windows bundled firmware version does not match firmware source")
     readme = (project_dir / "README.md").read_text(encoding="utf-8")

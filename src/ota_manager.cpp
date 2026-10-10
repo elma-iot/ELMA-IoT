@@ -12,6 +12,7 @@
 
 #include "github_release_client.h"
 #include "version.h"
+#include "ota_asset_policy.h"
 
 namespace {
 constexpr unsigned long RELEASE_CACHE_TTL_MS = 5UL * 60UL * 1000UL;
@@ -50,6 +51,10 @@ String normalizedVersionTag(String value) {
     return "v" + value;
 }
 
+String currentChipFamily();
+String boardAssetTemplate(){
+    return String("elma-")+currentChipFamily()+"-board"+String(APP_COMPILED_BOARD_PROFILE_ID)+"-${version}.bin";
+}
 String defaultAssetTemplateForBuild() {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
     #ifdef APP_ENABLE_HACS_MQTT
@@ -75,6 +80,7 @@ String defaultAssetTemplateForBuild() {
 }
 
 String effectiveAssetTemplate(const SettingsBundle& settings) {
+        if(settings.ota.owner=="elma-iot" && settings.ota.repository=="ELMA-IoT-Firmware")return boardAssetTemplate();
         String templ = settings.ota.assetTemplate;
         templ.trim();
         if (templ.isEmpty()) {
@@ -767,6 +773,8 @@ void OtaManager::appendStatusJson(JsonObject root) const {
     root["latestVersion"] = latestVersion_;
     root["message"] = lastMessage_;
     root["selectedVersion"] = selectedVersion_;
+    root["selectedAssetName"] = selectedAssetName_;
+    root["repository"] = settings_.ota.owner+"/"+settings_.ota.repository;
     root["updatePhase"] = updatePhase_;
     root["updateProgress"] = progressPercent_;
     root["updateBytes"] = progressBytes_;
@@ -831,6 +839,8 @@ void OtaManager::ensureSelectedReleaseStillValid() {
 void OtaManager::appendFirmwareInfoJson(JsonObject root, bool refresh, String& error) {
     root["currentVersion"] = normalizeVersion(APP_VERSION);
     root["currentChip"] = currentChipFamily();
+    root["repository"] = settings_.ota.owner+"/"+settings_.ota.repository;
+    root["assetTemplate"] = effectiveAssetTemplate(settings_);
     root["installedAssetName"] = currentReleaseAssetName(settings_);
     root["updateBusy"] = busy_;
     root["updateStatus"] = lastMessage_;
@@ -1026,6 +1036,10 @@ bool OtaManager::triggerInstallVersion(const String& version, const String& asse
     }
 
     const String normalizedVersion = normalizeVersion(version);
+    if(settings_.ota.owner=="elma-iot" && settings_.ota.repository=="ELMA-IoT-Firmware" &&
+       !matchesPublishedBoardAsset(assetName.c_str(),currentChipFamily().c_str(),APP_COMPILED_BOARD_PROFILE_ID,normalizedVersion.c_str())){
+        error="This firmware asset does not match the compiled board profile";return false;
+    }
     pendingInstallVersion_ = normalizedVersion;
     pendingInstallAssetName_ = assetName;
     pendingInstallAssetUrl_ = githubReleaseAssetUrl(settings_, normalizedVersion, assetName);
@@ -1187,29 +1201,7 @@ void OtaManager::runVersionTask(const String& version, const String& assetName, 
 }
 
 int OtaManager::compareVersions(const String& left, const String& right) const {
-    auto tokenize = [](String value, int* parts, size_t count) {
-        value.replace("v", "");
-        value.replace("V", "");
-        for (size_t i = 0; i < count; ++i) parts[i] = 0;
-        size_t index = 0;
-        int start = 0;
-        while (index < count && start < value.length()) {
-            int dot = value.indexOf('.', start);
-            String token = dot >= 0 ? value.substring(start, dot) : value.substring(start);
-            parts[index++] = token.toInt();
-            if (dot < 0) break;
-            start = dot + 1;
-        }
-    };
-    int leftParts[4];
-    int rightParts[4];
-    tokenize(left, leftParts, 4);
-    tokenize(right, rightParts, 4);
-    for (size_t i = 0; i < 4; ++i) {
-        if (leftParts[i] < rightParts[i]) return -1;
-        if (leftParts[i] > rightParts[i]) return 1;
-    }
-    return 0;
+    return comparePublishedVersions(left.c_str(),right.c_str());
 }
 
 String OtaManager::normalizeVersion(const String& value) const {
@@ -1255,16 +1247,14 @@ bool OtaManager::fetchAvailableReleases(bool refresh, String& error) {
         const String releaseName = release.name;
         const String publishedAt = release.publishedAt;
         const bool prerelease = release.prerelease;
-        if (latestVersion_.isEmpty() && !prerelease) {
-            latestVersion_ = releaseTag;
-        }
 
-        bool matchedAsset = false;
         for (const String& assetName : release.assetNames) {
             if (!hasBinExtension(assetName)) {
                 continue;
             }
 
+            if(settings_.ota.owner=="elma-iot" && settings_.ota.repository=="ELMA-IoT-Firmware" &&
+               !matchesPublishedBoardAsset(assetName.c_str(),currentChipFamily().c_str(),APP_COMPILED_BOARD_PROFILE_ID,releaseTag.c_str()))continue;
             const String chipFamily = chipFamilyForAssetName(assetName);
             // Release assets must identify their chip family in the filename.
             // A generic firmware.bin cannot be proven safe for this device.
@@ -1272,6 +1262,7 @@ bool OtaManager::fetchAvailableReleases(bool refresh, String& error) {
                 continue;
             }
 
+            if(latestVersion_.isEmpty() && !prerelease)latestVersion_=releaseTag;
             ReleaseInfo item;
             item.tag = releaseTag;
             item.name = releaseName;
@@ -1285,26 +1276,9 @@ bool OtaManager::fetchAvailableReleases(bool refresh, String& error) {
             item.isLatest = !latestVersion_.isEmpty() && releaseTag == latestVersion_;
             item.isNew = compareVersions(currentVersion, releaseTag) < 0;
             releaseCache_.push_back(item);
-            matchedAsset = true;
         }
 
-        if (!matchedAsset) {
-            ReleaseInfo item;
-            item.tag = releaseTag;
-            item.name = releaseName;
-            item.publishedAt = publishedAt;
-            item.prerelease = prerelease;
-            item.assetName = applyVersionTemplate(effectiveAssetTemplate(settings_), releaseTag);
-            item.assetUrl = githubReleaseAssetUrl(settings_, releaseTag, item.assetName);
-            item.variantLabel = variantLabelForAssetName(item.assetName);
-            item.chipFamily = chipFamilyForAssetName(item.assetName);
-            if (isCompatibleChipFamily(item.chipFamily)) {
-                item.isInstalled = compareVersions(currentVersion, releaseTag) == 0 && item.assetName == installedAssetName;
-                item.isLatest = !latestVersion_.isEmpty() && releaseTag == latestVersion_;
-                item.isNew = compareVersions(currentVersion, releaseTag) < 0;
-                releaseCache_.push_back(item);
-            }
-        }
+
     }
 
     if (latestVersion_.isEmpty() && !releaseCache_.empty()) {
@@ -1455,7 +1429,7 @@ OtaManager::CheckResult OtaManager::checkNow() {
     }
 
     if (result.latestVersion.isEmpty() || result.assetUrl.isEmpty()) {
-        result.message = "Incomplete release metadata";
+        result.message = "No firmware published for this board in the configured repository";
         return result;
     }
     result.updateAvailable = compareVersions(normalizeVersion(APP_VERSION), result.latestVersion) < 0;

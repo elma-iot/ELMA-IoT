@@ -1,4 +1,4 @@
-# SD recovery and LCD startup memory — 2026-10-08
+# SD recovery and LCD startup memory вЂ” 2026-10-08
 
 Shared by LCD and headless ESP32 firmware with enabled SD storage. Sunton/Guition LCD boards use SPI; VIEWE LCD boards use their existing four-bit SDMMC pin map.
 
@@ -80,3 +80,28 @@ Validation checkpoint (2026-10-09): the final Guition build passed and its appli
 **Unresolved; investigation stopped at the user's request:** with the SD inserted, the card mounts at 25 MHz and Wi-Fi associates at 192.168.1.180, but AsyncTCP still cannot allocate its task. The portrait dashboard renders, then reports deferred snapshots; opening Audio produced a C++ allocation abort in `PanelDashboard::syncMenu`. Hardware bars, scan overlays, HTTP reachability and physical SD hot-plug/eject remain unverified on this candidate. Do not describe this checkpoint as a working LCD firmware release. No SD formatting was performed.
 
 Next investigation: capture actual byte-addressable internal heap and largest block (the generic free-heap number is insufficient), inspect audio/DMA and network task allocations, then re-test scan with/without SD, saved credentials, monitor bars, and physical removal/reinsertion. Local diagnostic logs are excluded from Git because they may contain device/network details.
+
+## LCD styling regression (2026-10-10)
+
+The basic-theme switch removed borders/padding and left dropdown popup text inheriting incompatible colours. `panel_theme.cpp` now adds reusable dark frames, input/button/keyboard styles, focus/disabled states, and explicit dropdown-list selection colours on top of the basic theme. All LCD profiles use it. The tab selector no longer overrides its text with the dark background colour. Host LVGL renders at 240Г—320 and 320Г—480 verify frames and contrast (at least 8.3:1 for tested text). This appearance fix does not resolve the startup-memory issues above and was not flashed during this task.
+
+## VIEWE S3 reader audit (2026-10-10)
+
+The connected VIEWE 3.5-inch S3 reported `sd.enabled=false`, so the storage worker could not detect insertion. Its Windows catalog and firmware now enforce the built-in four-bit reader for both VIEWE sizes. Updating only SD settings on the running board mounted a 31,914,983,424-byte card with a valid filesystem. Software eject/remount also passed; no formatting was performed. This is a different board from the no-PSRAM Guition checkpoint above.
+
+SDMMC uses a five-second retry deadline, checked by the two-second storage poll, rather than backing off to a minute. A probe logs its FatFs result, and removal clears a dismissed format prompt. The LCD now shows the SD icon in portrait mode and labels the current Wi-Fi IP. During the user-assisted removal/reinsertion, the status changed to unmounted and then back to mounted at the same capacity. A genuinely unformatted card remains a separate hardware validation case.
+
+VIEWE 3.5-inch S3 validation: the full selected-board build passed (2,536,912-byte application), OTA upload completed, and the device returned at its saved Wi-Fi address. Serial reported the 320×480 panel with 8 MB PSRAM and successful LVGL drawing. SD mounted automatically; the observed startup contained only the expected software restart and no panic. Firmware binary SHA-256: `783a4bb458845caa0146b16b7513c6d482e430acbc8ba2afb16df2a6c79b6995`. The private device-specific binary is not a distributable release asset.
+
+## 2026-10-10: manual format, brightness and web styling
+
+Manual formatting is shared by LCD and web through device-owned prompt state. FAT32 is the supported format. A positive card presence/mount result, idle storage and explicit erase confirmation are required. The background worker unmounts, creates FAT32, remounts and reports completion/failure. Activity overlays disappear after completion; no invented percentage is shown.
+
+COM11 reproduced a loopTask stack-canary panic on a brightness save. The decoded stack passed through processDeferredActions -> SettingsManager::load/defaults/updateFromJson/sanitize. Deferred apply now uses its already-validated settings; display-only saves avoid restarting unrelated services and retain LVGL for brightness/idle changes.
+
+The storage dark-mode regression also affected other descendant pseudo-class rules: asset_embed.py stripped the space in `:root[...] :is(...)`. The minifier now retains that space and has regression coverage.
+
+
+### 0.1.59-test.1 device check
+
+VIEWE board 25 booted with SD mounted. Four brightness changes completed without the prior loopTask stack-canary panic. Format confirmation and cancellation were checked through HTTP and the browser without erasing the card. The device discovered its exact public release from `elma-iot/ELMA-IoT-Firmware`; public download SHA-256 was verified. Older images with credentials supplied only as compiled defaults require exporting/reapplying configuration when moving to this clean image; this device was restored over USB and reconnected. Actual erase/remount and physical brightness/animation appearance remain user acceptance checks.

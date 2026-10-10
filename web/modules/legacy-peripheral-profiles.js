@@ -1,3 +1,4 @@
+import {ONBOARD_BOARDS} from "./onboard-boards.js";
 // Older firmware stored operational pins/enabled flags without UI profiles.
 // Recover only missing selections; explicit values (including None) win.
 export function restoreLegacyPeripheralProfiles(settings) {
@@ -9,7 +10,7 @@ export function restoreLegacyPeripheralProfiles(settings) {
     profiles[arrayKey] = [scalar || fallback];
     profiles[scalarKey] = scalar || fallback;
   }
-  primary("audioProfiles", "audioProfile", settings?.audio?.enabled === true ? "max98357a-i2s-amp" : "none");
+  primary("audioProfiles", "audioProfile", settings?.audio?.enabled === true && !ONBOARD_BOARDS[settings?.ui?.gpioBoardSelection]?.requiresExternalAudio ? "max98357a-i2s-amp" : "none");
   primary("displayProfiles", "displayProfile", settings?.oled?.enabled === true
     ? (settings.oled.displayType === "panel" ? "viewe-onboard-lcd" : settings.oled.displayType === "wape" ? "waveshare-screen" : "i2c-oled") : "none");
   if (!Array.isArray(profiles.storage) || !profiles.storage.length) {

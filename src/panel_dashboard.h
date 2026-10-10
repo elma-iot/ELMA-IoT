@@ -39,7 +39,7 @@ private:
  void wifiDialog(WifiStep,const String& ssid="",bool mqtt=false);void closeWifiDialog();void connectWifiDialog();void updateWifiDialog();
  static void wifiDialogEvent(lv_event_t*);
  void hideKeyboard();void bindKeyboardDismiss(lv_obj_t*);
- bool sdFormatPromptShown_=false;lv_obj_t* sdFormatPrompt_=nullptr;
+ bool sdFormatPromptShown_=false;lv_obj_t* sdFormatPrompt_=nullptr;lv_obj_t* sdFormatType_=nullptr;
  lv_obj_t *sdFormatProgress_=nullptr,*sdFormatBar_=nullptr;
  static void sdFormatEvent(lv_event_t*);
  String lastPlaybackUrl_,resumeUrl_,resumeTitle_,statusSignature_;

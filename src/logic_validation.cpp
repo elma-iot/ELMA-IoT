@@ -5,6 +5,7 @@
 #include "logic_catalog.h"
 #endif
 #include "logic_alarm.h"
+#include "can_contract.h"
 #include "logic_sleep_contract.h"
 #include <set>
 #include <algorithm>
@@ -16,6 +17,19 @@
 bool validateLogicHardware(JsonObject n,std::string& error) {
     const std::string type=n["type"]|"";
     if(type=="hardware.sleep"||type=="hardware.wake_gpio")return ElmaLogic::validSleepHardware(n,error);
+    if(type.find("hardware.can.")==0){if(!CanContract::valid(type.c_str(),n["parameters"])){error="Invalid CAN parameters";return false;}return true;}
+    if(type.find("hardware.modbus.")==0){
+        auto p=n["parameters"];
+        auto integer=[&](const char* key,int lo,int hi){double v=p[key]|-1.;return std::isfinite(v)&&v>=lo&&v<=hi&&std::floor(v)==v;};
+        bool valid=true;
+        if(type=="hardware.modbus.read"){
+            valid=integer("unit",1,247)&&integer("function",1,4)&&integer("address",0,65535)&&integer("count",1,32)&&integer("stops",1,2);
+            valid=valid&&p["address"].as<int>()+p["count"].as<int>()<=65536&&(p["parity"]=="N"||p["parity"]=="E"||p["parity"]=="O");
+            bool baud=false;for(int b:{1200,2400,4800,9600,19200,38400,57600,115200})if(p["baud"]==b)baud=true;valid=valid&&baud;
+        }else if(type=="hardware.modbus.value")valid=integer("index",0,31);
+        else if(type=="hardware.modbus.received")valid=integer("unitFilter",0,247);
+        if(!valid){error="Invalid Modbus RTU parameters";return false;}return true;
+    }
     if(type!="hardware.gpio"&&type!="hardware.led")return true;
     std::set<std::string> enabled;
     if(type=="hardware.gpio") {

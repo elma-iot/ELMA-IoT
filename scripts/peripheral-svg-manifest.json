@@ -1,4 +1,18 @@
 {
+  "mcp2551-breadboard.svg": {
+    "profiles": [
+      "communication:mcp2551"
+    ],
+    "pins": [
+      "5V",
+      "GND",
+      "CTX",
+      "CRX",
+      "CANH",
+      "CANL"
+    ],
+    "title": "mcp2551"
+  },
   "max98357a-breadboard.svg": {
     "profiles": [
       "audio:max98357a-i2s-amp"

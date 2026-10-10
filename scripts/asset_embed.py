@@ -151,9 +151,10 @@ def minify_html(text: str) -> str:
 
 
 def minify_css(text: str) -> str:
+    # Whitespace before a pseudo-class is a descendant combinator, not punctuation.
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"\s*([{}:;,>])\s*", r"\1", text)
+    text = re.sub(r"\s*([{};,>])\s*", r"\1", text)
     text = text.replace(";}", "}")
     return text.strip()
 

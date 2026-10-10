@@ -14,7 +14,7 @@ test('healthy card never prompts or formats; remote cancel closes prompt',()=>{
 test('erase requires explicit click; shared formatting state closes confirmation',async()=>{
  const f=fixture();f.ui.update({sdFormat:{state:0,prompt:true}});
  await f.live[0].querySelectorAll('button')[1].onclick();
- assert.deepEqual(f.calls,[['/api/storage/format?action=confirm&erase=yes',{method:'POST'}]]);
+ assert.deepEqual(f.calls,[['/api/storage/format?action=confirm&erase=yes&filesystem=FAT32',{method:'POST'}]]);
  assert.equal(f.live[0].dataset.mode,'busy');
  assert.equal(f.live[0].children.filter(e=>e.tag==='progress').length,1);
  assert.equal(f.live[0].querySelectorAll('button').length,0);
