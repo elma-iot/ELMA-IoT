@@ -151,10 +151,11 @@ export function createEffectsTab({
 
       const noneOption = document.createElement("option");
       noneOption.value = "";
-      noneOption.textContent = "None";
+      noneOption.textContent = field === "captureFile" ? "Built-in shutter" : "None";
       element.append(noneOption);
 
       for (const optionData of state.effectFileOptions) {
+        if (field === "captureFile" && !/\.wav$/i.test(optionData.value)) continue;
         const option = document.createElement("option");
         option.value = optionData.value;
         option.textContent = optionData.label;

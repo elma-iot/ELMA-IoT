@@ -1,3 +1,5 @@
+#include "spk_media.h"
+#include "motion_capture.h"
 #if APP_ROTARY_HMI
 #include "legacy_ledc_compat.h"
 #endif
@@ -14,6 +16,7 @@
 #include "rs485_service.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
+#include "web_access.h"
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <soc/soc_caps.h>
@@ -1849,6 +1852,7 @@ String effectFileForSource(const String& source) {
     if (settings == nullptr) {
         return "";
     }
+    if (source == "effect-capture") return settings->effects.captureFile;
     if (source == "effect-startup") return settings->effects.startupFile;
     if (source == "effect-alarm") return settings->effects.alarmFile;
     if (source == "effect-notification") return settings->effects.notificationFile;
@@ -1864,6 +1868,7 @@ uint8_t effectVolumeForSource(const String& source) {
     if (settings == nullptr) {
         return DefaultConfig::DEFAULT_VOLUME_PERCENT;
     }
+    if (source == "effect-capture") return settings->effects.captureVolumePercent;
     if (source == "effect-startup") return settings->effects.startupVolumePercent;
     if (source == "effect-alarm") return settings->effects.alarmVolumePercent;
     if (source == "effect-notification") return settings->effects.notificationVolumePercent;
@@ -3175,7 +3180,8 @@ void applyClonedConfiguration() {
 
     // Serial provisioning runs on loopTask, whose stack is small on C3. Keep
     // the full settings bundle off that stack while parsing and saving it.
-    const std::unique_ptr<SettingsBundle> clonedStorage(new (std::nothrow) SettingsBundle(settingsManager->defaults()));
+    const bool certificateProvisioning=document["webAccessCertificate"].is<JsonObject>();
+    const std::unique_ptr<SettingsBundle> clonedStorage(new (std::nothrow) SettingsBundle(certificateProvisioning?*settings:settingsManager->defaults()));
     if (!clonedStorage) {
         DebugLog.println("[clone] error=insufficient memory for configuration");
         resetCloneProvisioningReceiver();
@@ -3190,6 +3196,9 @@ void applyClonedConfiguration() {
     }
 
     // This is an explicit setup operation from the owner-facing Android app.
+    if(certificateProvisioning && !WebAccess::importCertificate(String(document["webAccessCertificate"]["certificate"]|""),String(document["webAccessCertificate"]["privateKey"]|""),error)){
+        DebugLog.printf("[clone] error=TLS certificate rejected detail=%s\n",error.c_str());resetCloneProvisioningReceiver();return;
+    }
     // Preserve its complete snapshot, including the chosen device and MQTT
     // identities, so the device web UI reflects the wizard after reboot.
     cloned.usingSavedSettings = true;
@@ -4693,9 +4702,16 @@ void loop() {
 
     const unsigned long now = millis();
     webServer->securityTick();
+#if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO) && !defined(APP_DISABLE_WEB_UI)
+    serviceSpkMediaAudio(*audioPlayer,*settings);
+    MotionCapture::tick(otaManager->isFirmwareTransferActive());
+#endif
     serviceCloneProvisioningSerial();
     static bool audioReleasedForUpdate = false;
     if (otaManager->isFirmwareTransferActive() && !audioReleasedForUpdate) {
+#if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO) && !defined(APP_DISABLE_WEB_UI)
+        stopSpkMediaForUpdate();
+#endif
         audioReleasedForUpdate = true;
         DebugLog.println("[ota] releasing playback buffers for firmware transfer");
         audioPlayer->releaseResourcesForUpdate();

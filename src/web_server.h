@@ -128,5 +128,6 @@ class WebServerManager {
     void registerApiRoutes();
     void registerFirmwareRoutes();
     void registerWebRoutes();
+    bool serveStorageWebAsset(AsyncWebServerRequest* request, const String& path, bool fallback = false);
   #endif
 };

@@ -1,4 +1,6 @@
+import {createMotionCapture} from './modules/motion-capture.js';
 import {createRs485Tab} from "./modules/rs485-tab.js";
+import {installWebAccess} from "./modules/web-access.js";
 import {createBno055Tab} from "./modules/bno055-tab.js";
 import {I2C_PROFILES,i2cAddresses,i2cCompatible,i2cIssues} from "./modules/i2c-policy.js";
 import {ONBOARD_BOARDS} from "./modules/onboard-boards.js";
@@ -438,6 +440,7 @@ function peripheralDiagramOptionLabel(options, value, fallbackLabel = "Periphera
 }
 
 const EFFECT_SELECT_CONFIG = [
+  { id: "effectCaptureFile", field: "captureFile", label: "Camera shutter", source: "effect-capture", volumeId: "effectCaptureVolumePercent", volumeField: "captureVolumePercent" },
   { id: "effectStartupFile", field: "startupFile", label: "Startup", source: "effect-startup", volumeId: "effectStartupVolumePercent", volumeField: "startupVolumePercent" },
   { id: "effectAlarmFile", field: "alarmFile", label: "Alarm", source: "effect-alarm", volumeId: "effectAlarmVolumePercent", volumeField: "alarmVolumePercent" },
   { id: "effectNotificationFile", field: "notificationFile", label: "Notification", source: "effect-notification", volumeId: "effectNotificationVolumePercent", volumeField: "notificationVolumePercent" },
@@ -1050,6 +1053,8 @@ const elements = {
   equalizerPresenceValue: document.getElementById("equalizerPresenceValue"),
   equalizerHighSlider: document.getElementById("equalizerHighSlider"),
   equalizerHighValue: document.getElementById("equalizerHighValue"),
+  effectCaptureFile: document.getElementById("effectCaptureFile"),
+  effectCaptureVolumePercent: document.getElementById("effectCaptureVolumePercent"),
   effectStartupFile: document.getElementById("effectStartupFile"),
   effectStartupVolumePercent: document.getElementById("effectStartupVolumePercent"),
   effectAlarmFile: document.getElementById("effectAlarmFile"),
@@ -2424,7 +2429,8 @@ function peripheralHelperBindingValue(groupKey, index, signalLabel) {
     }
   }
   const slot = state.peripheralHelperBindings?.[peripheralHelperBindingSlotKey(groupKey, index)];
-  return typeof slot?.[signalLabel] === "string" ? slot[signalLabel] : "";
+  const value = slot?.[signalLabel];
+  return typeof value === "string" || (typeof value === "number" && Number.isFinite(value)) ? String(value) : "";
 }
 
 function helperBindingDisplayLabel(groupKey, signalLabel) {
@@ -3270,6 +3276,8 @@ function assignPeripheralDefaults(groupKey, profileValue, index, realDefinitions
     for(const signal of helperSignals){
       if(['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE','I2C_ADDRESS'].includes(signal))continue;
       const current=peripheralHelperBindingValue(groupKey,index,signal);
+      // BNO055 polling needs only SDA/SCL; do not invent an interrupt wire.
+      if(groupKey==='sensor' && profileValue==='bno055' && signal==='INT' && current==='')continue;
       if(current!==''&&(previous===undefined||state.settingsLoading)){occupied.add(Number(current));continue;}
       const options=helperBindingSignalOptionsFor(groupKey,index,signal);
       const shared=peripheralGpioAssignments().find(a=>a.pin>=0&&shareI2cRoles(`ui.${groupKey}.${index}.${signal.toLowerCase()}`,a.key)&&options.some(o=>!o.disabled&&Number(o.value)===a.pin));
@@ -4024,7 +4032,7 @@ function peripheralDiagramNodeMarkup(node) {
     return `
       <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
         <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
-        <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button>
+        <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">&#8635;</button>
         <div class="peripheral-diagram-node-visual"${visualStyle}>
           ${ledSvg ? `<div data-led-array-index="${node.index}" style="width:${ledWidth}px;max-height:220px;display:flex;align-items:center">${ledSvg}</div>` : `<img src="${escapeHtml(node.src)}" alt="${escapeHtml(node.title || node.label)} module" draggable="false" />`}
         </div>
@@ -4036,7 +4044,7 @@ function peripheralDiagramNodeMarkup(node) {
   return `
     <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
       <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
-      <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button>
+      <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">&#8635;</button>
       <div class="peripheral-diagram-node-visual"${visualStyle}>
         ${peripheralDiagramPlaceholderMarkup(node)}
       </div>
@@ -4234,7 +4242,7 @@ function handlePeripheralDiagramAssetError(event) {
   if (nodeElement) {
     const rotation = peripheralDiagramRotation(node.id);
     const visualStyle = rotation ? ` style="transform:rotate(${rotation}deg);"` : "";
-    nodeElement.innerHTML = `<button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button><div class="peripheral-diagram-node-visual"${visualStyle}>${peripheralDiagramPlaceholderMarkup(node)}</div><div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>`;
+    nodeElement.innerHTML = `<button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">&#8635;</button><div class="peripheral-diagram-node-visual"${visualStyle}>${peripheralDiagramPlaceholderMarkup(node)}</div><div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>`;
   }
   renderPeripheralDiagramWiring();
 }
@@ -4719,6 +4727,7 @@ function renderPeripheralDiagramNow() {
     }
     nodes.push({
       id: `sensor-${index}`,
+      src: PERIPHERAL_DIAGRAM_ASSET_MAP.sensor?.[normalizedProfile]?.src,
       className: "peripheral-diagram-node",
       style: peripheralDiagramSlotStyle("sensor", index),
       groupKey: "sensor",
@@ -8955,6 +8964,7 @@ function normalizeUiSettings(uiSettings = {}) {
     theme: ["automatic", "light", "dark"].includes(String(source.theme || "automatic").toLowerCase())
       ? String(source.theme || "automatic").toLowerCase()
       : "automatic",
+    customWebInterface: Boolean(source.customWebInterface),
     gpioSafetyOverride: Boolean(source.gpioSafetyOverride),
     gpioBoardAutodetect: Object.prototype.hasOwnProperty.call(source, "gpioBoardAutodetect")
       ? Boolean(source.gpioBoardAutodetect)
@@ -9953,7 +9963,10 @@ window.elmaRefreshFlashSettings = async () => {
     elements.localBuilderCompileFlash.disabled = false;
   }
 };
+installWebAccess({request});
 installOnlineHelpLinks();
 startStatusPolling();
 
 const logicsTab=createLogicsTab();if(logicsTab){installLogicLayout(logicsTab);window.elmaLogicsTab=logicsTab;}
+
+createMotionCapture({request});

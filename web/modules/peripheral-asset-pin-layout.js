@@ -5,6 +5,7 @@ import { canonicalSignalKey } from "./peripheral-pin-model.js";
 // image. Aliases let the electrical model use canonical application names even
 // when a board silkscreen uses BCK/LCK/VDD/VIN.
 const ASSET_CONTACTS = {
+ "bno055-breadboard.svg": {VCC:[.9,45/210,"right"],GND:[.9,75/210,"right"],SCL:[.9,105/210,"right"],SDA:[.9,135/210,"right"],INT:[.9,165/210,"right"]},
  "mcp2551-breadboard.svg":{"5V":[0.06205816,0.10312085,"left"], "GND":[0.06205816,0.26187024,"left"], "CTX":[0.06205816,0.42061962,"left"], "CRX":[0.06205816,0.57936901,"left"], "CANH":[0.06205816,0.73811839,"left"], "CANL":[0.06205816,0.89686778,"left"]},
   "pcm5102a-breadboard.svg": {
     SCK: [0.0445, 0.1021, "left"],
@@ -110,8 +111,8 @@ export function peripheralAssetPinContact(source, signal, rotation = 0) {
   const rank = Math.max(0, uniqueContacts.findIndex((entry) => coordinateKey(entry) === coordinateKey(contact)));
   const side = String(contact[2]);
   const stagger = side === "top" || side === "bottom"
-    ? (uniqueContacts.length <= 4 ? rank : rank % 4)
-    : rank % 2;
+    ? (uniqueContacts.length <= 4 ? 0 : rank % 4)
+    : 0;
   return rotateContact(contact, rotation, stagger);
 }
 
