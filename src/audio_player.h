@@ -44,6 +44,10 @@ class AudioPlayer {
     uint32_t currentPositionSeconds() const;
     uint32_t durationSeconds() const;
     bool seekStorageFile(uint32_t positionSeconds);
+    void holdForMedia(bool hold);
+    bool mediaHeld() const;
+    bool writeMediaPcm(const int16_t* samples,size_t count,uint32_t rate=16000);
+    bool captureCue(const String& wavReference,uint8_t volumePercent);
     DiagnosticsSnapshot diagnostics() const;
 
     void onStationName(const char* text);

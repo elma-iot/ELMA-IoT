@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "board": "miniexco-v2",
+  "files": [
+    {
+      "file": "index.html",
+      "destination": "/web/miniexco-v2/index.html",
+      "size": 532,
+      "sha256": "34d6547f635e7eee4bf4fbecaf0aa6de7ec13bec9ce17d399ca89e15bba43391"
+    },
+    {
+      "file": "index.html.gz",
+      "destination": "/web/miniexco-v2/index.html.gz",
+      "size": 331,
+      "sha256": "56ce569c09b558124a43a4e5396a8a265c7cb3d10ae389fef15fb2ba8ea1b6a3"
+    },
+    {
+      "file": "robot.js",
+      "destination": "/web/miniexco-v2/robot.js",
+      "size": 17927,
+      "sha256": "7a30cf44b35c98bce10dd8b80dd6c03b0755368f43dd8b8ac13542e93fabca27"
+    },
+    {
+      "file": "robot.js.gz",
+      "destination": "/web/miniexco-v2/robot.js.gz",
+      "size": 7106,
+      "sha256": "f68894dded2c2086475a8aab5326f32721fba2c12f83c66d1c90b62d309e7231"
+    },
+    {
+      "file": "robot.css",
+      "destination": "/web/miniexco-v2/robot.css",
+      "size": 1886,
+      "sha256": "cf46bd8ab797a842544426eaf6cab7a1dc759531952baba22281b4fa19f34cab"
+    },
+    {
+      "file": "robot.css.gz",
+      "destination": "/web/miniexco-v2/robot.css.gz",
+      "size": 803,
+      "sha256": "3521c5d7ee09e572c7d2009d06e7ffbfe75441b1f18d1651d8ce3e8d0e22e0d1"
+    },
+    {
+      "file": "rover.webp",
+      "destination": "/web/miniexco-v2/rover.webp",
+      "size": 9284,
+      "sha256": "4c6cc0e1f98b83fdfbbc9836307360a6941300d98f0c5bda945b8eac763151a7"
+    },
+    {
+      "file": "miniexco.glb",
+      "destination": "/3d/miniexco.glb",
+      "size": 285848,
+      "sha256": "6371248f84b158bed821064c75236faec025f611aead35291130d40a24df335c"
+    },
+    {
+      "file": "horn.wav",
+      "destination": "/pcm/horn.wav",
+      "size": 114062,
+      "sha256": "3b39a08a37e05ca28767a25950d162519337859ad512e51ba54da1d95c8ba415"
+    },
+    {
+      "file": "capture.wav",
+      "destination": "/pcm/capture.wav",
+      "size": 243232,
+      "sha256": "54e3683608fb9fa2960218d476a776ee867548dc8eb229b1d99796531d0b551d"
+    },
+    {
+      "file": "entry.html",
+      "destination": "/web/index.html",
+      "size": 167,
+      "sha256": "ec9efe1474a70f7968288ecdf58d56a97939d08d7007c5ff05d5713c0e7fb10f"
+    },
+    {
+      "file": "entry.html.gz",
+      "destination": "/web/index.html.gz",
+      "size": 138,
+      "sha256": "05c37a4444b2907b15782a786d496468dc9207ca60e3e26b61f31f1c8368fefc"
+    }
+  ]
+}

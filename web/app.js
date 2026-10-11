@@ -1,4 +1,7 @@
+import {createRobotTab} from "./modules/robot-tab.js";
+import {createMotionCapture} from './modules/motion-capture.js';
 import {createRs485Tab} from "./modules/rs485-tab.js";
+import {installWebAccess} from "./modules/web-access.js";
 import {createBno055Tab} from "./modules/bno055-tab.js";
 import {I2C_PROFILES,i2cAddresses,i2cCompatible,i2cIssues} from "./modules/i2c-policy.js";
 import {ONBOARD_BOARDS} from "./modules/onboard-boards.js";
@@ -438,6 +441,7 @@ function peripheralDiagramOptionLabel(options, value, fallbackLabel = "Periphera
 }
 
 const EFFECT_SELECT_CONFIG = [
+  { id: "effectCaptureFile", field: "captureFile", label: "Camera shutter", source: "effect-capture", volumeId: "effectCaptureVolumePercent", volumeField: "captureVolumePercent" },
   { id: "effectStartupFile", field: "startupFile", label: "Startup", source: "effect-startup", volumeId: "effectStartupVolumePercent", volumeField: "startupVolumePercent" },
   { id: "effectAlarmFile", field: "alarmFile", label: "Alarm", source: "effect-alarm", volumeId: "effectAlarmVolumePercent", volumeField: "alarmVolumePercent" },
   { id: "effectNotificationFile", field: "notificationFile", label: "Notification", source: "effect-notification", volumeId: "effectNotificationVolumePercent", volumeField: "notificationVolumePercent" },
@@ -449,184 +453,304 @@ const EFFECT_SELECT_CONFIG = [
 ];
 const STORAGE_PREVIEW_EMBEDDED_SCAN_MAX_BYTES = 256 * 1024;
 const GPIO_BOARD_PRESENTATION = {
-  "viewe-uedx48480021-md80et": { rotation: "none", rank: "Round rotary display", recommendation: "GC9503 LCD and rotary encoder. Enable touch only on touch-equipped MD80ET hardware.", tone: "featured" },
-  "viewe-uedx48480021-md80et-st7701s": { rotation: "none", rank: "Round rotary display", recommendation: "ST7701S LCD variant and rotary encoder. Confirm the controller before flashing.", tone: "featured" },
-  "viewe-uedx24320028e-wb-a": { rotation: "none", rank: "Touch display board", recommendation: "VIEWE 240Р вЂњРІР‚вЂќ320 LCD with CHSC6540 touch.", tone: "featured" },
+  "viewe-uedx48480021-md80et": {
+    "rotation": "none",
+    "rank": "Round rotary display",
+    "recommendation": "GC9503 LCD and rotary encoder. Enable touch only on touch-equipped MD80ET hardware.",
+    "tone": "featured"
+  },
+  "viewe-uedx48480021-md80et-st7701s": {
+    "rotation": "none",
+    "rank": "Round rotary display",
+    "recommendation": "ST7701S LCD variant and rotary encoder. Confirm the controller before flashing.",
+    "tone": "featured"
+  },
+  "viewe-uedx24320028e-wb-a": {
+    "rotation": "none",
+    "rank": "Touch display board",
+    "recommendation": "VIEWE 240Р вЂњРІР‚вЂќ320 LCD with CHSC6540 touch.",
+    "tone": "featured"
+  },
   "esp32-s3-super-mini": {
-    rotation: "rotate(-90deg)",
-    rank: "Current board",
-    recommendation: "Compact ESP32-S3 board. Good for speaker builds, but with tighter pin breakout than larger S3 boards.",
-    tone: "featured",
+    "rotation": "rotate(-90deg)",
+    "rank": "Current board",
+    "recommendation": "Compact ESP32-S3 board. Good for speaker builds, but with tighter pin breakout than larger S3 boards.",
+    "tone": "featured"
   },
   "esp32-s3-zero": {
-    rotation: "rotate(-90deg)",
-    rank: "Compact S3 option",
-    recommendation: "Very small ESP32-S3 board. Good when you need S3 features in a minimal footprint.",
-    tone: "good",
+    "rotation": "rotate(-90deg)",
+    "rank": "Compact S3 option",
+    "recommendation": "Very small ESP32-S3 board. Good when you need S3 features in a minimal footprint.",
+    "tone": "good"
   },
   "esp32-s3-psram": {
-    rotation: "none",
-    rank: "S3 PSRAM variant",
-    recommendation: "ESP32-S3-N16R8 layout with PSRAM and larger breakout coverage.",
-    tone: "good",
+    "rotation": "none",
+    "rank": "S3 PSRAM variant",
+    "recommendation": "ESP32-S3-N16R8 layout with PSRAM and larger breakout coverage.",
+    "tone": "good"
   },
   "esp32-spk-n16r8": {
-    rotation: "none",
-    rank: "Speaker board variant",
-    recommendation: "ESP32-S3 speaker/camera board with wide breakout access, onboard peripherals, and several already-committed pins.",
-    tone: "warn",
+    "rotation": "none",
+    "rank": "Speaker board variant",
+    "recommendation": "ESP32-S3 speaker/camera board with wide breakout access, onboard peripherals, and several already-committed pins.",
+    "tone": "warn"
   },
   "esp32-s3-devkit-c1": {
-    rotation: "none",
-    rank: "S3 DevKit variant",
-    recommendation: "ESP32-S3 DevKit C-1 breakout with the N8R8-style pin arrangement.",
-    tone: "good",
+    "rotation": "none",
+    "rank": "S3 DevKit variant",
+    "recommendation": "ESP32-S3 DevKit C-1 breakout with the N8R8-style pin arrangement.",
+    "tone": "good"
   },
   "esp32-s3-cam-module": {
-    rotation: "none",
-    rank: "S3 camera module",
-    recommendation: "ESP32-S3-CAM module layout with the compact N16R8 module pin breakout.",
-    tone: "warn",
+    "rotation": "none",
+    "rank": "S3 camera module",
+    "recommendation": "ESP32-S3-CAM module layout with the compact N16R8 module pin breakout.",
+    "tone": "warn"
   },
   "esp32-wrover": {
-    rotation: "none",
-    rank: "2. Very good",
-    recommendation: "Strong classic ESP32 choice with PSRAM. A solid fallback when S3 boards are not available.",
-    tone: "good",
+    "rotation": "none",
+    "rank": "2. Very good",
+    "recommendation": "Strong classic ESP32 choice with PSRAM. A solid fallback when S3 boards are not available.",
+    "tone": "good"
   },
   "esp32-wroom": {
-    rotation: "rotate(-90deg)",
-    rank: "3. Good",
-    recommendation: "Good for speaker projects, but with less memory headroom than PSRAM-equipped boards.",
-    tone: "good",
+    "rotation": "rotate(-90deg)",
+    "rank": "3. Good",
+    "recommendation": "Good for speaker projects, but with less memory headroom than PSRAM-equipped boards.",
+    "tone": "good"
   },
   "esp32-mini": {
-    rotation: "none",
-    rank: "4. Compact fallback",
-    recommendation: "Compact board for lighter builds. Works, but GPIO and memory headroom are tighter.",
-    tone: "neutral",
+    "rotation": "none",
+    "rank": "4. Compact fallback",
+    "recommendation": "Compact board for lighter builds. Works, but GPIO and memory headroom are tighter.",
+    "tone": "neutral"
   },
   "wemos-lolin32-mini": {
-    rotation: "rotate(-90deg)",
-    rank: "ESP32 compact variant",
-    recommendation: "Wemos Lolin32 Mini layout with the board-specific narrow pinout and VP/VN analog inputs.",
-    tone: "neutral",
+    "rotation": "rotate(-90deg)",
+    "rank": "ESP32 compact variant",
+    "recommendation": "Wemos Lolin32 Mini layout with the board-specific narrow pinout and VP/VN analog inputs.",
+    "tone": "neutral"
   },
   "wemos-d1-mini-esp32": {
-    rotation: "none",
-    rank: "ESP32-WROOM compact board",
-    recommendation: "Wemos D1 Mini-format ESP32-WROOM board with onboard USB-to-UART and two rows of breakout pins on each side.",
-    tone: "good",
+    "rotation": "none",
+    "rank": "ESP32-WROOM compact board",
+    "recommendation": "Wemos D1 Mini-format ESP32-WROOM board with onboard USB-to-UART and two rows of breakout pins on each side.",
+    "tone": "good"
   },
   "esp32-s2-psram": {
-    rotation: "none",
-    rank: "5. Acceptable",
-    recommendation: "Acceptable for simpler audio use, but it is not as strong as S3 or WROVER boards for this project.",
-    tone: "neutral",
+    "rotation": "none",
+    "rank": "5. Acceptable",
+    "recommendation": "Acceptable for simpler audio use, but it is not as strong as S3 or WROVER boards for this project.",
+    "tone": "neutral"
   },
   "esp32-s2-wemos-mini": {
-    rotation: "none",
-    rank: "Compact ESP32-S2 board",
-    recommendation: "Wemos S2 Mini with native USB and the board-specific 32-pin breakout.",
-    tone: "neutral",
+    "rotation": "none",
+    "rank": "Compact ESP32-S2 board",
+    "recommendation": "Wemos S2 Mini with native USB and the board-specific 32-pin breakout.",
+    "tone": "neutral"
   },
   "esp32-c6": {
-    rotation: "rotate(180deg)",
-    rank: "6. Works",
-    recommendation: "Works, but it is not audio-focused. Choose it only if you specifically need the C6 platform.",
-    tone: "neutral",
+    "rotation": "rotate(180deg)",
+    "rank": "6. Works",
+    "recommendation": "Works, but it is not audio-focused. Choose it only if you specifically need the C6 platform.",
+    "tone": "neutral"
   },
   "esp32-c2-esp8684": {
-    rotation: "none", rank: "Compact RISC-V option",
-    recommendation: "ESP8684-DevKitM-1 (ESP32-C2). Uses its onboard USB-to-UART bridge for programming.", tone: "neutral",
+    "rotation": "none",
+    "rank": "Compact RISC-V option",
+    "recommendation": "ESP8684-DevKitM-1 (ESP32-C2). Uses its onboard USB-to-UART bridge for programming.",
+    "tone": "neutral"
   },
   "esp32-c3": {
-    rotation: "rotate(180deg)",
-    rank: "7. Basic only",
-    recommendation: "ESP32-C3 Super Mini layout. Usable for simple builds, but still the most limited option here for speaker-oriented use.",
-    tone: "basic",
+    "rotation": "rotate(180deg)",
+    "rank": "7. Basic only",
+    "recommendation": "ESP32-C3 Super Mini layout. Usable for simple builds, but still the most limited option here for speaker-oriented use.",
+    "tone": "basic"
   },
-  "esp8266-esp01": { rotation: "rotate(90deg)", rank: "Legacy compact module", recommendation: "ESP-01 with only GPIO0 and GPIO2 exposed. Requires a 3.3 V UART programmer and has very limited flash/GPIO capacity.", tone: "basic" },
-  "esp8266-esp01s": { rotation: "rotate(90deg)", rank: "Legacy compact module", recommendation: "ESP-01S pin-compatible module. Requires a 3.3 V UART programmer and has very limited flash/GPIO capacity.", tone: "basic" },
-  "esp8266-wemos-d1-mini-lite": { rotation: "none", rank: "Compact ESP8266 board", recommendation: "Wemos D1 Mini Lite with onboard USB-to-UART and the familiar D1 Mini pin layout.", tone: "neutral" },
-  "esp8266-esp12e": { rotation: "rotate(-90deg)", rank: "Legacy ESP8266 module", recommendation: "ESP-12E family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.", tone: "basic" },
-  "esp8266-esp12f": { rotation: "rotate(-90deg)", rank: "Legacy ESP8266 module", recommendation: "ESP-12F family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.", tone: "basic" },
-  "esp8285-generic": { rotation: "rotate(90deg)", rank: "Legacy integrated-flash module", recommendation: "Generic ESP8285 family target. Confirm the module pinout and flash size before wiring.", tone: "basic" },
-  "custom-board": { rotation: "none", rank: "User-defined board", recommendation: "Select the installed ESP chip, expose only pins present on that chip, and edit the labels to match your board silkscreen.", tone: "neutral" },
-  "viewe-uedx32480035e-wb-a": {"rotation":"none","rank":"Touch display board","recommendation":"VIEWE 3.5-inch 320x480 LCD with CHSC6540 touch.","tone":"featured"},
+  "esp8266-esp01": {
+    "rotation": "rotate(90deg)",
+    "rank": "Legacy compact module",
+    "recommendation": "ESP-01 with only GPIO0 and GPIO2 exposed. Requires a 3.3 V UART programmer and has very limited flash/GPIO capacity.",
+    "tone": "basic"
+  },
+  "esp8266-esp01s": {
+    "rotation": "rotate(90deg)",
+    "rank": "Legacy compact module",
+    "recommendation": "ESP-01S pin-compatible module. Requires a 3.3 V UART programmer and has very limited flash/GPIO capacity.",
+    "tone": "basic"
+  },
+  "esp8266-wemos-d1-mini-lite": {
+    "rotation": "none",
+    "rank": "Compact ESP8266 board",
+    "recommendation": "Wemos D1 Mini Lite with onboard USB-to-UART and the familiar D1 Mini pin layout.",
+    "tone": "neutral"
+  },
+  "esp8266-esp12e": {
+    "rotation": "rotate(-90deg)",
+    "rank": "Legacy ESP8266 module",
+    "recommendation": "ESP-12E family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.",
+    "tone": "basic"
+  },
+  "esp8266-esp12f": {
+    "rotation": "rotate(-90deg)",
+    "rank": "Legacy ESP8266 module",
+    "recommendation": "ESP-12F family module with more GPIOs. Requires an external 3.3 V USB-to-UART bridge when used as a bare module.",
+    "tone": "basic"
+  },
+  "esp8285-generic": {
+    "rotation": "rotate(90deg)",
+    "rank": "Legacy integrated-flash module",
+    "recommendation": "Generic ESP8285 family target. Confirm the module pinout and flash size before wiring.",
+    "tone": "basic"
+  },
+  "custom-board": {
+    "rotation": "none",
+    "rank": "User-defined board",
+    "recommendation": "Select the installed ESP chip, expose only pins present on that chip, and edit the labels to match your board silkscreen.",
+    "tone": "neutral"
+  },
+  "viewe-uedx32480035e-wb-a": {
+    "rotation": "none",
+    "rank": "Touch display board",
+    "recommendation": "VIEWE 3.5-inch 320x480 LCD with CHSC6540 touch.",
+    "tone": "featured"
+  },
+  "miniexco-v2": {
+    "rotation": "none",
+    "rank": "Speaker board variant",
+    "recommendation": "ESP32-S3 speaker/camera board with wide breakout access, onboard peripherals, and several already-committed pins.",
+    "tone": "warn"
+  }
 };
 const GPIO_BOARD_ASSETS = {
-"viewe-uedx48480021-md80et":{"src": "/viewe-uedx48480021-md80et.svg", "alt": "VIEWE 2.1-inch rotary touch display - GC9503"},
-"viewe-uedx48480021-md80et-st7701s":{"src": "/viewe-uedx48480021-md80et-st7701s.svg", "alt": "VIEWE 2.1-inch rotary touch display - ST7701S"},
-"esp32-2432s028r":{"src": "/esp32-2432s028r.svg", "alt": "ESP32-2432S028R \u00b7 2.8-inch resistive"},
-"esp32-2432s028c":{"src": "/esp32-2432s028c.svg", "alt": "ESP32-2432S028C \u00b7 2.8-inch capacitive"},
-"esp32-3248s035c":{"src": "/esp32-3248s035c.svg", "alt": "ESP32-48S035 / ESP32-3248S035C \u00b7 3.5-inch capacitive"},
-"esp32-cam":{"src": "/esp32-cam.svg", "alt": "ESP32-CAM \u00b7 AI-Thinker / OV2640"},
-
-  "viewe-uedx24320028e-wb-a": { src: "/viewe-uedx24320028e-wb-a.svg", alt: "VIEWE UEDX24320028E-WB-A V1.1" },
+  "viewe-uedx48480021-md80et": {
+    "src": "/viewe-uedx48480021-md80et.svg",
+    "alt": "VIEWE 2.1-inch rotary touch display - GC9503"
+  },
+  "viewe-uedx48480021-md80et-st7701s": {
+    "src": "/viewe-uedx48480021-md80et-st7701s.svg",
+    "alt": "VIEWE 2.1-inch rotary touch display - ST7701S"
+  },
+  "esp32-2432s028r": {
+    "src": "/esp32-2432s028r.svg",
+    "alt": "ESP32-2432S028R · 2.8-inch resistive"
+  },
+  "esp32-2432s028c": {
+    "src": "/esp32-2432s028c.svg",
+    "alt": "ESP32-2432S028C · 2.8-inch capacitive"
+  },
+  "esp32-3248s035c": {
+    "src": "/esp32-3248s035c.svg",
+    "alt": "ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive"
+  },
+  "esp32-cam": {
+    "src": "/esp32-cam.svg",
+    "alt": "ESP32-CAM · AI-Thinker / OV2640"
+  },
+  "viewe-uedx24320028e-wb-a": {
+    "src": "/viewe-uedx24320028e-wb-a.svg",
+    "alt": "VIEWE UEDX24320028E-WB-A V1.1"
+  },
   "esp32-s3-super-mini": {
-    src: "/esp32-s3-supermini-breadboard.svg",
-    alt: "ESP32-S3 Super Mini board",
+    "src": "/esp32-s3-supermini-breadboard.svg",
+    "alt": "ESP32-S3 Super Mini board"
   },
   "esp32-s3-zero": {
-    src: "/esp32-s3-zero-breadboard.svg",
-    alt: "ESP32-S3 Zero board",
+    "src": "/esp32-s3-zero-breadboard.svg",
+    "alt": "ESP32-S3 Zero board"
   },
   "esp32-s3-psram": {
-    src: "/esp32-s3-psram-breadboard.svg",
-    alt: "ESP32-S3-N16R8 board",
+    "src": "/esp32-s3-psram-breadboard.svg",
+    "alt": "ESP32-S3-N16R8 board"
   },
   "esp32-spk-n16r8": {
-    src: "/esp32-spk-n16r8-breadboard.svg",
-    alt: "ESP32-S3-SPK N16R8 board",
+    "src": "/esp32-spk-n16r8-breadboard.svg",
+    "alt": "ESP32-S3-SPK N16R8 board"
   },
   "esp32-s3-devkit-c1": {
-    src: "/esp32-s3-devkit-c1-n8r8-v1-breadboard.svg",
-    alt: "ESP32-S3 DevKit C-1 board",
+    "src": "/esp32-s3-devkit-c1-n8r8-v1-breadboard.svg",
+    "alt": "ESP32-S3 DevKit C-1 board"
   },
   "esp32-s3-cam-module": {
-    src: "/esp32-s3-cam-module-breadboard.svg",
-    alt: "ESP32-S3-CAM module board",
+    "src": "/esp32-s3-cam-module-breadboard.svg",
+    "alt": "ESP32-S3-CAM module board"
   },
   "esp32-wrover": {
-    src: "/esp32-wrover-breadboard.svg",
-    alt: "ESP32-WROVER board",
+    "src": "/esp32-wrover-breadboard.svg",
+    "alt": "ESP32-WROVER board"
   },
   "esp32-wroom": {
-    src: "/esp32-wroom-breadboard.svg",
-    alt: "Classic ESP32-WROOM board",
+    "src": "/esp32-wroom-breadboard.svg",
+    "alt": "Classic ESP32-WROOM board"
   },
   "esp32-mini": {
-    src: "/esp32-mini-breadboard.svg",
-    alt: "ESP32 Mini board",
+    "src": "/esp32-mini-breadboard.svg",
+    "alt": "ESP32 Mini board"
   },
   "wemos-lolin32-mini": {
-    src: "/wemos-lolin32-mini-breadboard.svg",
-    alt: "Wemos Lolin32 Mini board",
+    "src": "/wemos-lolin32-mini-breadboard.svg",
+    "alt": "Wemos Lolin32 Mini board"
   },
-  "wemos-d1-mini-esp32": { src: "/wemos-d1-mini-esp32-breadboard.svg", alt: "Wemos D1 Mini ESP32 board" },
+  "wemos-d1-mini-esp32": {
+    "src": "/wemos-d1-mini-esp32-breadboard.svg",
+    "alt": "Wemos D1 Mini ESP32 board"
+  },
   "esp32-s2-psram": {
-    src: "/esp32-s2-mini-breadboard.svg",
-    alt: "ESP32-S2 with PSRAM board",
+    "src": "/esp32-s2-mini-breadboard.svg",
+    "alt": "ESP32-S2 with PSRAM board"
   },
-  "esp32-s2-wemos-mini": { src: "/wemos-s2-mini-breadboard.svg", alt: "Wemos S2 Mini board" },
+  "esp32-s2-wemos-mini": {
+    "src": "/wemos-s2-mini-breadboard.svg",
+    "alt": "Wemos S2 Mini board"
+  },
   "esp32-c6": {
-    src: "/esp32-c6-mini-breadboard.svg",
-    alt: "ESP32-C6 board",
+    "src": "/esp32-c6-mini-breadboard.svg",
+    "alt": "ESP32-C6 board"
   },
-  "esp32-c2-esp8684": { src: "/esp32-c2-esp8684-breadboard.svg", alt: "ESP8684 DevKitM-1 board" },
+  "esp32-c2-esp8684": {
+    "src": "/esp32-c2-esp8684-breadboard.svg",
+    "alt": "ESP8684 DevKitM-1 board"
+  },
   "esp32-c3": {
-    src: "/esp32-c3-breadboard.svg",
-    alt: "ESP32-C3 Super Mini board",
+    "src": "/esp32-c3-breadboard.svg",
+    "alt": "ESP32-C3 Super Mini board"
   },
-  "esp8266-esp01": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8266 ESP-01 module" },
-  "esp8266-esp01s": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8266 ESP-01S module" },
-  "esp8266-wemos-d1-mini-lite": { src: "/wemos-d1-mini-lite-breadboard.svg", alt: "Wemos D1 Mini Lite ESP8285 board" },
-  "esp8266-esp12e": { src: "/esp8266-esp12e-breadboard.svg", alt: "ESP8266 ESP-12E module" },
-  "esp8266-esp12f": { src: "/esp8266-esp12f-breadboard.svg", alt: "ESP8266 ESP-12F development board" },
-  "esp8285-generic": { src: "/esp8266-esp01-breadboard.svg", alt: "ESP8285 family module" },
-  "custom-board": { src: "/esp32-38pinwide-breadboard.svg", alt: "Generic custom ESP board" },
-  "viewe-uedx32480035e-wb-a": {"src":"/viewe-uedx32480035e-wb-a.svg","alt":"VIEWE 3.5-inch 320x480 Р вЂ™Р’В· UEDX32480035E-WB-A"},
+  "esp8266-esp01": {
+    "src": "/esp8266-esp01-breadboard.svg",
+    "alt": "ESP8266 ESP-01 module"
+  },
+  "esp8266-esp01s": {
+    "src": "/esp8266-esp01-breadboard.svg",
+    "alt": "ESP8266 ESP-01S module"
+  },
+  "esp8266-wemos-d1-mini-lite": {
+    "src": "/wemos-d1-mini-lite-breadboard.svg",
+    "alt": "Wemos D1 Mini Lite ESP8285 board"
+  },
+  "esp8266-esp12e": {
+    "src": "/esp8266-esp12e-breadboard.svg",
+    "alt": "ESP8266 ESP-12E module"
+  },
+  "esp8266-esp12f": {
+    "src": "/esp8266-esp12f-breadboard.svg",
+    "alt": "ESP8266 ESP-12F development board"
+  },
+  "esp8285-generic": {
+    "src": "/esp8266-esp01-breadboard.svg",
+    "alt": "ESP8285 family module"
+  },
+  "custom-board": {
+    "src": "/esp32-38pinwide-breadboard.svg",
+    "alt": "Generic custom ESP board"
+  },
+  "viewe-uedx32480035e-wb-a": {
+    "src": "/viewe-uedx32480035e-wb-a.svg",
+    "alt": "VIEWE 3.5-inch 320x480 Р вЂ™Р’В· UEDX32480035E-WB-A"
+  },
+  "miniexco-v2": {
+    "src": "/miniexco-v2.svg",
+    "alt": "MiniExco v2 robot"
+  }
 };
 const OLED_PREVIEW_SCROLL_INTERVAL_MS = 300;
 const DEFAULT_ESP32S3_AUDIO_PINS = {
@@ -646,336 +770,4816 @@ const DEFAULT_SD_GPIO_PINS = {
 };
 const DOCUMENTED_BUZZER_PIN = 7;
 const GPIO_BOARD_LAYOUTS = {
-"viewe-uedx48480021-md80et":{"left": [], "right": []},
-"viewe-uedx48480021-md80et-st7701s":{"left": [], "right": []},
-"esp32-2432s028r":{"left": [{"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 22, "label": "GPIO22"}, {"pin": 21, "label": "GPIO21"}, {"pin": 27, "label": "GPIO27"}, {"pin": null, "label": "3V3"}], "right": [{"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}]},
-"esp32-2432s028c":{"left": [{"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 22, "label": "GPIO22"}, {"pin": 21, "label": "GPIO21"}, {"pin": 27, "label": "GPIO27"}, {"pin": null, "label": "3V3"}], "right": [{"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}]},
-"esp32-3248s035c":{"left": [{"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 22, "label": "GPIO22"}, {"pin": 21, "label": "GPIO21"}, {"pin": null, "label": "3V3"}], "right": [{"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}]},
-"esp32-cam":{"left": [{"pin": null, "label": "5V"}, {"pin": null, "label": "GND"}, {"pin": 12, "label": "GPIO12"}, {"pin": 13, "label": "GPIO13"}, {"pin": 15, "label": "GPIO15"}, {"pin": 14, "label": "GPIO14"}, {"pin": 2, "label": "GPIO2"}, {"pin": 4, "label": "GPIO4"}], "right": [{"pin": null, "label": "GND"}, {"pin": 1, "label": "GPIO1"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "VCC"}, {"pin": null, "label": "GND"}, {"pin": 0, "label": "GPIO0"}, {"pin": 16, "label": "GPIO16"}, {"pin": null, "label": "3V3"}]},
-
+  "viewe-uedx48480021-md80et": {
+    "left": [],
+    "right": []
+  },
+  "viewe-uedx48480021-md80et-st7701s": {
+    "left": [],
+    "right": []
+  },
+  "esp32-2432s028r": {
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
+  },
+  "esp32-2432s028c": {
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
+  },
+  "esp32-3248s035c": {
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
+  },
+  "esp32-cam": {
+    "left": [
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      }
+    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": null,
+        "label": "VCC"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ]
+  },
   "viewe-uedx24320028e-wb-a": {
-    left: [...[5,6,7,8,9,10,11,12,2,4,14,15,16,17,18,21,43,44].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"},{pin:null,label:"GND"}],
-    right: [...[0,1,3,13,19,20,38,39,40,41,42,45,47,48].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"5V"},{pin:null,label:"GND"}],
+    "left": [
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 43,
+        "label": "GPIO43"
+      },
+      {
+        "pin": 44,
+        "label": "GPIO44"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ],
+    "right": [
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
   },
   "custom-board": {
-    left: [0,1,2,3,4,5,12,13,14,15,16].map(pin=>({pin,label:`GPIO${pin}`})),
-    right: [17,18,19,21,22,23,25,26,27,32,33,34,35,36,39].map(pin=>({pin,label:`GPIO${pin}`})),
+    "left": [
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      }
+    ],
+    "right": [
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 23,
+        "label": "GPIO23"
+      },
+      {
+        "pin": 25,
+        "label": "GPIO25"
+      },
+      {
+        "pin": 26,
+        "label": "GPIO26"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": 32,
+        "label": "GPIO32"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      }
+    ]
   },
   "esp32-s3-super-mini": {
-    left: [
-      ...[8, 9, 10, 11, 12, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "3V3" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "5V" },
+    "left": [
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
     ],
-    right: [
-      ...[7, 6, 5, 4, 3, 2, 1].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: 44, label: "RX / GPIO44" },
-      { pin: 43, label: "TX / GPIO43" },
-    ],
+    "right": [
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 44,
+        "label": "RX / GPIO44"
+      },
+      {
+        "pin": 43,
+        "label": "TX / GPIO43"
+      }
+    ]
   },
   "esp32-s3-zero": {
-    left: [
-      ...[14, 15, 16, 7, 8, 9, 10, 11, 12, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: 44, label: "RX / GPIO44" },
-      { pin: 43, label: "TX / GPIO43" },
+    "left": [
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 44,
+        "label": "RX / GPIO44"
+      },
+      {
+        "pin": 43,
+        "label": "TX / GPIO43"
+      }
     ],
-    right: [
-      ...[6, 5, 4, 3, 2, 1].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "3V3" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "5V" },
-    ],
+    "right": [
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ]
   },
   "esp32-s3-psram": {
-    left: [
-      { pin: null, label: "GND" },
-      { pin: null, label: "3V3" },
-      { pin: null, label: "EN" },
-      ...[4, 5, 6, 7, 15, 16, 17, 18, 8, 19, 20, 3, 46, 9, 10, 11, 12].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "3V3" },
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "EN"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
     ],
-    right: [
-      { pin: null, label: "GND" },
-      { pin: 1, label: "GPIO1" },
-      { pin: 2, label: "GPIO2" },
-      { pin: 43, label: "TX0 / GPIO43" },
-      { pin: 44, label: "RX0 / GPIO44" },
-      ...[42, 41, 40, 38, 37, 36, 35, 0, 45, 48, 47, 21, 14, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "5V IN" },
-    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 43,
+        "label": "TX0 / GPIO43"
+      },
+      {
+        "pin": 44,
+        "label": "RX0 / GPIO44"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 37,
+        "label": "GPIO37"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": null,
+        "label": "5V IN"
+      }
+    ]
   },
-  "esp32-spk-n16r8": {"left": [{"pin": 6, "label": "GPIO6"}, {"pin": 7, "label": "GPIO7"}, {"pin": 8, "label": "GPIO8"}, {"pin": 9, "label": "GPIO9"}, {"pin": 10, "label": "GPIO10"}, {"pin": 11, "label": "GPIO11"}, {"pin": 12, "label": "GPIO12"}, {"pin": 13, "label": "GPIO13"}, {"pin": 14, "label": "GPIO14"}, {"pin": 15, "label": "GPIO15"}, {"pin": 16, "label": "GPIO16"}, {"pin": 17, "label": "GPIO17"}, {"pin": 18, "label": "GPIO18"}, {"pin": 19, "label": "GPIO19"}, {"pin": 20, "label": "GPIO20"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "3V3"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "5V"}], "right": [{"pin": 3, "label": "GPIO3"}, {"pin": 1, "label": "GPIO1"}, {"pin": null, "label": "EN"}, {"pin": 2, "label": "GPIO2"}, {"pin": 0, "label": "GPIO0"}, {"pin": 46, "label": "GPIO46"}, {"pin": 45, "label": "GPIO45"}, {"pin": 44, "label": "GPIO44"}, {"pin": 43, "label": "GPIO43"}, {"pin": 40, "label": "GPIO40"}, {"pin": 39, "label": "GPIO39"}, {"pin": 38, "label": "GPIO38"}, {"pin": 21, "label": "GPIO21"}, {"pin": null, "label": "NC"}, {"pin": null, "label": "NC"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "3V3"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "5V"}]},
+  "esp32-spk-n16r8": {
+    "left": [
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ],
+    "right": [
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": null,
+        "label": "EN"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 44,
+        "label": "GPIO44"
+      },
+      {
+        "pin": 43,
+        "label": "GPIO43"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": null,
+        "label": "NC"
+      },
+      {
+        "pin": null,
+        "label": "NC"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ]
+  },
   "esp32-s3-devkit-c1": {
-    left: [
-      { pin: null, label: "3V3" },
-      { pin: null, label: "3V3" },
-      { pin: null, label: "RST" },
-      ...[4, 5, 6, 7, 15, 16, 17, 18, 8, 3, 46, 9, 10, 11, 12, 13, 14].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "5V" },
-      { pin: null, label: "GND" },
+    "left": [
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
     ],
-    right: [
-      { pin: null, label: "GND" },
-      { pin: 43, label: "TX / GPIO43" },
-      { pin: 44, label: "RX / GPIO44" },
-      { pin: 1, label: "GPIO1" },
-      { pin: 2, label: "GPIO2" },
-      ...[42, 41, 40, 39, 38, 37, 36, 35, 0, 45, 48, 47, 21, 20, 19].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "GND" },
-      { pin: null, label: "GND" },
-    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 43,
+        "label": "TX / GPIO43"
+      },
+      {
+        "pin": 44,
+        "label": "RX / GPIO44"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 37,
+        "label": "GPIO37"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
   },
   "esp32-s3-cam-module": {
-    left: [
-      { pin: null, label: "3V3" },
-      { pin: null, label: "RST" },
-      ...[4, 5, 6, 7, 15, 16, 17, 18, 8, 3, 46, 9, 10, 11, 12, 13, 14].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "5V" },
+    "left": [
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
     ],
-    right: [
-      { pin: 43, label: "TX / GPIO43" },
-      { pin: 44, label: "RX / GPIO44" },
-      { pin: 1, label: "GPIO1" },
-      { pin: 2, label: "GPIO2" },
-      ...[42, 41, 40, 39, 38, 37, 36, 35, 0, 45, 48, 47, 21, 20, 19].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "GND" },
-    ],
+    "right": [
+      {
+        "pin": 43,
+        "label": "TX / GPIO43"
+      },
+      {
+        "pin": 44,
+        "label": "RX / GPIO44"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 37,
+        "label": "GPIO37"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
   },
   "esp32-wrover": {
-    left: [36, 39, 34, 35, 32, 33, 25, 26, 27, 14, 12, 13].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [23, 22, 1, 3, 21, 19, 18, 5, 17, 16, 4, 0, 2, 15].map((pin) => ({
-      pin,
-      label: pin === 1 ? "TX / GPIO1" : (pin === 3 ? "RX / GPIO3" : `GPIO${pin}`),
-    })),
+    "left": [
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 32,
+        "label": "GPIO32"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 25,
+        "label": "GPIO25"
+      },
+      {
+        "pin": 26,
+        "label": "GPIO26"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      }
+    ],
+    "right": [
+      {
+        "pin": 23,
+        "label": "GPIO23"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      }
+    ]
   },
   "esp32-wroom": {
-    left: [15, 2, 0, 4, 16, 17, 5, 18, 19, 21, 3, 1, 22, 23].map((pin) => ({
-      pin,
-      label: pin === 1 ? "TX / GPIO1" : (pin === 3 ? "RX / GPIO3" : `GPIO${pin}`),
-    })),
-    right: [13, 12, 14, 27, 26, 25, 33, 32, 35, 34, 39, 36].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    "left": [
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 23,
+        "label": "GPIO23"
+      }
+    ],
+    "right": [
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": 26,
+        "label": "GPIO26"
+      },
+      {
+        "pin": 25,
+        "label": "GPIO25"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 32,
+        "label": "GPIO32"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      }
+    ]
   },
   "esp32-mini": {
-    left: [
-      { pin: null, label: "RST" },
-      { pin: null, label: "A0" },
-      { pin: 16, label: "D0 / GPIO16" },
-      { pin: 14, label: "D5 / GPIO14" },
-      { pin: 12, label: "D6 / GPIO12" },
-      { pin: 13, label: "D7 / GPIO13" },
-      { pin: 15, label: "D8 / GPIO15" },
-      { pin: null, label: "3V3" },
+    "left": [
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "A0"
+      },
+      {
+        "pin": 16,
+        "label": "D0 / GPIO16"
+      },
+      {
+        "pin": 14,
+        "label": "D5 / GPIO14"
+      },
+      {
+        "pin": 12,
+        "label": "D6 / GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "D7 / GPIO13"
+      },
+      {
+        "pin": 15,
+        "label": "D8 / GPIO15"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
     ],
-    right: [
-      { pin: 1, label: "TX / GPIO1" },
-      { pin: 3, label: "RX / GPIO3" },
-      { pin: 5, label: "D1 / GPIO5" },
-      { pin: 4, label: "D2 / GPIO4" },
-      { pin: 0, label: "D3 / GPIO0" },
-      { pin: 2, label: "D4 / GPIO2" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "5V" },
-    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 5,
+        "label": "D1 / GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "D2 / GPIO4"
+      },
+      {
+        "pin": 0,
+        "label": "D3 / GPIO0"
+      },
+      {
+        "pin": 2,
+        "label": "D4 / GPIO2"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ]
   },
   "wemos-lolin32-mini": {
-    left: [
-      ...[13, 15, 2, 0, 4, 16, 17, 5, 18, 23, 19, 22].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "3V3" },
+    "left": [
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 23,
+        "label": "GPIO23"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
     ],
-    right: [
-      { pin: null, label: "GND" },
-      ...[12, 14, 27, 26, 25, 33, 32, 35, 34].map((pin) => ({ pin, label: `GPIO${pin}` })),
-      { pin: null, label: "EN" },
-      { pin: 39, label: "VN / GPIO39" },
-      { pin: 36, label: "VP / GPIO36" },
-    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": 26,
+        "label": "GPIO26"
+      },
+      {
+        "pin": 25,
+        "label": "GPIO25"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 32,
+        "label": "GPIO32"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": null,
+        "label": "EN"
+      },
+      {
+        "pin": 39,
+        "label": "VN / GPIO39"
+      },
+      {
+        "pin": 36,
+        "label": "VP / GPIO36"
+      }
+    ]
   },
   "wemos-d1-mini-esp32": {
-    left: [{pin:null,label:"RST"},36,26,18,19,23,5,{pin:null,label:"3V3"},13,15].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
-    right: [1,3,22,21,17,16,{pin:null,label:"GND"},{pin:null,label:"5V"},12,7].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+    "left": [
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 26,
+        "label": "GPIO26"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 23,
+        "label": "GPIO23"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      }
+    ]
   },
   "esp32-s2-psram": {
-    left: [
-      { pin: 1, label: "GPIO1" },
-      { pin: null, label: "EN" },
-      { pin: 2, label: "GPIO2" },
-      { pin: 3, label: "GPIO3" },
-      { pin: 4, label: "GPIO4" },
-      { pin: 5, label: "GPIO5" },
-      { pin: 6, label: "GPIO6" },
-      { pin: 7, label: "GPIO7" },
-      { pin: 8, label: "GPIO8" },
-      { pin: 9, label: "GPIO9" },
-      { pin: 10, label: "GPIO10" },
-      { pin: 11, label: "GPIO11" },
-      { pin: 13, label: "GPIO13" },
-      { pin: 12, label: "GPIO12" },
-      { pin: 14, label: "GPIO14" },
-      { pin: null, label: "3.3V" },
+    "left": [
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": null,
+        "label": "EN"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": null,
+        "label": "3.3V"
+      }
     ],
-    right: [
-      { pin: 39, label: "GPIO39" },
-      { pin: 40, label: "GPIO40" },
-      { pin: 37, label: "GPIO37" },
-      { pin: 38, label: "GPIO38" },
-      { pin: 35, label: "GPIO35" },
-      { pin: 36, label: "GPIO36" },
-      { pin: 33, label: "GPIO33" },
-      { pin: 34, label: "GPIO34" },
-      { pin: 18, label: "GPIO18" },
-      { pin: 21, label: "GPIO21" },
-      { pin: 16, label: "GPIO16" },
-      { pin: 17, label: "GPIO17" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "GND" },
-      { pin: null, label: "VBUS" },
-      { pin: 15, label: "GPIO15" },
-    ],
+    "right": [
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 37,
+        "label": "GPIO37"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "VBUS"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      }
+    ]
   },
   "esp32-s2-wemos-mini": {
-    left: [{pin:1,label:"GPIO1"},{pin:null,label:"EN"},...[2,3,4,5,6,7,8,9,10,11,13,12,14].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}],
-    right: [39,40,37,38,35,36,33,34,18,21,16,17].map(pin=>({pin,label:`GPIO${pin}`})).concat([{pin:null,label:"GND"},{pin:null,label:"GND"},{pin:null,label:"VBUS"},{pin:15,label:"GPIO15"}]),
+    "left": [
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": null,
+        "label": "EN"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 37,
+        "label": "GPIO37"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "VBUS"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      }
+    ]
   },
   "esp32-c6": {
-    // The source artwork has USB at the top and is displayed rotated 180Р вЂ™Р’В°.
-    left: [...[8,9,14,15,18,19,20].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3.3V"},{pin:null,label:"GND"},{pin:null,label:"5V"}],
-    right: [7,6,5,4,3,2,1,0,{pin:17,label:"RX / GPIO17"},{pin:16,label:"TX / GPIO16"}].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+    "left": [
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": null,
+        "label": "3.3V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ],
+    "right": [
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 17,
+        "label": "RX / GPIO17"
+      },
+      {
+        "pin": 16,
+        "label": "TX / GPIO16"
+      }
+    ]
   },
   "esp32-c2-esp8684": {
-    left: [{pin:null,label:"GND"},{pin:null,label:"3V3"},{pin:null,label:"3V3"},2,3,{pin:null,label:"GND"},{pin:null,label:"RST"},{pin:null,label:"GND"},0,1,10,{pin:null,label:"GND"},{pin:null,label:"5V"},{pin:null,label:"5V"},{pin:null,label:"GND"}].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
-    right: [9,8,7,6,5,4,20,19,18,17,16,15,14,13,12,11].map(pin=>({pin,label:pin===20?"TX / GPIO20":pin===19?"RX / GPIO19":`GPIO${pin}`})),
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ],
+    "right": [
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 20,
+        "label": "TX / GPIO20"
+      },
+      {
+        "pin": 19,
+        "label": "RX / GPIO19"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      }
+    ]
   },
   "esp32-c3": {
-    // The source artwork has USB at the top and is displayed rotated 180Р вЂ™Р’В°.
-    left: [0,1,2,3,4].map(pin=>({pin,label:`GPIO${pin}`})).concat([{pin:null,label:"3.3V"},{pin:null,label:"GND"},{pin:null,label:"5V"}]),
-    right: [21,20,10,9,8,7,6,5].map(pin=>({pin,label:`GPIO${pin}`})),
+    "left": [
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": null,
+        "label": "3.3V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ],
+    "right": [
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      }
+    ]
   },
-  "esp8266-esp01": { left:[{pin:null,label:"3V3"},{pin:null,label:"RST"},{pin:null,label:"EN / CH_PD"},{pin:3,label:"RX / GPIO3"}], right:[{pin:null,label:"GND"},{pin:2,label:"GPIO2"},{pin:0,label:"BOOT / GPIO0"},{pin:1,label:"TX / GPIO1"}] },
-  "esp8266-esp01s": { left:[{pin:null,label:"3V3"},{pin:null,label:"RST"},{pin:null,label:"EN / CH_PD"},{pin:3,label:"RX / GPIO3"}], right:[{pin:null,label:"GND"},{pin:2,label:"GPIO2"},{pin:0,label:"BOOT / GPIO0"},{pin:1,label:"TX / GPIO1"}] },
+  "esp8266-esp01": {
+    "left": [
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "EN / CH_PD"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      }
+    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 0,
+        "label": "BOOT / GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      }
+    ]
+  },
+  "esp8266-esp01s": {
+    "left": [
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "EN / CH_PD"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      }
+    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 0,
+        "label": "BOOT / GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      }
+    ]
+  },
   "esp8266-wemos-d1-mini-lite": {
-    left: [{pin:null,label:"RST"},{pin:null,label:"A0"},{pin:16,label:"D0 / GPIO16"},{pin:14,label:"D5 / GPIO14"},{pin:12,label:"D6 / GPIO12"},{pin:13,label:"D7 / GPIO13"},{pin:15,label:"D8 / GPIO15"},{pin:null,label:"3V3"}],
-    right: [{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},{pin:5,label:"D1 / GPIO5"},{pin:4,label:"D2 / GPIO4"},{pin:0,label:"D3 / GPIO0"},{pin:2,label:"D4 / GPIO2"},{pin:null,label:"GND"},{pin:null,label:"5V"}],
+    "left": [
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "A0"
+      },
+      {
+        "pin": 16,
+        "label": "D0 / GPIO16"
+      },
+      {
+        "pin": 14,
+        "label": "D5 / GPIO14"
+      },
+      {
+        "pin": 12,
+        "label": "D6 / GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "D7 / GPIO13"
+      },
+      {
+        "pin": 15,
+        "label": "D8 / GPIO15"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 5,
+        "label": "D1 / GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "D2 / GPIO4"
+      },
+      {
+        "pin": 0,
+        "label": "D3 / GPIO0"
+      },
+      {
+        "pin": 2,
+        "label": "D4 / GPIO2"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ]
   },
-  "esp8266-esp12e": { left:[{pin:null,label:"RST"},{pin:null,label:"ADC"},{pin:null,label:"EN / CH_PD"},...[16,14,12,13].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}], right:[{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},...[5,4,0,2,15].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"GND"}] },
-  "esp8266-esp12f": { left:[{pin:null,label:"RST"},{pin:null,label:"ADC"},{pin:null,label:"EN / CH_PD"},...[16,14,12,13].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"3V3"}], right:[{pin:1,label:"TX / GPIO1"},{pin:3,label:"RX / GPIO3"},...[5,4,0,2,15].map(pin=>({pin,label:`GPIO${pin}`})),{pin:null,label:"GND"}] },
-  "esp8285-generic": { left:[16,14,12,13,15,2].map(pin=>({pin,label:`GPIO${pin}`})), right:[0,4,5,3,1].map(pin=>({pin,label:pin===3?"RX / GPIO3":pin===1?"TX / GPIO1":`GPIO${pin}`})) },
-  "viewe-uedx32480035e-wb-a": {"left":[{"pin":5,"label":"GPIO5"},{"pin":6,"label":"GPIO6"},{"pin":7,"label":"GPIO7"},{"pin":8,"label":"GPIO8"},{"pin":9,"label":"GPIO9"},{"pin":10,"label":"GPIO10"},{"pin":11,"label":"GPIO11"},{"pin":12,"label":"GPIO12"},{"pin":2,"label":"GPIO2"},{"pin":4,"label":"GPIO4"},{"pin":14,"label":"GPIO14"},{"pin":15,"label":"GPIO15"},{"pin":16,"label":"GPIO16"},{"pin":17,"label":"GPIO17"},{"pin":18,"label":"GPIO18"},{"pin":21,"label":"GPIO21"},{"pin":43,"label":"GPIO43"},{"pin":44,"label":"GPIO44"},{"pin":null,"label":"3V3"},{"pin":null,"label":"GND"}],"right":[{"pin":0,"label":"GPIO0"},{"pin":1,"label":"GPIO1"},{"pin":3,"label":"GPIO3"},{"pin":13,"label":"GPIO13"},{"pin":19,"label":"GPIO19"},{"pin":20,"label":"GPIO20"},{"pin":38,"label":"GPIO38"},{"pin":39,"label":"GPIO39"},{"pin":40,"label":"GPIO40"},{"pin":41,"label":"GPIO41"},{"pin":42,"label":"GPIO42"},{"pin":45,"label":"GPIO45"},{"pin":47,"label":"GPIO47"},{"pin":48,"label":"GPIO48"},{"pin":null,"label":"5V"},{"pin":null,"label":"GND"}]},
+  "esp8266-esp12e": {
+    "left": [
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "ADC"
+      },
+      {
+        "pin": null,
+        "label": "EN / CH_PD"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
+  },
+  "esp8266-esp12f": {
+    "left": [
+      {
+        "pin": null,
+        "label": "RST"
+      },
+      {
+        "pin": null,
+        "label": "ADC"
+      },
+      {
+        "pin": null,
+        "label": "EN / CH_PD"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
+    "right": [
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
+  },
+  "esp8285-generic": {
+    "left": [
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      }
+    ],
+    "right": [
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 3,
+        "label": "RX / GPIO3"
+      },
+      {
+        "pin": 1,
+        "label": "TX / GPIO1"
+      }
+    ]
+  },
+  "viewe-uedx32480035e-wb-a": {
+    "left": [
+      {
+        "pin": 5,
+        "label": "GPIO5"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 43,
+        "label": "GPIO43"
+      },
+      {
+        "pin": 44,
+        "label": "GPIO44"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ],
+    "right": [
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      }
+    ]
+  },
+  "miniexco-v2": {
+    "left": [
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      },
+      {
+        "pin": 7,
+        "label": "GPIO7"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 10,
+        "label": "GPIO10"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 19,
+        "label": "GPIO19"
+      },
+      {
+        "pin": 20,
+        "label": "GPIO20"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ],
+    "right": [
+      {
+        "pin": 3,
+        "label": "GPIO3"
+      },
+      {
+        "pin": 1,
+        "label": "GPIO1"
+      },
+      {
+        "pin": null,
+        "label": "EN"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 44,
+        "label": "GPIO44"
+      },
+      {
+        "pin": 43,
+        "label": "GPIO43"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": null,
+        "label": "NC"
+      },
+      {
+        "pin": null,
+        "label": "NC"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      },
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "5V"
+      }
+    ]
+  }
 };
 const GPIO_BOARD_EXTRA_LAYOUTS = {
-"viewe-uedx48480021-md80et":{"left":[],"right":[]},
-"viewe-uedx48480021-md80et-st7701s":{"left":[],"right":[]},
-"esp32-2432s028r":{"left": [], "right": []},
-"esp32-2432s028c":{"left": [], "right": []},
-"esp32-3248s035c":{"left": [], "right": []},
-"esp32-cam":{"left": [], "right": []},
-
+  "viewe-uedx48480021-md80et": {
+    "left": [],
+    "right": []
+  },
+  "viewe-uedx48480021-md80et-st7701s": {
+    "left": [],
+    "right": []
+  },
+  "esp32-2432s028r": {
+    "left": [],
+    "right": []
+  },
+  "esp32-2432s028c": {
+    "left": [],
+    "right": []
+  },
+  "esp32-3248s035c": {
+    "left": [],
+    "right": []
+  },
+  "esp32-cam": {
+    "left": [],
+    "right": []
+  },
   "wemos-d1-mini-esp32": {
-    left: [{pin:null,label:"GND"},{pin:null,label:"NC"},39,35,33,34,14,{pin:null,label:"NC"},9,11].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
-    right: [{pin:null,label:"GND"},27,25,32,12,4,0,2,8,6].map(value=>typeof value==='number'?({pin:value,label:`GPIO${value}`}):value),
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": null,
+        "label": "NC"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": null,
+        "label": "NC"
+      },
+      {
+        "pin": 9,
+        "label": "GPIO9"
+      },
+      {
+        "pin": 11,
+        "label": "GPIO11"
+      }
+    ],
+    "right": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 27,
+        "label": "GPIO27"
+      },
+      {
+        "pin": 25,
+        "label": "GPIO25"
+      },
+      {
+        "pin": 32,
+        "label": "GPIO32"
+      },
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 4,
+        "label": "GPIO4"
+      },
+      {
+        "pin": 0,
+        "label": "GPIO0"
+      },
+      {
+        "pin": 2,
+        "label": "GPIO2"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 6,
+        "label": "GPIO6"
+      }
+    ]
   },
   "esp32-s3-super-mini": {
-    left: [14, 15, 16, 17, 18, 21, 33, 34].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [39, 40, 41, 42, 45, 46, 47, 48].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    "left": [
+      {
+        "pin": 14,
+        "label": "GPIO14"
+      },
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 16,
+        "label": "GPIO16"
+      },
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      }
+    ],
+    "right": [
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      }
+    ]
   },
   "esp32-s3-zero": {
-    left: [17, 18, 21, 33, 34, 35, 36, 37, 38].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [48, 47, 46, 45, 44, 43, 42, 41, 40, 39].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    "left": [
+      {
+        "pin": 17,
+        "label": "GPIO17"
+      },
+      {
+        "pin": 18,
+        "label": "GPIO18"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 33,
+        "label": "GPIO33"
+      },
+      {
+        "pin": 34,
+        "label": "GPIO34"
+      },
+      {
+        "pin": 35,
+        "label": "GPIO35"
+      },
+      {
+        "pin": 36,
+        "label": "GPIO36"
+      },
+      {
+        "pin": 37,
+        "label": "GPIO37"
+      },
+      {
+        "pin": 38,
+        "label": "GPIO38"
+      }
+    ],
+    "right": [
+      {
+        "pin": 48,
+        "label": "GPIO48"
+      },
+      {
+        "pin": 47,
+        "label": "GPIO47"
+      },
+      {
+        "pin": 46,
+        "label": "GPIO46"
+      },
+      {
+        "pin": 45,
+        "label": "GPIO45"
+      },
+      {
+        "pin": 44,
+        "label": "GPIO44"
+      },
+      {
+        "pin": 43,
+        "label": "GPIO43"
+      },
+      {
+        "pin": 42,
+        "label": "GPIO42"
+      },
+      {
+        "pin": 41,
+        "label": "GPIO41"
+      },
+      {
+        "pin": 40,
+        "label": "GPIO40"
+      },
+      {
+        "pin": 39,
+        "label": "GPIO39"
+      }
+    ]
   },
   "esp32-c6": {
-    left: [15, 8, 23].map((pin) => ({ pin, label: `GPIO${pin}` })),
-    right: [12, 13, 21, 22].map((pin) => ({ pin, label: `GPIO${pin}` })),
+    "left": [
+      {
+        "pin": 15,
+        "label": "GPIO15"
+      },
+      {
+        "pin": 8,
+        "label": "GPIO8"
+      },
+      {
+        "pin": 23,
+        "label": "GPIO23"
+      }
+    ],
+    "right": [
+      {
+        "pin": 12,
+        "label": "GPIO12"
+      },
+      {
+        "pin": 13,
+        "label": "GPIO13"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      }
+    ]
   },
+  "miniexco-v2": {"left": [], "right": []}
 };
 const GPIO_BOARD_RESERVED_PINS = {
-"viewe-uedx48480021-md80et":{"17": {"kind": "onboard", "label": "LCD DE", "warning": "LCD DE is owned by the rotary module."}, "3": {"kind": "onboard", "label": "LCD VSYNC", "warning": "LCD VSYNC is owned by the rotary module."}, "46": {"kind": "onboard", "label": "LCD HSYNC / strap", "warning": "LCD HSYNC / strap is owned by the rotary module."}, "9": {"kind": "onboard", "label": "LCD PCLK", "warning": "LCD PCLK is owned by the rotary module."}, "18": {"kind": "onboard", "label": "LCD SPI CS", "warning": "LCD SPI CS is owned by the rotary module."}, "8": {"kind": "onboard", "label": "LCD reset", "warning": "LCD reset is owned by the rotary module."}, "7": {"kind": "onboard", "label": "Backlight", "warning": "Backlight is owned by the rotary module."}, "15": {"kind": "onboard", "label": "Touch SCL", "warning": "Touch SCL is owned by the rotary module."}, "16": {"kind": "onboard", "label": "Touch SDA", "warning": "Touch SDA is owned by the rotary module."}, "6": {"kind": "onboard", "label": "Encoder A", "warning": "Encoder A is owned by the rotary module."}, "5": {"kind": "onboard", "label": "Encoder B", "warning": "Encoder B is owned by the rotary module."}, "0": {"kind": "onboard", "label": "Encoder push / BOOT", "warning": "Encoder push / BOOT is owned by the rotary module."}, "19": {"kind": "onboard", "label": "USB D-", "warning": "USB D- is owned by the rotary module."}, "20": {"kind": "onboard", "label": "USB D+", "warning": "USB D+ is owned by the rotary module."}, "43": {"kind": "onboard", "label": "Programming UART", "warning": "Programming UART is owned by the rotary module."}, "44": {"kind": "onboard", "label": "Programming UART", "warning": "Programming UART is owned by the rotary module."}, "10": {"kind": "onboard", "label": "LCD DATA0", "warning": "LCD DATA0 is owned by the rotary module."}, "11": {"kind": "onboard", "label": "LCD DATA1", "warning": "LCD DATA1 is owned by the rotary module."}, "12": {"kind": "onboard", "label": "LCD DATA2 / initialization SPI", "warning": "LCD DATA2 / initialization SPI is owned by the rotary module."}, "13": {"kind": "onboard", "label": "LCD DATA3 / initialization SPI", "warning": "LCD DATA3 / initialization SPI is owned by the rotary module."}, "14": {"kind": "onboard", "label": "LCD DATA4", "warning": "LCD DATA4 is owned by the rotary module."}, "21": {"kind": "onboard", "label": "LCD DATA5", "warning": "LCD DATA5 is owned by the rotary module."}, "47": {"kind": "onboard", "label": "LCD DATA6", "warning": "LCD DATA6 is owned by the rotary module."}, "48": {"kind": "onboard", "label": "LCD DATA7", "warning": "LCD DATA7 is owned by the rotary module."}, "45": {"kind": "onboard", "label": "LCD DATA8", "warning": "LCD DATA8 is owned by the rotary module."}, "38": {"kind": "onboard", "label": "LCD DATA9", "warning": "LCD DATA9 is owned by the rotary module."}, "39": {"kind": "onboard", "label": "LCD DATA10", "warning": "LCD DATA10 is owned by the rotary module."}, "40": {"kind": "onboard", "label": "LCD DATA11", "warning": "LCD DATA11 is owned by the rotary module."}, "41": {"kind": "onboard", "label": "LCD DATA12", "warning": "LCD DATA12 is owned by the rotary module."}, "42": {"kind": "onboard", "label": "LCD DATA13", "warning": "LCD DATA13 is owned by the rotary module."}, "2": {"kind": "onboard", "label": "LCD DATA14", "warning": "LCD DATA14 is owned by the rotary module."}, "1": {"kind": "onboard", "label": "LCD DATA15", "warning": "LCD DATA15 is owned by the rotary module."}, "33": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "34": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "35": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "36": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "37": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}},
-"viewe-uedx48480021-md80et-st7701s":{"17": {"kind": "onboard", "label": "LCD DE", "warning": "LCD DE is owned by the rotary module."}, "3": {"kind": "onboard", "label": "LCD VSYNC", "warning": "LCD VSYNC is owned by the rotary module."}, "46": {"kind": "onboard", "label": "LCD HSYNC / strap", "warning": "LCD HSYNC / strap is owned by the rotary module."}, "9": {"kind": "onboard", "label": "LCD PCLK", "warning": "LCD PCLK is owned by the rotary module."}, "18": {"kind": "onboard", "label": "LCD SPI CS", "warning": "LCD SPI CS is owned by the rotary module."}, "8": {"kind": "onboard", "label": "LCD reset", "warning": "LCD reset is owned by the rotary module."}, "7": {"kind": "onboard", "label": "Backlight", "warning": "Backlight is owned by the rotary module."}, "15": {"kind": "onboard", "label": "Touch SCL", "warning": "Touch SCL is owned by the rotary module."}, "16": {"kind": "onboard", "label": "Touch SDA", "warning": "Touch SDA is owned by the rotary module."}, "6": {"kind": "onboard", "label": "Encoder A", "warning": "Encoder A is owned by the rotary module."}, "5": {"kind": "onboard", "label": "Encoder B", "warning": "Encoder B is owned by the rotary module."}, "0": {"kind": "onboard", "label": "Encoder push / BOOT", "warning": "Encoder push / BOOT is owned by the rotary module."}, "19": {"kind": "onboard", "label": "USB D-", "warning": "USB D- is owned by the rotary module."}, "20": {"kind": "onboard", "label": "USB D+", "warning": "USB D+ is owned by the rotary module."}, "43": {"kind": "onboard", "label": "Programming UART", "warning": "Programming UART is owned by the rotary module."}, "44": {"kind": "onboard", "label": "Programming UART", "warning": "Programming UART is owned by the rotary module."}, "10": {"kind": "onboard", "label": "LCD DATA0", "warning": "LCD DATA0 is owned by the rotary module."}, "11": {"kind": "onboard", "label": "LCD DATA1", "warning": "LCD DATA1 is owned by the rotary module."}, "12": {"kind": "onboard", "label": "LCD DATA2 / initialization SPI", "warning": "LCD DATA2 / initialization SPI is owned by the rotary module."}, "13": {"kind": "onboard", "label": "LCD DATA3 / initialization SPI", "warning": "LCD DATA3 / initialization SPI is owned by the rotary module."}, "14": {"kind": "onboard", "label": "LCD DATA4", "warning": "LCD DATA4 is owned by the rotary module."}, "21": {"kind": "onboard", "label": "LCD DATA5", "warning": "LCD DATA5 is owned by the rotary module."}, "47": {"kind": "onboard", "label": "LCD DATA6", "warning": "LCD DATA6 is owned by the rotary module."}, "48": {"kind": "onboard", "label": "LCD DATA7", "warning": "LCD DATA7 is owned by the rotary module."}, "45": {"kind": "onboard", "label": "LCD DATA8", "warning": "LCD DATA8 is owned by the rotary module."}, "38": {"kind": "onboard", "label": "LCD DATA9", "warning": "LCD DATA9 is owned by the rotary module."}, "39": {"kind": "onboard", "label": "LCD DATA10", "warning": "LCD DATA10 is owned by the rotary module."}, "40": {"kind": "onboard", "label": "LCD DATA11", "warning": "LCD DATA11 is owned by the rotary module."}, "41": {"kind": "onboard", "label": "LCD DATA12", "warning": "LCD DATA12 is owned by the rotary module."}, "42": {"kind": "onboard", "label": "LCD DATA13", "warning": "LCD DATA13 is owned by the rotary module."}, "2": {"kind": "onboard", "label": "LCD DATA14", "warning": "LCD DATA14 is owned by the rotary module."}, "1": {"kind": "onboard", "label": "LCD DATA15", "warning": "LCD DATA15 is owned by the rotary module."}, "33": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "34": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "35": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "36": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}, "37": {"kind": "onboard", "label": "Octal PSRAM", "warning": "Octal PSRAM is owned by the rotary module."}},
-"esp32-2432s028r":{"2": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "12": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "13": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "14": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "15": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "21": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "25": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "32": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "33": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "36": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "39": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "4": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "16": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "17": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "26": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "34": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "1": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}},
-"esp32-2432s028c":{"2": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "12": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "13": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "14": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "15": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "21": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "25": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "32": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "33": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "4": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "16": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "17": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "26": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "34": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "1": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}},
-"esp32-3248s035c":{"2": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "12": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "13": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "14": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "15": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "27": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "21": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "25": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "32": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "33": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "4": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "16": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "17": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "26": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "34": {"kind": "onboard", "label": "Onboard hardware", "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."}, "1": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Used for serial flashing/logging."}},
-"esp32-cam":{"0": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "5": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "18": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "19": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "21": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "22": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "23": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "25": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "26": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "27": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "32": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "34": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "35": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "36": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "39": {"kind": "camera", "label": "Camera", "warning": "Fixed OV2640 camera wiring."}, "16": {"kind": "psram", "label": "PSRAM", "warning": "Connected to camera PSRAM."}, "17": {"kind": "psram", "label": "PSRAM", "warning": "Connected to camera PSRAM."}, "1": {"kind": "serial", "label": "UART", "warning": "Serial flashing/logging."}, "3": {"kind": "serial", "label": "UART", "warning": "Serial flashing/logging."}, "4": {"kind": "onboard", "label": "Flash LED", "warning": "High-brightness camera illuminator."}},
-
-  "viewe-uedx24320028e-wb-a": Object.fromEntries([1,3,13,38,39,40,41,42,45,47,48].map(pin=>[pin,{label:"Onboard hardware",warning:"Reserved for the VIEWE LCD, touch or buzzer.",kind:"onboard"}])),
-  "wemos-d1-mini-esp32": {
-    0:{label:"BOOT",warning:"GPIO0 is a boot strap pin.",kind:"strap"},
-    1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},
-    3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},
-    6:{label:"Flash CLK",warning:"GPIO6 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
-    7:{label:"Flash SD0",warning:"GPIO7 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
-    8:{label:"Flash SD1",warning:"GPIO8 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
-    9:{label:"Flash SD2",warning:"GPIO9 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
-    10:{label:"Flash SD3",warning:"GPIO10 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
-    11:{label:"Flash CMD",warning:"GPIO11 is connected to the onboard SPI flash and must not be assigned.",kind:"onboard"},
-    12:{label:"BOOT strap",warning:"GPIO12 affects flash voltage during boot; use only when the attached circuit preserves a safe boot level.",kind:"strap"},
+  "viewe-uedx48480021-md80et": {
+    "0": {
+      "kind": "onboard",
+      "label": "Encoder push / BOOT",
+      "warning": "Encoder push / BOOT is owned by the rotary module."
+    },
+    "1": {
+      "kind": "onboard",
+      "label": "LCD DATA15",
+      "warning": "LCD DATA15 is owned by the rotary module."
+    },
+    "2": {
+      "kind": "onboard",
+      "label": "LCD DATA14",
+      "warning": "LCD DATA14 is owned by the rotary module."
+    },
+    "3": {
+      "kind": "onboard",
+      "label": "LCD VSYNC",
+      "warning": "LCD VSYNC is owned by the rotary module."
+    },
+    "5": {
+      "kind": "onboard",
+      "label": "Encoder B",
+      "warning": "Encoder B is owned by the rotary module."
+    },
+    "6": {
+      "kind": "onboard",
+      "label": "Encoder A",
+      "warning": "Encoder A is owned by the rotary module."
+    },
+    "7": {
+      "kind": "onboard",
+      "label": "Backlight",
+      "warning": "Backlight is owned by the rotary module."
+    },
+    "8": {
+      "kind": "onboard",
+      "label": "LCD reset",
+      "warning": "LCD reset is owned by the rotary module."
+    },
+    "9": {
+      "kind": "onboard",
+      "label": "LCD PCLK",
+      "warning": "LCD PCLK is owned by the rotary module."
+    },
+    "10": {
+      "kind": "onboard",
+      "label": "LCD DATA0",
+      "warning": "LCD DATA0 is owned by the rotary module."
+    },
+    "11": {
+      "kind": "onboard",
+      "label": "LCD DATA1",
+      "warning": "LCD DATA1 is owned by the rotary module."
+    },
+    "12": {
+      "kind": "onboard",
+      "label": "LCD DATA2 / initialization SPI",
+      "warning": "LCD DATA2 / initialization SPI is owned by the rotary module."
+    },
+    "13": {
+      "kind": "onboard",
+      "label": "LCD DATA3 / initialization SPI",
+      "warning": "LCD DATA3 / initialization SPI is owned by the rotary module."
+    },
+    "14": {
+      "kind": "onboard",
+      "label": "LCD DATA4",
+      "warning": "LCD DATA4 is owned by the rotary module."
+    },
+    "15": {
+      "kind": "onboard",
+      "label": "Touch SCL",
+      "warning": "Touch SCL is owned by the rotary module."
+    },
+    "16": {
+      "kind": "onboard",
+      "label": "Touch SDA",
+      "warning": "Touch SDA is owned by the rotary module."
+    },
+    "17": {
+      "kind": "onboard",
+      "label": "LCD DE",
+      "warning": "LCD DE is owned by the rotary module."
+    },
+    "18": {
+      "kind": "onboard",
+      "label": "LCD SPI CS",
+      "warning": "LCD SPI CS is owned by the rotary module."
+    },
+    "19": {
+      "kind": "onboard",
+      "label": "USB D-",
+      "warning": "USB D- is owned by the rotary module."
+    },
+    "20": {
+      "kind": "onboard",
+      "label": "USB D+",
+      "warning": "USB D+ is owned by the rotary module."
+    },
+    "21": {
+      "kind": "onboard",
+      "label": "LCD DATA5",
+      "warning": "LCD DATA5 is owned by the rotary module."
+    },
+    "33": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "34": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "35": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "36": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "37": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "38": {
+      "kind": "onboard",
+      "label": "LCD DATA9",
+      "warning": "LCD DATA9 is owned by the rotary module."
+    },
+    "39": {
+      "kind": "onboard",
+      "label": "LCD DATA10",
+      "warning": "LCD DATA10 is owned by the rotary module."
+    },
+    "40": {
+      "kind": "onboard",
+      "label": "LCD DATA11",
+      "warning": "LCD DATA11 is owned by the rotary module."
+    },
+    "41": {
+      "kind": "onboard",
+      "label": "LCD DATA12",
+      "warning": "LCD DATA12 is owned by the rotary module."
+    },
+    "42": {
+      "kind": "onboard",
+      "label": "LCD DATA13",
+      "warning": "LCD DATA13 is owned by the rotary module."
+    },
+    "43": {
+      "kind": "onboard",
+      "label": "Programming UART",
+      "warning": "Programming UART is owned by the rotary module."
+    },
+    "44": {
+      "kind": "onboard",
+      "label": "Programming UART",
+      "warning": "Programming UART is owned by the rotary module."
+    },
+    "45": {
+      "kind": "onboard",
+      "label": "LCD DATA8",
+      "warning": "LCD DATA8 is owned by the rotary module."
+    },
+    "46": {
+      "kind": "onboard",
+      "label": "LCD HSYNC / strap",
+      "warning": "LCD HSYNC / strap is owned by the rotary module."
+    },
+    "47": {
+      "kind": "onboard",
+      "label": "LCD DATA6",
+      "warning": "LCD DATA6 is owned by the rotary module."
+    },
+    "48": {
+      "kind": "onboard",
+      "label": "LCD DATA7",
+      "warning": "LCD DATA7 is owned by the rotary module."
+    }
   },
-  "esp8266-wemos-d1-mini-lite": {0:{label:"BOOT",warning:"GPIO0 must be high for normal boot and low during reset to program.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
+  "viewe-uedx48480021-md80et-st7701s": {
+    "0": {
+      "kind": "onboard",
+      "label": "Encoder push / BOOT",
+      "warning": "Encoder push / BOOT is owned by the rotary module."
+    },
+    "1": {
+      "kind": "onboard",
+      "label": "LCD DATA15",
+      "warning": "LCD DATA15 is owned by the rotary module."
+    },
+    "2": {
+      "kind": "onboard",
+      "label": "LCD DATA14",
+      "warning": "LCD DATA14 is owned by the rotary module."
+    },
+    "3": {
+      "kind": "onboard",
+      "label": "LCD VSYNC",
+      "warning": "LCD VSYNC is owned by the rotary module."
+    },
+    "5": {
+      "kind": "onboard",
+      "label": "Encoder B",
+      "warning": "Encoder B is owned by the rotary module."
+    },
+    "6": {
+      "kind": "onboard",
+      "label": "Encoder A",
+      "warning": "Encoder A is owned by the rotary module."
+    },
+    "7": {
+      "kind": "onboard",
+      "label": "Backlight",
+      "warning": "Backlight is owned by the rotary module."
+    },
+    "8": {
+      "kind": "onboard",
+      "label": "LCD reset",
+      "warning": "LCD reset is owned by the rotary module."
+    },
+    "9": {
+      "kind": "onboard",
+      "label": "LCD PCLK",
+      "warning": "LCD PCLK is owned by the rotary module."
+    },
+    "10": {
+      "kind": "onboard",
+      "label": "LCD DATA0",
+      "warning": "LCD DATA0 is owned by the rotary module."
+    },
+    "11": {
+      "kind": "onboard",
+      "label": "LCD DATA1",
+      "warning": "LCD DATA1 is owned by the rotary module."
+    },
+    "12": {
+      "kind": "onboard",
+      "label": "LCD DATA2 / initialization SPI",
+      "warning": "LCD DATA2 / initialization SPI is owned by the rotary module."
+    },
+    "13": {
+      "kind": "onboard",
+      "label": "LCD DATA3 / initialization SPI",
+      "warning": "LCD DATA3 / initialization SPI is owned by the rotary module."
+    },
+    "14": {
+      "kind": "onboard",
+      "label": "LCD DATA4",
+      "warning": "LCD DATA4 is owned by the rotary module."
+    },
+    "15": {
+      "kind": "onboard",
+      "label": "Touch SCL",
+      "warning": "Touch SCL is owned by the rotary module."
+    },
+    "16": {
+      "kind": "onboard",
+      "label": "Touch SDA",
+      "warning": "Touch SDA is owned by the rotary module."
+    },
+    "17": {
+      "kind": "onboard",
+      "label": "LCD DE",
+      "warning": "LCD DE is owned by the rotary module."
+    },
+    "18": {
+      "kind": "onboard",
+      "label": "LCD SPI CS",
+      "warning": "LCD SPI CS is owned by the rotary module."
+    },
+    "19": {
+      "kind": "onboard",
+      "label": "USB D-",
+      "warning": "USB D- is owned by the rotary module."
+    },
+    "20": {
+      "kind": "onboard",
+      "label": "USB D+",
+      "warning": "USB D+ is owned by the rotary module."
+    },
+    "21": {
+      "kind": "onboard",
+      "label": "LCD DATA5",
+      "warning": "LCD DATA5 is owned by the rotary module."
+    },
+    "33": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "34": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "35": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "36": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "37": {
+      "kind": "onboard",
+      "label": "Octal PSRAM",
+      "warning": "Octal PSRAM is owned by the rotary module."
+    },
+    "38": {
+      "kind": "onboard",
+      "label": "LCD DATA9",
+      "warning": "LCD DATA9 is owned by the rotary module."
+    },
+    "39": {
+      "kind": "onboard",
+      "label": "LCD DATA10",
+      "warning": "LCD DATA10 is owned by the rotary module."
+    },
+    "40": {
+      "kind": "onboard",
+      "label": "LCD DATA11",
+      "warning": "LCD DATA11 is owned by the rotary module."
+    },
+    "41": {
+      "kind": "onboard",
+      "label": "LCD DATA12",
+      "warning": "LCD DATA12 is owned by the rotary module."
+    },
+    "42": {
+      "kind": "onboard",
+      "label": "LCD DATA13",
+      "warning": "LCD DATA13 is owned by the rotary module."
+    },
+    "43": {
+      "kind": "onboard",
+      "label": "Programming UART",
+      "warning": "Programming UART is owned by the rotary module."
+    },
+    "44": {
+      "kind": "onboard",
+      "label": "Programming UART",
+      "warning": "Programming UART is owned by the rotary module."
+    },
+    "45": {
+      "kind": "onboard",
+      "label": "LCD DATA8",
+      "warning": "LCD DATA8 is owned by the rotary module."
+    },
+    "46": {
+      "kind": "onboard",
+      "label": "LCD HSYNC / strap",
+      "warning": "LCD HSYNC / strap is owned by the rotary module."
+    },
+    "47": {
+      "kind": "onboard",
+      "label": "LCD DATA6",
+      "warning": "LCD DATA6 is owned by the rotary module."
+    },
+    "48": {
+      "kind": "onboard",
+      "label": "LCD DATA7",
+      "warning": "LCD DATA7 is owned by the rotary module."
+    }
+  },
+  "esp32-2432s028r": {
+    "1": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Used for serial flashing/logging."
+    },
+    "2": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "3": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Used for serial flashing/logging."
+    },
+    "4": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "12": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "13": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "14": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "15": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "16": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "17": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "21": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "25": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "26": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "32": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "33": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "34": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "36": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "39": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    }
+  },
+  "esp32-2432s028c": {
+    "1": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Used for serial flashing/logging."
+    },
+    "2": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "3": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Used for serial flashing/logging."
+    },
+    "4": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "12": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "13": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "14": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "15": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "16": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "17": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "21": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "25": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "26": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "32": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "33": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "34": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    }
+  },
+  "esp32-3248s035c": {
+    "1": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Used for serial flashing/logging."
+    },
+    "2": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "3": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Used for serial flashing/logging."
+    },
+    "4": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "12": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "13": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "14": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "15": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "16": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "17": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "21": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "25": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "26": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "27": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "32": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "33": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    },
+    "34": {
+      "kind": "onboard",
+      "label": "Onboard hardware",
+      "warning": "Wired to LCD, touch, amplifier, RGB LED or light sensor."
+    }
+  },
+  "esp32-cam": {
+    "0": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "1": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Serial flashing/logging."
+    },
+    "3": {
+      "kind": "serial",
+      "label": "UART",
+      "warning": "Serial flashing/logging."
+    },
+    "4": {
+      "kind": "onboard",
+      "label": "Flash LED",
+      "warning": "High-brightness camera illuminator."
+    },
+    "5": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "16": {
+      "kind": "psram",
+      "label": "PSRAM",
+      "warning": "Connected to camera PSRAM."
+    },
+    "17": {
+      "kind": "psram",
+      "label": "PSRAM",
+      "warning": "Connected to camera PSRAM."
+    },
+    "18": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "19": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "21": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "22": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "23": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "25": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "26": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "27": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "32": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "34": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "35": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "36": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    },
+    "39": {
+      "kind": "camera",
+      "label": "Camera",
+      "warning": "Fixed OV2640 camera wiring."
+    }
+  },
+  "viewe-uedx24320028e-wb-a": {
+    "1": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "3": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "13": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "38": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "39": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "40": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "41": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "42": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "45": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "47": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "48": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    }
+  },
+  "wemos-d1-mini-esp32": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 is a boot strap pin.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "6": {
+      "label": "Flash CLK",
+      "warning": "GPIO6 is connected to the onboard SPI flash and must not be assigned.",
+      "kind": "onboard"
+    },
+    "7": {
+      "label": "Flash SD0",
+      "warning": "GPIO7 is connected to the onboard SPI flash and must not be assigned.",
+      "kind": "onboard"
+    },
+    "8": {
+      "label": "Flash SD1",
+      "warning": "GPIO8 is connected to the onboard SPI flash and must not be assigned.",
+      "kind": "onboard"
+    },
+    "9": {
+      "label": "Flash SD2",
+      "warning": "GPIO9 is connected to the onboard SPI flash and must not be assigned.",
+      "kind": "onboard"
+    },
+    "10": {
+      "label": "Flash SD3",
+      "warning": "GPIO10 is connected to the onboard SPI flash and must not be assigned.",
+      "kind": "onboard"
+    },
+    "11": {
+      "label": "Flash CMD",
+      "warning": "GPIO11 is connected to the onboard SPI flash and must not be assigned.",
+      "kind": "onboard"
+    },
+    "12": {
+      "label": "BOOT strap",
+      "warning": "GPIO12 affects flash voltage during boot; use only when the attached circuit preserves a safe boot level.",
+      "kind": "strap"
+    }
+  },
+  "esp8266-wemos-d1-mini-lite": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 must be high for normal boot and low during reset to program.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "2": {
+      "label": "BOOT strap",
+      "warning": "GPIO2 must remain high for normal boot.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "15": {
+      "label": "BOOT strap",
+      "warning": "GPIO15 must remain low for normal flash boot.",
+      "kind": "strap"
+    }
+  },
   "esp32-s2-wemos-mini": {
-    15:{label:"LED",warning:"GPIO15 drives the onboard LED on this Wemos S2 Mini.",kind:"onboard"},
-    19:{label:"USB D-",warning:"GPIO19 is used by native USB.",kind:"usb"},
-    20:{label:"USB D+",warning:"GPIO20 is used by native USB.",kind:"usb"},
+    "15": {
+      "label": "LED",
+      "warning": "GPIO15 drives the onboard LED on this Wemos S2 Mini.",
+      "kind": "onboard"
+    },
+    "19": {
+      "label": "USB D-",
+      "warning": "GPIO19 is used by native USB.",
+      "kind": "usb"
+    },
+    "20": {
+      "label": "USB D+",
+      "warning": "GPIO20 is used by native USB.",
+      "kind": "usb"
+    }
   },
   "esp32-c2-esp8684": {
-    0:{label:"RGB red",warning:"GPIO0 drives the onboard RGB LED red channel.",kind:"onboard"},
-    1:{label:"RGB green",warning:"GPIO1 drives the onboard RGB LED green channel.",kind:"onboard"},
-    8:{label:"ROM log",warning:"GPIO8 is used for ROM-stage serial log output on some ESP8684 configurations.",kind:"serial"},
-    19:{label:"U0RXD",warning:"GPIO19 is the primary UART download receive pin.",kind:"serial"},
-    20:{label:"U0TXD",warning:"GPIO20 is the primary UART download transmit pin.",kind:"serial"},
+    "0": {
+      "label": "RGB red",
+      "warning": "GPIO0 drives the onboard RGB LED red channel.",
+      "kind": "onboard"
+    },
+    "1": {
+      "label": "RGB green",
+      "warning": "GPIO1 drives the onboard RGB LED green channel.",
+      "kind": "onboard"
+    },
+    "8": {
+      "label": "ROM log",
+      "warning": "GPIO8 is used for ROM-stage serial log output on some ESP8684 configurations.",
+      "kind": "serial"
+    },
+    "19": {
+      "label": "U0RXD",
+      "warning": "GPIO19 is the primary UART download receive pin.",
+      "kind": "serial"
+    },
+    "20": {
+      "label": "U0TXD",
+      "warning": "GPIO20 is the primary UART download transmit pin.",
+      "kind": "serial"
+    }
   },
-  "esp8266-esp01": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"}},
-  "esp8266-esp01s": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"}},
-  "esp8266-esp12e": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
-  "esp8266-esp12f": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
-  "esp8285-generic": {0:{label:"BOOT",warning:"GPIO0 must be low during reset to enter the ROM bootloader.",kind:"strap"},1:{label:"U0TXD",warning:"GPIO1 is used by the programming UART.",kind:"serial"},2:{label:"BOOT strap",warning:"GPIO2 must remain high for normal boot.",kind:"strap"},3:{label:"U0RXD",warning:"GPIO3 is used by the programming UART.",kind:"serial"},15:{label:"BOOT strap",warning:"GPIO15 must remain low for normal flash boot.",kind:"strap"}},
+  "esp8266-esp01": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 must be low during reset to enter the ROM bootloader.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "2": {
+      "label": "BOOT strap",
+      "warning": "GPIO2 must remain high for normal boot.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    }
+  },
+  "esp8266-esp01s": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 must be low during reset to enter the ROM bootloader.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "2": {
+      "label": "BOOT strap",
+      "warning": "GPIO2 must remain high for normal boot.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    }
+  },
+  "esp8266-esp12e": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 must be low during reset to enter the ROM bootloader.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "2": {
+      "label": "BOOT strap",
+      "warning": "GPIO2 must remain high for normal boot.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "15": {
+      "label": "BOOT strap",
+      "warning": "GPIO15 must remain low for normal flash boot.",
+      "kind": "strap"
+    }
+  },
+  "esp8266-esp12f": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 must be low during reset to enter the ROM bootloader.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "2": {
+      "label": "BOOT strap",
+      "warning": "GPIO2 must remain high for normal boot.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "15": {
+      "label": "BOOT strap",
+      "warning": "GPIO15 must remain low for normal flash boot.",
+      "kind": "strap"
+    }
+  },
+  "esp8285-generic": {
+    "0": {
+      "label": "BOOT",
+      "warning": "GPIO0 must be low during reset to enter the ROM bootloader.",
+      "kind": "strap"
+    },
+    "1": {
+      "label": "U0TXD",
+      "warning": "GPIO1 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "2": {
+      "label": "BOOT strap",
+      "warning": "GPIO2 must remain high for normal boot.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "U0RXD",
+      "warning": "GPIO3 is used by the programming UART.",
+      "kind": "serial"
+    },
+    "15": {
+      "label": "BOOT strap",
+      "warning": "GPIO15 must remain low for normal flash boot.",
+      "kind": "strap"
+    }
+  },
   "esp32-c6": {
-    8: { label: "WS2812", warning: "Reserved onboard LED pin: GPIO8 drives the built-in WS2812 RGB LED (DIN).", kind: "onboard" },
-    9: { label: "BOOT", warning: "Reserved strap pin: GPIO9 is tied to the BOOT function on this ESP32-C6 board.", kind: "strap" },
-    15: { label: "LED", warning: "Board-tied LED pin: GPIO15 drives the onboard LED on this ESP32-C6 board.", kind: "onboard" },
+    "8": {
+      "label": "WS2812",
+      "warning": "Reserved onboard LED pin: GPIO8 drives the built-in WS2812 RGB LED (DIN).",
+      "kind": "onboard"
+    },
+    "9": {
+      "label": "BOOT",
+      "warning": "Reserved strap pin: GPIO9 is tied to the BOOT function on this ESP32-C6 board.",
+      "kind": "strap"
+    },
+    "15": {
+      "label": "LED",
+      "warning": "Board-tied LED pin: GPIO15 drives the onboard LED on this ESP32-C6 board.",
+      "kind": "onboard"
+    }
   },
   "esp32-s2-psram": {
-    15: { label: "LED", warning: "Board-tied LED pin: GPIO15 drives the onboard LED on this ESP32-S2 PSRAM board.", kind: "onboard" },
-    34: { label: "SPI CS", warning: "Reserved SPI/PSRAM pin: GPIO34 is tied to the onboard CS signal on this board.", kind: "psram" },
-    35: { label: "SPI MOSI", warning: "Reserved SPI/PSRAM pin: GPIO35 is tied to the onboard MOSI signal on this board.", kind: "psram" },
-    36: { label: "SPI SCK", warning: "Reserved SPI/PSRAM pin: GPIO36 is tied to the onboard clock signal on this board.", kind: "psram" },
-    37: { label: "SPI MISO", warning: "Reserved SPI/PSRAM pin: GPIO37 is tied to the onboard MISO signal on this board.", kind: "psram" },
-    39: { label: "JTAG MTCK", warning: "Board-tied JTAG pin: GPIO39 is routed to MTCK on this ESP32-S2 board.", kind: "jtag" },
-    40: { label: "JTAG MTDO", warning: "Board-tied JTAG pin: GPIO40 is routed to MTDO on this ESP32-S2 board.", kind: "jtag" },
+    "15": {
+      "label": "LED",
+      "warning": "Board-tied LED pin: GPIO15 drives the onboard LED on this ESP32-S2 PSRAM board.",
+      "kind": "onboard"
+    },
+    "34": {
+      "label": "SPI CS",
+      "warning": "Reserved SPI/PSRAM pin: GPIO34 is tied to the onboard CS signal on this board.",
+      "kind": "psram"
+    },
+    "35": {
+      "label": "SPI MOSI",
+      "warning": "Reserved SPI/PSRAM pin: GPIO35 is tied to the onboard MOSI signal on this board.",
+      "kind": "psram"
+    },
+    "36": {
+      "label": "SPI SCK",
+      "warning": "Reserved SPI/PSRAM pin: GPIO36 is tied to the onboard clock signal on this board.",
+      "kind": "psram"
+    },
+    "37": {
+      "label": "SPI MISO",
+      "warning": "Reserved SPI/PSRAM pin: GPIO37 is tied to the onboard MISO signal on this board.",
+      "kind": "psram"
+    },
+    "39": {
+      "label": "JTAG MTCK",
+      "warning": "Board-tied JTAG pin: GPIO39 is routed to MTCK on this ESP32-S2 board.",
+      "kind": "jtag"
+    },
+    "40": {
+      "label": "JTAG MTDO",
+      "warning": "Board-tied JTAG pin: GPIO40 is routed to MTDO on this ESP32-S2 board.",
+      "kind": "jtag"
+    }
   },
   "esp32-s3-cam-module": {
-    0: { label: "BOOT", warning: "Reserved strap pin: GPIO0 is used for BOOT mode.", kind: "strap" },
-    2: { label: "LED ON", warning: "Board-tied LED pin: GPIO2 drives the onboard LED.", kind: "onboard" },
-    3: { label: "JTAG EN", warning: "Reserved strap pin: GPIO3 is used for JTAG enable/strap behavior on this module.", kind: "strap" },
-    4: { label: "CAM SIOD", warning: "Reserved camera pin: GPIO4 is used for camera SIOD.", kind: "camera" },
-    5: { label: "CAM SIOC", warning: "Reserved camera pin: GPIO5 is used for camera SIOC.", kind: "camera" },
-    6: { label: "CAM VSYNC", warning: "Reserved camera pin: GPIO6 is used for camera VSYNC.", kind: "camera" },
-    7: { label: "CAM HREF", warning: "Reserved camera pin: GPIO7 is used for camera HREF.", kind: "camera" },
-    8: { label: "CAM Y4", warning: "Reserved camera pin: GPIO8 is used for camera Y4.", kind: "camera" },
-    9: { label: "CAM Y3", warning: "Reserved camera pin: GPIO9 is used for camera Y3.", kind: "camera" },
-    10: { label: "CAM Y5", warning: "Reserved camera pin: GPIO10 is used for camera Y5.", kind: "camera" },
-    11: { label: "CAM Y2", warning: "Reserved camera pin: GPIO11 is used for camera Y2.", kind: "camera" },
-    12: { label: "CAM Y6", warning: "Reserved camera pin: GPIO12 is used for camera Y6.", kind: "camera" },
-    13: { label: "CAM PCLK", warning: "Reserved camera pin: GPIO13 is used for camera PCLK.", kind: "camera" },
-    15: { label: "CAM XCLK", warning: "Reserved camera pin: GPIO15 is used for camera XCLK.", kind: "camera" },
-    16: { label: "CAM Y9", warning: "Reserved camera pin: GPIO16 is used for camera Y9.", kind: "camera" },
-    17: { label: "CAM Y8", warning: "Reserved camera pin: GPIO17 is used for camera Y8.", kind: "camera" },
-    18: { label: "CAM Y7", warning: "Reserved camera pin: GPIO18 is used for camera Y7.", kind: "camera" },
-    19: { label: "USB D+", warning: "Board-tied USB pin: GPIO19 is used for USB D+ and auxiliary serial functions.", kind: "usb" },
-    20: { label: "USB D-", warning: "Board-tied USB pin: GPIO20 is used for USB D- and auxiliary serial functions.", kind: "usb" },
-    35: { label: "PSRAM", warning: "Reserved PSRAM pin: GPIO35 is used for onboard PSRAM.", kind: "psram" },
-    36: { label: "PSRAM", warning: "Reserved PSRAM pin: GPIO36 is used for onboard PSRAM.", kind: "psram" },
-    37: { label: "PSRAM", warning: "Reserved PSRAM pin: GPIO37 is used for onboard PSRAM.", kind: "psram" },
-    38: { label: "SD CMD", warning: "Reserved SD pin: GPIO38 is used for the built-in SD CMD line.", kind: "sd" },
-    39: { label: "SD CLK", warning: "Reserved SD pin: GPIO39 is used for the built-in SD clock line.", kind: "sd" },
-    40: { label: "SD DATA", warning: "Reserved SD pin: GPIO40 is used for built-in SD data.", kind: "sd" },
-    41: { label: "MTDI", warning: "Board-tied JTAG pin: GPIO41 is routed to MTDI.", kind: "jtag" },
-    42: { label: "MTMS", warning: "Board-tied JTAG pin: GPIO42 is routed to MTMS.", kind: "jtag" },
-    43: { label: "U0TXD / LED TX", warning: "Board-tied serial pin: GPIO43 is used for U0TXD and the onboard TX LED.", kind: "serial" },
-    44: { label: "U0RXD / LED RX", warning: "Board-tied serial pin: GPIO44 is used for U0RXD and the onboard RX LED.", kind: "serial" },
-    45: { label: "VSPI", warning: "Reserved strap pin: GPIO45 is used for VSPI/boot strap behavior.", kind: "strap" },
-    46: { label: "LOG", warning: "Reserved strap pin: GPIO46 is used for LOG/strap behavior.", kind: "strap" },
-    48: { label: "WS2812", warning: "Reserved onboard LED pin: GPIO48 drives the built-in WS2812 status LED.", kind: "onboard" },
+    "0": {
+      "label": "BOOT",
+      "warning": "Reserved strap pin: GPIO0 is used for BOOT mode.",
+      "kind": "strap"
+    },
+    "2": {
+      "label": "LED ON",
+      "warning": "Board-tied LED pin: GPIO2 drives the onboard LED.",
+      "kind": "onboard"
+    },
+    "3": {
+      "label": "JTAG EN",
+      "warning": "Reserved strap pin: GPIO3 is used for JTAG enable/strap behavior on this module.",
+      "kind": "strap"
+    },
+    "4": {
+      "label": "CAM SIOD",
+      "warning": "Reserved camera pin: GPIO4 is used for camera SIOD.",
+      "kind": "camera"
+    },
+    "5": {
+      "label": "CAM SIOC",
+      "warning": "Reserved camera pin: GPIO5 is used for camera SIOC.",
+      "kind": "camera"
+    },
+    "6": {
+      "label": "CAM VSYNC",
+      "warning": "Reserved camera pin: GPIO6 is used for camera VSYNC.",
+      "kind": "camera"
+    },
+    "7": {
+      "label": "CAM HREF",
+      "warning": "Reserved camera pin: GPIO7 is used for camera HREF.",
+      "kind": "camera"
+    },
+    "8": {
+      "label": "CAM Y4",
+      "warning": "Reserved camera pin: GPIO8 is used for camera Y4.",
+      "kind": "camera"
+    },
+    "9": {
+      "label": "CAM Y3",
+      "warning": "Reserved camera pin: GPIO9 is used for camera Y3.",
+      "kind": "camera"
+    },
+    "10": {
+      "label": "CAM Y5",
+      "warning": "Reserved camera pin: GPIO10 is used for camera Y5.",
+      "kind": "camera"
+    },
+    "11": {
+      "label": "CAM Y2",
+      "warning": "Reserved camera pin: GPIO11 is used for camera Y2.",
+      "kind": "camera"
+    },
+    "12": {
+      "label": "CAM Y6",
+      "warning": "Reserved camera pin: GPIO12 is used for camera Y6.",
+      "kind": "camera"
+    },
+    "13": {
+      "label": "CAM PCLK",
+      "warning": "Reserved camera pin: GPIO13 is used for camera PCLK.",
+      "kind": "camera"
+    },
+    "15": {
+      "label": "CAM XCLK",
+      "warning": "Reserved camera pin: GPIO15 is used for camera XCLK.",
+      "kind": "camera"
+    },
+    "16": {
+      "label": "CAM Y9",
+      "warning": "Reserved camera pin: GPIO16 is used for camera Y9.",
+      "kind": "camera"
+    },
+    "17": {
+      "label": "CAM Y8",
+      "warning": "Reserved camera pin: GPIO17 is used for camera Y8.",
+      "kind": "camera"
+    },
+    "18": {
+      "label": "CAM Y7",
+      "warning": "Reserved camera pin: GPIO18 is used for camera Y7.",
+      "kind": "camera"
+    },
+    "19": {
+      "label": "USB D+",
+      "warning": "Board-tied USB pin: GPIO19 is used for USB D+ and auxiliary serial functions.",
+      "kind": "usb"
+    },
+    "20": {
+      "label": "USB D-",
+      "warning": "Board-tied USB pin: GPIO20 is used for USB D- and auxiliary serial functions.",
+      "kind": "usb"
+    },
+    "35": {
+      "label": "PSRAM",
+      "warning": "Reserved PSRAM pin: GPIO35 is used for onboard PSRAM.",
+      "kind": "psram"
+    },
+    "36": {
+      "label": "PSRAM",
+      "warning": "Reserved PSRAM pin: GPIO36 is used for onboard PSRAM.",
+      "kind": "psram"
+    },
+    "37": {
+      "label": "PSRAM",
+      "warning": "Reserved PSRAM pin: GPIO37 is used for onboard PSRAM.",
+      "kind": "psram"
+    },
+    "38": {
+      "label": "SD CMD",
+      "warning": "Reserved SD pin: GPIO38 is used for the built-in SD CMD line.",
+      "kind": "sd"
+    },
+    "39": {
+      "label": "SD CLK",
+      "warning": "Reserved SD pin: GPIO39 is used for the built-in SD clock line.",
+      "kind": "sd"
+    },
+    "40": {
+      "label": "SD DATA",
+      "warning": "Reserved SD pin: GPIO40 is used for built-in SD data.",
+      "kind": "sd"
+    },
+    "41": {
+      "label": "MTDI",
+      "warning": "Board-tied JTAG pin: GPIO41 is routed to MTDI.",
+      "kind": "jtag"
+    },
+    "42": {
+      "label": "MTMS",
+      "warning": "Board-tied JTAG pin: GPIO42 is routed to MTMS.",
+      "kind": "jtag"
+    },
+    "43": {
+      "label": "U0TXD / LED TX",
+      "warning": "Board-tied serial pin: GPIO43 is used for U0TXD and the onboard TX LED.",
+      "kind": "serial"
+    },
+    "44": {
+      "label": "U0RXD / LED RX",
+      "warning": "Board-tied serial pin: GPIO44 is used for U0RXD and the onboard RX LED.",
+      "kind": "serial"
+    },
+    "45": {
+      "label": "VSPI",
+      "warning": "Reserved strap pin: GPIO45 is used for VSPI/boot strap behavior.",
+      "kind": "strap"
+    },
+    "46": {
+      "label": "LOG",
+      "warning": "Reserved strap pin: GPIO46 is used for LOG/strap behavior.",
+      "kind": "strap"
+    },
+    "48": {
+      "label": "WS2812",
+      "warning": "Reserved onboard LED pin: GPIO48 drives the built-in WS2812 status LED.",
+      "kind": "onboard"
+    }
   },
-  "esp32-spk-n16r8": {"0": {"label": "Boot strapping", "warning": "GPIO0: Boot strapping; shared onboard wiring.", "kind": "strap"}, "3": {"label": "Boot strapping", "warning": "GPIO3: Boot strapping; shared onboard wiring.", "kind": "strap"}, "45": {"label": "Boot strapping", "warning": "GPIO45: Boot strapping; shared onboard wiring.", "kind": "strap"}, "46": {"label": "Boot strapping", "warning": "GPIO46 drives NS4168 amplifier CTRL after boot; boot strapping still applies.", "kind": "strap"}, "19": {"label": "Native USB D-/D+", "warning": "GPIO19: Native USB D-/D+; shared onboard wiring.", "kind": "usb"}, "20": {"label": "Native USB D-/D+", "warning": "GPIO20: Native USB D-/D+; shared onboard wiring.", "kind": "usb"}, "43": {"label": "CH340 UART0 TX/RX", "warning": "GPIO43: CH340 UART0 TX/RX; shared onboard wiring.", "kind": "serial"}, "44": {"label": "CH340 UART0 TX/RX", "warning": "GPIO44: CH340 UART0 TX/RX; shared onboard wiring.", "kind": "serial"}, "21": {"label": "SK6812 status LED", "warning": "GPIO21: SK6812 status LED; shared onboard wiring.", "kind": "onboard"}, "6": {"label": "Onboard camera", "warning": "GPIO6: Onboard camera; shared onboard wiring.", "kind": "camera"}, "7": {"label": "Onboard camera", "warning": "GPIO7: Onboard camera; shared onboard wiring.", "kind": "camera"}, "8": {"label": "Onboard camera", "warning": "GPIO8: Onboard camera; shared onboard wiring.", "kind": "camera"}, "9": {"label": "NS4168 speaker I2S", "warning": "GPIO9: NS4168 speaker I2S; shared onboard wiring.", "kind": "onboard"}, "10": {"label": "NS4168 speaker I2S", "warning": "GPIO10: NS4168 speaker I2S; shared onboard wiring.", "kind": "onboard"}, "38": {"label": "Dual microphone I2S", "warning": "GPIO38: Dual microphone I2S; shared onboard wiring.", "kind": "onboard"}, "39": {"label": "Dual microphone I2S", "warning": "GPIO39: Dual microphone I2S; shared onboard wiring.", "kind": "onboard"}, "40": {"label": "Dual microphone I2S", "warning": "GPIO40: Dual microphone I2S; shared onboard wiring.", "kind": "onboard"}, "15": {"label": "Onboard buttons", "warning": "GPIO15: Onboard buttons; shared onboard wiring.", "kind": "onboard"}, "16": {"label": "Onboard buttons", "warning": "GPIO16: Onboard buttons; shared onboard wiring.", "kind": "onboard"}},
-  "viewe-uedx32480035e-wb-a": {"1":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"3":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"13":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"38":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"39":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"40":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"41":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"42":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"45":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"47":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"},"48":{"label":"Onboard hardware","warning":"Reserved for the VIEWE LCD, touch or buzzer.","kind":"onboard"}},
+  "esp32-spk-n16r8": {
+    "0": {
+      "label": "Boot strapping",
+      "warning": "GPIO0: Boot strapping; shared onboard wiring.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "Boot strapping",
+      "warning": "GPIO3: Boot strapping; shared onboard wiring.",
+      "kind": "strap"
+    },
+    "6": {
+      "label": "Onboard camera",
+      "warning": "GPIO6: Onboard camera; shared onboard wiring.",
+      "kind": "camera"
+    },
+    "7": {
+      "label": "Onboard camera",
+      "warning": "GPIO7: Onboard camera; shared onboard wiring.",
+      "kind": "camera"
+    },
+    "8": {
+      "label": "Onboard camera",
+      "warning": "GPIO8: Onboard camera; shared onboard wiring.",
+      "kind": "camera"
+    },
+    "9": {
+      "label": "NS4168 speaker I2S",
+      "warning": "GPIO9: NS4168 speaker I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "10": {
+      "label": "NS4168 speaker I2S",
+      "warning": "GPIO10: NS4168 speaker I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "15": {
+      "label": "Onboard buttons",
+      "warning": "GPIO15: Onboard buttons; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "16": {
+      "label": "Onboard buttons",
+      "warning": "GPIO16: Onboard buttons; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "19": {
+      "label": "Native USB D-/D+",
+      "warning": "GPIO19: Native USB D-/D+; shared onboard wiring.",
+      "kind": "usb"
+    },
+    "20": {
+      "label": "Native USB D-/D+",
+      "warning": "GPIO20: Native USB D-/D+; shared onboard wiring.",
+      "kind": "usb"
+    },
+    "21": {
+      "label": "SK6812 status LED",
+      "warning": "GPIO21: SK6812 status LED; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "38": {
+      "label": "Dual microphone I2S",
+      "warning": "GPIO38: Dual microphone I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "39": {
+      "label": "Dual microphone I2S",
+      "warning": "GPIO39: Dual microphone I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "40": {
+      "label": "Dual microphone I2S",
+      "warning": "GPIO40: Dual microphone I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "43": {
+      "label": "CH340 UART0 TX/RX",
+      "warning": "GPIO43: CH340 UART0 TX/RX; shared onboard wiring.",
+      "kind": "serial"
+    },
+    "44": {
+      "label": "CH340 UART0 TX/RX",
+      "warning": "GPIO44: CH340 UART0 TX/RX; shared onboard wiring.",
+      "kind": "serial"
+    },
+    "45": {
+      "label": "Boot strapping",
+      "warning": "GPIO45: Boot strapping; shared onboard wiring.",
+      "kind": "strap"
+    },
+    "46": {
+      "label": "Boot strapping",
+      "warning": "GPIO46 drives NS4168 amplifier CTRL after boot; boot strapping still applies.",
+      "kind": "strap"
+    }
+  },
+  "viewe-uedx32480035e-wb-a": {
+    "1": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "3": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "13": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "38": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "39": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "40": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "41": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "42": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "45": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "47": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    },
+    "48": {
+      "label": "Onboard hardware",
+      "warning": "Reserved for the VIEWE LCD, touch or buzzer.",
+      "kind": "onboard"
+    }
+  },
+  "miniexco-v2": {
+    "0": {
+      "label": "Boot strapping",
+      "warning": "GPIO0: Boot strapping; shared onboard wiring.",
+      "kind": "strap"
+    },
+    "3": {
+      "label": "Boot strapping",
+      "warning": "GPIO3: Boot strapping; shared onboard wiring.",
+      "kind": "strap"
+    },
+    "6": {
+      "label": "Onboard camera",
+      "warning": "GPIO6: Onboard camera; shared onboard wiring.",
+      "kind": "camera"
+    },
+    "7": {
+      "label": "Onboard camera",
+      "warning": "GPIO7: Onboard camera; shared onboard wiring.",
+      "kind": "camera"
+    },
+    "8": {
+      "label": "Onboard camera",
+      "warning": "GPIO8: Onboard camera; shared onboard wiring.",
+      "kind": "camera"
+    },
+    "9": {
+      "label": "NS4168 speaker I2S",
+      "warning": "GPIO9: NS4168 speaker I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "10": {
+      "label": "NS4168 speaker I2S",
+      "warning": "GPIO10: NS4168 speaker I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "15": {
+      "label": "Onboard buttons",
+      "warning": "GPIO15: Onboard buttons; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "16": {
+      "label": "Onboard buttons",
+      "warning": "GPIO16: Onboard buttons; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "19": {
+      "label": "Native USB D-/D+",
+      "warning": "GPIO19: Native USB D-/D+; shared onboard wiring.",
+      "kind": "usb"
+    },
+    "20": {
+      "label": "Native USB D-/D+",
+      "warning": "GPIO20: Native USB D-/D+; shared onboard wiring.",
+      "kind": "usb"
+    },
+    "21": {
+      "label": "SK6812 status LED",
+      "warning": "GPIO21: SK6812 status LED; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "38": {
+      "label": "Dual microphone I2S",
+      "warning": "GPIO38: Dual microphone I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "39": {
+      "label": "Dual microphone I2S",
+      "warning": "GPIO39: Dual microphone I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "40": {
+      "label": "Dual microphone I2S",
+      "warning": "GPIO40: Dual microphone I2S; shared onboard wiring.",
+      "kind": "onboard"
+    },
+    "43": {
+      "label": "CH340 UART0 TX/RX",
+      "warning": "GPIO43: CH340 UART0 TX/RX; shared onboard wiring.",
+      "kind": "serial"
+    },
+    "44": {
+      "label": "CH340 UART0 TX/RX",
+      "warning": "GPIO44: CH340 UART0 TX/RX; shared onboard wiring.",
+      "kind": "serial"
+    },
+    "45": {
+      "label": "Boot strapping",
+      "warning": "GPIO45: Boot strapping; shared onboard wiring.",
+      "kind": "strap"
+    },
+    "46": {
+      "label": "Boot strapping",
+      "warning": "GPIO46 drives NS4168 amplifier CTRL after boot; boot strapping still applies.",
+      "kind": "strap"
+    }
+  }
 };
 const GPIO_ROLE_OPTIONS = [
   "Unused",
@@ -1050,6 +5654,8 @@ const elements = {
   equalizerPresenceValue: document.getElementById("equalizerPresenceValue"),
   equalizerHighSlider: document.getElementById("equalizerHighSlider"),
   equalizerHighValue: document.getElementById("equalizerHighValue"),
+  effectCaptureFile: document.getElementById("effectCaptureFile"),
+  effectCaptureVolumePercent: document.getElementById("effectCaptureVolumePercent"),
   effectStartupFile: document.getElementById("effectStartupFile"),
   effectStartupVolumePercent: document.getElementById("effectStartupVolumePercent"),
   effectAlarmFile: document.getElementById("effectAlarmFile"),
@@ -2424,7 +7030,8 @@ function peripheralHelperBindingValue(groupKey, index, signalLabel) {
     }
   }
   const slot = state.peripheralHelperBindings?.[peripheralHelperBindingSlotKey(groupKey, index)];
-  return typeof slot?.[signalLabel] === "string" ? slot[signalLabel] : "";
+  const value = slot?.[signalLabel];
+  return typeof value === "string" || (typeof value === "number" && Number.isFinite(value)) ? String(value) : "";
 }
 
 function helperBindingDisplayLabel(groupKey, signalLabel) {
@@ -2504,6 +7111,7 @@ function powerHelperDefaultValue(profileValue, signalLabel, inputVoltage = "") {
 
 function helperBindingDefaultValue(groupKey, index, signalLabel) {
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
+  const profileValue = peripheralHelperProfileValue(groupKey,index,state.settings||{});
   const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
   const fixed=board?.bindings?.[groupKey+':'+peripheralHelperProfileValue(groupKey,index,state.settings||{})]?.[normalizedSignal];
   if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return String(fixed);
@@ -2657,7 +7265,7 @@ function boardProfileChipFamily(boardProfile = activeGpioBoardProfile()) {
   if (normalizedProfile === "custom-board") {
     return normalizeCustomBoard(state.settings?.ui?.customBoard).chipFamily;
   }
-  if (normalizedProfile === "esp32-spk-n16r8" || normalizedProfile.startsWith("esp32-s3")) {
+  if (normalizedProfile.startsWith("miniexco") || normalizedProfile === "esp32-spk-n16r8" || normalizedProfile.startsWith("esp32-s3")) {
     return "esp32s3";
   }
   if (normalizedProfile.startsWith("esp32-s2")) {
@@ -3270,6 +7878,8 @@ function assignPeripheralDefaults(groupKey, profileValue, index, realDefinitions
     for(const signal of helperSignals){
       if(['CONTACT','SOURCE','MAIN_CONTROL','INPUT_VOLTAGE','OUTPUT_VOLTAGE','I2C_ADDRESS'].includes(signal))continue;
       const current=peripheralHelperBindingValue(groupKey,index,signal);
+      // BNO055 polling needs only SDA/SCL; do not invent an interrupt wire.
+      if(groupKey==='sensor' && profileValue==='bno055' && signal==='INT' && current==='')continue;
       if(current!==''&&(previous===undefined||state.settingsLoading)){occupied.add(Number(current));continue;}
       const options=helperBindingSignalOptionsFor(groupKey,index,signal);
       const shared=peripheralGpioAssignments().find(a=>a.pin>=0&&shareI2cRoles(`ui.${groupKey}.${index}.${signal.toLowerCase()}`,a.key)&&options.some(o=>!o.disabled&&Number(o.value)===a.pin));
@@ -4024,7 +8634,7 @@ function peripheralDiagramNodeMarkup(node) {
     return `
       <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
         <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
-        <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button>
+        <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">&#8635;</button>
         <div class="peripheral-diagram-node-visual"${visualStyle}>
           ${ledSvg ? `<div data-led-array-index="${node.index}" style="width:${ledWidth}px;max-height:220px;display:flex;align-items:center">${ledSvg}</div>` : `<img src="${escapeHtml(node.src)}" alt="${escapeHtml(node.title || node.label)} module" draggable="false" />`}
         </div>
@@ -4036,7 +8646,7 @@ function peripheralDiagramNodeMarkup(node) {
   return `
     <div class="${node.className}" data-node-id="${escapeHtml(node.id)}"${styleAttribute}>
       <button type="button" class="peripheral-diagram-node-edit" data-node-edit="${escapeHtml(node.id)}" aria-label="Edit ${escapeHtml(node.label)} labels" title="Edit labels">Edit</button>
-      <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button>
+      <button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">&#8635;</button>
       <div class="peripheral-diagram-node-visual"${visualStyle}>
         ${peripheralDiagramPlaceholderMarkup(node)}
       </div>
@@ -4234,7 +8844,7 @@ function handlePeripheralDiagramAssetError(event) {
   if (nodeElement) {
     const rotation = peripheralDiagramRotation(node.id);
     const visualStyle = rotation ? ` style="transform:rotate(${rotation}deg);"` : "";
-    nodeElement.innerHTML = `<button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">Р Р†РІР‚В Р’В»</button><div class="peripheral-diagram-node-visual"${visualStyle}>${peripheralDiagramPlaceholderMarkup(node)}</div><div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>`;
+    nodeElement.innerHTML = `<button type="button" class="peripheral-diagram-node-rotate" data-node-rotate="${escapeHtml(node.id)}" aria-label="Rotate ${escapeHtml(node.label)} clockwise" title="Rotate 90 degrees clockwise">&#8635;</button><div class="peripheral-diagram-node-visual"${visualStyle}>${peripheralDiagramPlaceholderMarkup(node)}</div><div class="peripheral-diagram-node-label">${escapeHtml(node.label)}</div>`;
   }
   renderPeripheralDiagramWiring();
 }
@@ -4719,6 +9329,7 @@ function renderPeripheralDiagramNow() {
     }
     nodes.push({
       id: `sensor-${index}`,
+      src: PERIPHERAL_DIAGRAM_ASSET_MAP.sensor?.[normalizedProfile]?.src,
       className: "peripheral-diagram-node",
       style: peripheralDiagramSlotStyle("sensor", index),
       groupKey: "sensor",
@@ -8955,6 +13566,7 @@ function normalizeUiSettings(uiSettings = {}) {
     theme: ["automatic", "light", "dark"].includes(String(source.theme || "automatic").toLowerCase())
       ? String(source.theme || "automatic").toLowerCase()
       : "automatic",
+    customWebInterface: Boolean(source.customWebInterface),
     gpioSafetyOverride: Boolean(source.gpioSafetyOverride),
     gpioBoardAutodetect: Object.prototype.hasOwnProperty.call(source, "gpioBoardAutodetect")
       ? Boolean(source.gpioBoardAutodetect)
@@ -9264,8 +13876,9 @@ function updatePlaybackActionButton() {
   updatePlaybackHeroControls();
 }
 
-let cameraTab,microphonesTab,bno055Tab,rs485Tab;
+let robotTab,cameraTab,microphonesTab,bno055Tab,rs485Tab;
 function setupTabs() {
+  robotTab ||= createRobotTab({request,board:activeGpioBoardProfile});
   cameraTab ||= createCameraTab({request});
   microphonesTab ||= createMicrophonesTab({request});
   rs485Tab ||= createRs485Tab({request});
@@ -9275,6 +13888,7 @@ function setupTabs() {
   tabNavigation = initTabNavigation({
     storageKey: ACTIVE_TAB_STORAGE_KEY,
     onActivate(resolvedTabName) {
+      robotTab?.setActive(resolvedTabName === "robot");
       cameraTab?.setActive(resolvedTabName === "camera");
       microphonesTab?.setActive(resolvedTabName === "microphones");
       rs485Tab?.setActive(resolvedTabName === "rs485");
@@ -9953,7 +14567,10 @@ window.elmaRefreshFlashSettings = async () => {
     elements.localBuilderCompileFlash.disabled = false;
   }
 };
+installWebAccess({request});
 installOnlineHelpLinks();
 startStatusPolling();
 
 const logicsTab=createLogicsTab();if(logicsTab){installLogicLayout(logicsTab);window.elmaLogicsTab=logicsTab;}
+
+createMotionCapture({request});

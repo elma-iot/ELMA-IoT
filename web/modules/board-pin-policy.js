@@ -4,7 +4,7 @@ export function boardChipFamily(board = "") {
     try { return JSON.parse(localStorage.getItem("elma.custom.board") || "{}").chipFamily || "esp32"; }
     catch { return "esp32"; }
   }
-  if (board.startsWith("viewe-uedx48480021-md80et") || board === "viewe-uedx24320028e-wb-a" || board === "viewe-uedx32480035e-wb-a" || board === "esp32-spk-n16r8" || board.startsWith("esp32-s3")) return "esp32s3";
+  if (board.startsWith("viewe-uedx48480021-md80et") || board === "viewe-uedx24320028e-wb-a" || board === "viewe-uedx32480035e-wb-a" || board === "miniexco-v2" || board === "esp32-spk-n16r8" || board.startsWith("esp32-s3")) return "esp32s3";
   if (board.startsWith("esp32-s2")) return "esp32s2";
   if (board.startsWith("esp32-c2")) return "esp32c2";
   if (board === "esp32-c3") return "esp32c3";

@@ -5094,5 +5094,331 @@
       "true:touch": [],
       "true:pull-input": []
     }
+  },
+  "miniexco-v2": {
+    "chip": "esp32s3",
+    "asset": {
+      "src": "/miniexco-v2.svg",
+      "alt": "MiniExco v2 · ESP32-S3-SPK N16R8"
+    },
+    "gpio": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      3,
+      1,
+      2,
+      0,
+      46,
+      45,
+      44,
+      43,
+      40,
+      39,
+      38,
+      21
+    ],
+    "defaults": {
+      "statusLedPin": -1,
+      "statusLedType": "regular",
+      "statusLedActiveLow": false,
+      "statusLedGreenPin": -1,
+      "statusLedBluePin": -1,
+      "preserveExternalLed": false,
+      "batteryAdcPin": 13
+    },
+    "capabilities": {
+      "false:output": [
+        2,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "false:input": [
+        2,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "false:adc": [
+        2
+      ],
+      "false:touch": [
+        2,
+        11,
+        12,
+        13,
+        14
+      ],
+      "false:pull-input": [
+        2,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "true:output": [
+        0,
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        38,
+        39,
+        40,
+        43,
+        44,
+        45,
+        46
+      ],
+      "true:input": [
+        0,
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        38,
+        39,
+        40,
+        43,
+        44,
+        45,
+        46
+      ],
+      "true:adc": [
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "true:touch": [
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "true:pull-input": [
+        0,
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        38,
+        39,
+        40,
+        43,
+        44,
+        45,
+        46
+      ]
+    },
+    "flashMB": 16,
+    "adcPad": false,
+    "onboard": {
+      "cameraPins": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        33,
+        34,
+        35,
+        36,
+        37,
+        41,
+        42,
+        47,
+        48
+      ],
+      "audioProfile": "spk-ns4168",
+      "audioPins": [
+        9,
+        10,
+        45,
+        46
+      ],
+      "defaults": {
+        "device": {
+          "statusLedPin": 255,
+          "statusLedType": "digital"
+        },
+        "oled": {
+          "enabled": false
+        },
+        "audio": {
+          "enabled": true,
+          "bclkPin": 10,
+          "wsPin": 45,
+          "doutPin": 9
+        },
+        "sd": {
+          "enabled": true,
+          "sdmmc": false,
+          "csPin": 2,
+          "sckPin": 11,
+          "mosiPin": 3,
+          "misoPin": 12
+        },
+        "battery": {
+          "adcPin": 13,
+          "dividerR1Ohms": 22000,
+          "dividerR2Ohms": 10000,
+          "dividerMaxVin": 8.4,
+          "calibrationMultiplier": 0.84,
+          "chargingSensePin": 0
+        }
+      },
+      "bindings": {
+        "audio:spk-ns4168": {},
+        "audioIn:spk-dual-mic": {
+          "SCK": 39,
+          "WS": 40,
+          "SD": 38
+        },
+        "storage:microsd-spi": {
+          "CS": 2,
+          "SCK": 11,
+          "MOSI": 3,
+          "MISO": 12
+        },
+        "communication:uart": {
+          "TX": 43,
+          "RX": 44
+        }
+      },
+      "builtinProfiles": {
+        "audio": "spk-ns4168",
+        "storage": "microsd-spi",
+        "audioIn": "spk-dual-mic"
+      },
+      "microphone": true,
+      "robot": {
+        "name": "MiniExco v2",
+        "motorPins": {
+          "right": [
+            16,
+            17
+          ],
+          "left": [
+            18,
+            19
+          ],
+          "arm": [
+            43,
+            44
+          ]
+        },
+        "servoPins": {
+          "bucket": 0,
+          "aux": 20
+        },
+        "ledPin": 21,
+        "ledCount": 12,
+        "batteryPin": 13,
+        "chargerPin": 1,
+        "i2c": {
+          "sda": 15,
+          "scl": 14
+        }
+      },
+      "robotPins": [
+        16,
+        17,
+        18,
+        19,
+        43,
+        44,
+        0,
+        20,
+        21,
+        13,
+        1
+      ]
+    }
   }
 }

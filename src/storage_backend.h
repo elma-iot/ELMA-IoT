@@ -43,6 +43,7 @@ void endStorageWrite(StorageTarget target);
 void beginStorageRead(StorageTarget target);
 void endStorageRead(StorageTarget target);
 bool storageBusy(StorageTarget target);
+bool storageWriteBlocked(StorageTarget target);
 fs::FS* getStorageFs(StorageTarget target);
 bool storageMounted(StorageTarget target);
 bool storageConfigured(StorageTarget target);

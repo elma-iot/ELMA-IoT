@@ -20,6 +20,11 @@
 #include "storage_memory.h"
 #include "storage_backend.h"
 
+#if defined(APP_SPK_BOARD)
+constexpr i2s_port_t kSpeakerI2s=I2S_NUM_1;
+#else
+constexpr i2s_port_t kSpeakerI2s=I2S_NUM_0;
+#endif
 namespace {
 AudioPlayer::Impl* g_impl = nullptr;
 
@@ -155,7 +160,7 @@ class AudioPlayer::Impl {
         }
     };
 
-    Audio audio;
+    Audio audio{false,3,kSpeakerI2s};
     ElmaAudio::PitchShift* pitchShift = nullptr; // Allocate only for non-unity pitch correction.
     float playbackSpeed = 1;
     uint32_t clockRate = 0;
@@ -183,6 +188,8 @@ class AudioPlayer::Impl {
     uint8_t bitsPerSample = 16;
     uint8_t channelCount = DefaultConfig::AUDIO_FORCE_MONO ? 1 : 2;
     bool diagnosticTestMode = false;
+    bool mediaHeld = false,mediaResume = false,mediaLeasePaused = false, outputDriverReady = true;
+    uint32_t mediaSavedRate = 0;
     String state = "idle";
     String type = "idle";
     String title = "Idle";
@@ -227,7 +234,7 @@ class AudioPlayer::Impl {
         setHardwareAudioVolume(percentToLibraryVolume(volumePercent));
     }
 
-    void fadeToPercent(uint8_t targetVolumePercent, unsigned long durationMs) {
+    void fadeToPercent(uint8_t targetVolumePercent, unsigned long durationMs, bool serviceAudio = false) {
         const int targetAudioVolume = map(targetVolumePercent, 0, 100, 0, DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME);
         if (hardwareAudioVolume == targetAudioVolume) {
             return;
@@ -239,6 +246,7 @@ class AudioPlayer::Impl {
 
         while (hardwareAudioVolume != targetAudioVolume) {
             setHardwareAudioVolume(static_cast<uint8_t>(hardwareAudioVolume + direction));
+            if(serviceAudio && audio.isRunning())audio.loop();
             delay(stepDelayMs);
             yield();
         }
@@ -261,7 +269,7 @@ void reconstructAudioOutput(Audio& audio, uint8_t bclkPin, uint8_t wsPin) {
     // ESP32-S3 (including SPK) uses the external I2S output.
     (void)bclkPin;
     (void)wsPin;
-    new (&audio) Audio();
+    new (&audio) Audio(false,3,kSpeakerI2s);
 #endif
 }
 
@@ -603,6 +611,7 @@ void AudioPlayer::loop() {
     if (impl_ == nullptr) {
         return;
     }
+    if (impl_->mediaHeld || !impl_->outputDriverReady) return;
     if (impl_->speechRendering) {
         int16_t pcm[512];const size_t count = (impl_->renderingPiano?impl_->piano->render(pcm,512):impl_->speech->render(pcm,512));
         if (count) {
@@ -641,7 +650,7 @@ void AudioPlayer::loop() {
     }
     const uint32_t decodedRate=impl_->audio.getSampleRate();
     const uint32_t clock=static_cast<uint32_t>(decodedRate*impl_->playbackSpeed);
-    if (impl_->audio.isRunning() && clock && clock!=impl_->clockRate) {if(i2s_set_sample_rates(I2S_NUM_0,clock)==ESP_OK){impl_->clockRate=clock;impl_->activeSampleRateHz=clock;}else if(impl_->appState)impl_->appState->setLastError("Unsupported audio playback clock");}
+    if (impl_->audio.isRunning() && clock && clock!=impl_->clockRate) {if(i2s_set_sample_rates(kSpeakerI2s,clock)==ESP_OK){impl_->clockRate=clock;impl_->activeSampleRateHz=clock;}else if(impl_->appState)impl_->appState->setLastError("Unsupported audio playback clock");}
     if (!impl_->audio.isRunning() && !impl_->speechRendering && !impl_->speechPath.isEmpty()) {fs::FS* fs=getStorageFs(impl_->speechTarget);if(fs){beginStorageWrite(impl_->speechTarget);fs->remove(impl_->speechPath);endStorageWrite(impl_->speechTarget);}impl_->speechPath="";}
     if (impl_->durationProbePending && impl_->storageLeaseActive && impl_->audio.getAudioCurrentTime() > 0) {
         impl_->cachedDurationSeconds = impl_->audio.getAudioFileDuration();
@@ -662,7 +671,7 @@ void AudioPlayer::loop() {
 }
 
 bool AudioPlayer::play(const String& url, const String& title, const String& mediaType, const String& source) {
-    if (impl_ == nullptr || !impl_->outputEnabled || url.isEmpty()) {
+    if (impl_ == nullptr || impl_->mediaHeld || !impl_->outputEnabled || url.isEmpty()) {
         return false;
     }
 
@@ -830,7 +839,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
 }
 
 bool AudioPlayer::playStorageOverlay(StorageTarget target, const String& path, uint8_t duckPercent, uint8_t overlayPercent) {
-    if (impl_ == nullptr || !impl_->outputEnabled || path.isEmpty() || !impl_->audio.isRunning() ||
+    if (impl_ == nullptr || impl_->mediaHeld || !impl_->outputEnabled || path.isEmpty() || !impl_->audio.isRunning() ||
         !(impl_->state == "playing" || impl_->state == "buffering")) {
         return false;
     }
@@ -857,6 +866,7 @@ void AudioPlayer::stop() {
     if (impl_ == nullptr) {
         return;
     }
+    impl_->mediaResume=false;impl_->mediaLeasePaused=false;
 
     if (impl_->speechRendering) {impl_->speechFile.close();endStorageWrite(impl_->speechTarget);impl_->speechRendering=false;}
     impl_->stopRequested = true;
@@ -1146,6 +1156,7 @@ bool AudioPlayer::validateSource(JsonVariantConst source, String& error) {
     error="";return true;
 }
 bool AudioPlayer::playSource(JsonVariantConst source, String& error) {
+    if(impl_&&impl_->mediaHeld){error="Audio is reserved for communication or capture";return false;}
     if(!impl_ || !impl_->outputEnabled) {error="Audio output is disabled";return false;}
     if(!validateSource(source,error)) return false;
     const float pitchRatio = std::pow(2.f, (source["pitch"] | 0.f) / 12.f) / (source["speed"] | 1.f);
@@ -1190,4 +1201,58 @@ bool AudioPlayer::playSource(JsonVariantConst source, String& error) {
     impl_->publish();return true;
 }
 
+
+namespace {
+bool configureMediaOutput(AudioPlayer::Impl* impl,bool media,uint32_t rate){
+ if(!impl->outputEnabled||impl->bclkPin==255)return false;
+ // Keep intercom DMA bounded to 3 x 128 frames; SPK music uses 4 x 256.
+ i2s_driver_uninstall(kSpeakerI2s);i2s_config_t config{};
+ config.mode=i2s_mode_t(I2S_MODE_MASTER|I2S_MODE_TX);config.sample_rate=rate;config.bits_per_sample=I2S_BITS_PER_SAMPLE_16BIT;
+ config.channel_format=I2S_CHANNEL_FMT_RIGHT_LEFT;config.communication_format=I2S_COMM_FORMAT_STAND_I2S;config.intr_alloc_flags=ESP_INTR_FLAG_LEVEL1;
+ #if defined(APP_SPK_BOARD)
+ config.dma_buf_count=media?3:4;config.dma_buf_len=media?128:256;
+#else
+ config.dma_buf_count=media?3:16;config.dma_buf_len=media?128:512;
+#endif
+ config.tx_desc_auto_clear=true;config.fixed_mclk=I2S_PIN_NO_CHANGE;
+ if(i2s_driver_install(kSpeakerI2s,&config,0,nullptr)!=ESP_OK)return false;
+ i2s_pin_config_t pins{};pins.mck_io_num=I2S_PIN_NO_CHANGE;pins.bck_io_num=impl->bclkPin;pins.ws_io_num=impl->wsPin;pins.data_out_num=impl->doutPin;pins.data_in_num=I2S_PIN_NO_CHANGE;
+ if(i2s_set_pin(kSpeakerI2s,&pins)!=ESP_OK){i2s_driver_uninstall(kSpeakerI2s);return false;}
+ i2s_zero_dma_buffer(kSpeakerI2s);return true;
+}
+}
+void AudioPlayer::holdForMedia(bool hold) {
+ if(!impl_ || impl_->mediaHeld==hold)return;
+ if(hold){impl_->mediaSavedRate=impl_->clockRate?impl_->clockRate:44100;impl_->mediaResume=impl_->audio.isRunning();
+  impl_->fadeToPercent(0,70,true);impl_->mediaResume=impl_->audio.isRunning();if(impl_->mediaResume)impl_->audio.pauseResume();impl_->mediaHeld=true;impl_->mediaLeasePaused=impl_->storageLeaseActive;if(impl_->mediaLeasePaused)releaseStorageLease(impl_);
+  requestAudioPerformanceClock();impl_->outputDriverReady=configureMediaOutput(impl_,true,16000);impl_->clockRate=16000;impl_->state=impl_->outputDriverReady?"paused":"error";impl_->publish();
+ }else{impl_->mediaHeld=false;impl_->outputDriverReady=configureMediaOutput(impl_,false,impl_->mediaSavedRate);impl_->clockRate=impl_->mediaSavedRate;
+  if(!impl_->outputDriverReady){impl_->mediaResume=false;impl_->state="error";impl_->publish();return;}
+  if(impl_->mediaLeasePaused){if(storageMounted(impl_->storageTarget))acquireStorageLease(impl_,impl_->storageTarget);else{impl_->audio.stopSong();impl_->mediaResume=false;}impl_->mediaLeasePaused=false;}
+  if(impl_->mediaResume){impl_->audio.pauseResume();impl_->state=impl_->streamWarmupPending?"buffering":"playing";impl_->fadeToPercent(impl_->volume,90,true);}else{impl_->state="idle";impl_->applyHardwareVolumePercent(impl_->volume);}impl_->mediaResume=false;impl_->publish();}
+}
+bool AudioPlayer::mediaHeld() const {return impl_ && impl_->mediaHeld;}
+bool AudioPlayer::writeMediaPcm(const int16_t* samples,size_t count,uint32_t rate) {
+ if(!impl_||!impl_->outputEnabled||!impl_->mediaHeld||!impl_->outputDriverReady||rate<8000||rate>48000)return false;
+ if(impl_->clockRate!=rate){if(i2s_set_sample_rates(kSpeakerI2s,rate)!=ESP_OK)return false;impl_->clockRate=rate;}
+ int16_t stereo[512];for(size_t at=0;at<count;at+=256){size_t n=std::min(size_t(256),count-at);for(size_t i=0;i<n;i++)stereo[i*2]=stereo[i*2+1]=int32_t(samples[at+i])*impl_->volume/100;
+  size_t written=0;if(i2s_write(kSpeakerI2s,stereo,n*4,&written,pdMS_TO_TICKS(20+(n*1000+rate-1)/rate))!=ESP_OK||written!=n*4)return false;
+ }return true;
+}
+bool AudioPlayer::captureCue(const String& reference,uint8_t level) {
+ if(!impl_||!impl_->outputEnabled)return false;
+ bool alreadyHeld=impl_->mediaHeld;holdForMedia(true);uint8_t saved=impl_->volume;impl_->volume=constrain(level,uint8_t(15),uint8_t(100));bool played=false;
+ StorageTarget target;String path;
+ if(parseAudioFileReference(reference,target,path)&&path.endsWith(".wav")){
+  beginStorageRead(target);File file=storageOpen(target,path,"r");uint8_t h[44]{};
+  if(file&&file.read(h,44)==44&&!memcmp(h,"RIFF",4)&&!memcmp(h+8,"WAVEfmt ",8)&&!memcmp(h+36,"data",4)&&h[20]==1&&h[21]==0&&h[34]==16&&h[35]==0&&(h[22]==1||h[22]==2)){
+   uint32_t rate=uint32_t(h[24])|(uint32_t(h[25])<<8)|(uint32_t(h[26])<<16)|(uint32_t(h[27])<<24);size_t maximum=std::min(size_t(file.size()-44),size_t(rate)*h[22]*2);int16_t pcm[256];
+   if(rate>=8000&&rate<=48000)for(size_t at=0;at<maximum;){size_t n=file.read(reinterpret_cast<uint8_t*>(pcm),std::min(sizeof(pcm),maximum-at));if(!n)break;at+=n;size_t count=n/2;if(h[22]==2){for(size_t i=0;i<count/2;i++)pcm[i]=(int32_t(pcm[i*2])+pcm[i*2+1])/2;count/=2;}if(!writeMediaPcm(pcm,count,rate))break;played=true;}
+  }if(file)file.close();endStorageRead(target);
+ }
+ if(!played){int16_t pcm[256];uint32_t noise=0x31415927;played=true;for(unsigned at=0;at<2400;at+=256){size_t n=std::min(256U,2400-at);for(size_t i=0;i<n;i++){noise=noise*1664525+1013904223;unsigned t=at+i;int gain=(t<800?(800-t):t>1000&&t<2000?(2000-t):0);pcm[i]=int32_t(int16_t(noise>>16))*gain/1500;}if(!writeMediaPcm(pcm,n,16000)){played=false;break;}}}
+ impl_->volume=saved;if(!alreadyHeld)holdForMedia(false);return played;
+}
+
 #endif // APP_DISABLE_AUDIO
+

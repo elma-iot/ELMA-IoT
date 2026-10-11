@@ -23,7 +23,11 @@ constexpr uint8_t OTA_DOWNLOAD_MAX_RESUME_ATTEMPTS = 3;
 // TLS handshakes and filtered GitHub JSON parsing exceed the Arduino loop
 // task's stack on ESP32-S3. Every network-backed OTA operation uses its own
 // generously sized task instead of ever running on loopTask.
+#if defined(APP_SPK_BOARD)
+constexpr uint32_t OTA_NETWORK_TASK_STACK_BYTES = 12288;
+#else
 constexpr uint32_t OTA_NETWORK_TASK_STACK_BYTES = 24576;
+#endif
 
 void logOtaTaskStack(const char* taskName) {
     const UBaseType_t minimumFreeWords = uxTaskGetStackHighWaterMark(nullptr);

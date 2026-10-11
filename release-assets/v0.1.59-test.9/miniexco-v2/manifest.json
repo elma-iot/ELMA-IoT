@@ -1,0 +1,34 @@
+{
+  "version": "0.1.59-test.9",
+  "board": "miniexco-v2",
+  "boardId": 32,
+  "chip": "esp32s3",
+  "flashBytes": 16777216,
+  "psram": "8 MB OPI",
+  "images": [
+    {
+      "file": "bootloader.bin",
+      "offset": "0x0",
+      "size": 15104,
+      "sha256": "2a71d69b471e20c2bac7fb469f3c6a807b3ebee780e348e5889db0da849ca363"
+    },
+    {
+      "file": "partitions.bin",
+      "offset": "0x8000",
+      "size": 3072,
+      "sha256": "f63cec6dbe072f36af217726869ce29269a6f3f33bab9aede8b075bad2a2e1b1"
+    },
+    {
+      "file": "boot_app0.bin",
+      "offset": "0xe000",
+      "size": 8192,
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+    },
+    {
+      "file": "firmware.bin",
+      "offset": "0x10000",
+      "size": 3012000,
+      "sha256": "9f85fce82ce9d6f836377f57c019603e5937d558f3bf8abf8fd4343ecc9f34c6"
+    }
+  ]
+}

@@ -189,6 +189,10 @@ void MotorController::prepareForRestart() {
 }
 
 void MotorController::applySettings(const SettingsBundle& settings) {
+#if defined(APP_ROBOT_BOARD)
+    // The dedicated leased robot runtime owns all three DRV8833 channels.
+    stopAllChannels();releaseConfiguredPins();return;
+#endif
     ChannelPins nextChannels[2] = {};
     const auto channelPinsEqual = [](const ChannelPins& left, const ChannelPins& right) {
         return left.forwardPin == right.forwardPin && left.backwardPin == right.backwardPin;
