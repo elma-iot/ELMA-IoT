@@ -220,6 +220,7 @@ void MotorController::applySettings(const SettingsBundle& settings) {
         nextChannels[0] = buildChannelPins(drv8833ControlIndex, "IN1", "IN2");
         nextChannels[1] = buildChannelPins(drv8833ControlIndex, "IN3", "IN4");
     }
+    driverSlot_=drv8833ControlIndex==SIZE_MAX?-1:int(drv8833ControlIndex);
 
     if (channelPinsEqual(configuredChannels_[0], nextChannels[0]) && channelPinsEqual(configuredChannels_[1], nextChannels[1])) {
         // Runtime settings application initializes button fallbacks before it
@@ -246,6 +247,15 @@ void MotorController::reclaimConfiguredPins() {
 
 bool MotorController::available() const {
     return configuredChannels_[0].configured() || configuredChannels_[1].configured();
+}
+bool MotorController::movePtz(uint8_t panChannel,uint8_t tiltChannel,int pan,int tilt,uint32_t durationMs,int8_t panLimit,int8_t tiltLimit,String& error) {
+    if(panChannel>1||tiltChannel>1||panChannel==tiltChannel||pan<-1||pan>1||tilt<-1||tilt>1||durationMs<100||durationMs>2000){error="Invalid PTZ channels, directions or duration (100–2000 ms)";return false;}
+    if(!configuredChannels_[panChannel].configured()||!configuredChannels_[tiltChannel].configured()){error="Wire both DRV8833 channels for pan/tilt";return false;}
+    if((pan&&limitInputActive(panLimit))||(tilt&&limitInputActive(tiltLimit))){error="PTZ limit switch active";return false;}
+    stopChannel(panChannel);stopChannel(tiltChannel);
+    if(pan&&!runChannel(panChannel,pan>0,durationMs,panLimit,error))return false;
+    if(tilt&&!runChannel(tiltChannel,tilt>0,durationMs,tiltLimit,error)){stopChannel(panChannel);return false;}
+    return true;
 }
 
 bool MotorController::limitInputActive(int8_t limitInputIndex) const {

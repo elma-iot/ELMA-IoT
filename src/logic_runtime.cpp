@@ -282,6 +282,10 @@ void Runtime::execute(size_t n, const char* trigger) {
         JsonDocument args; auto target = node(n);
         if (type.compare(0,7,"action.")==0) { auto ref=input(n,"device");target=ref.as<JsonObjectConst>();args["action"]=type.substr(7); }
         else args["action"]=type.substr(type.find('.')+1);
+        if(type=="peripheral.ptz"){
+            args["action"]=trigger;
+            for(const char* key:{"enabled","pan","tilt","panChannel","tiltChannel","durationMs","panLimitInput","tiltLimitInput","invertPan","invertTilt"})args[key].set(input(n,key));
+        }
         if(type=="hardware.can.configure"||type=="hardware.can.send"){
             args["action"]=type=="hardware.can.configure"?"configure":"send";
             for(const char* key:{"bitrate","listenOnly","identifier","extended","remote","data","length"})args[key].set(input(n,key));

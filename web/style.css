@@ -3914,7 +3914,11 @@ body {
     position: fixed;
     right: 18px;
     bottom: 18px;
-    background: #ffffff;
+    background: var(--panel);
+    color: var(--ink);
+    z-index: 10000;
+    max-width: min(560px, calc(100vw - 36px));
+    overflow-wrap: anywhere;
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 12px 14px;
@@ -5461,6 +5465,7 @@ h2 {color:var(--ink)}
 .device-audio-unavailable .storage-preview-actions { display: none !important; }
 
 .hero-device { display:flex;align-items:center;justify-content:center;gap:20px;min-width:0;flex-wrap:wrap; }
+@media(min-width:641px){.hero-device{justify-content:flex-start;flex-wrap:nowrap}.hero-device h1{flex:1;min-width:0}}
 .header-clock {display:flex;flex-direction:column;align-items:center;white-space:nowrap;}
 .header-clock strong {font-size:1.45rem;font-variant-numeric:tabular-nums;}
 .header-clock span {font-size:.75rem;opacity:.75;}
@@ -5476,3 +5481,19 @@ h2 {color:var(--ink)}
 .robot-controls{max-width:1100px;margin:auto}.robot-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.robot-controls label{display:flex;gap:10px;align-items:center;margin:10px 0}.robot-inputs{display:flex;gap:30px;flex-wrap:wrap;align-items:center;justify-content:center}.robot-stick{width:180px;height:180px;border:3px solid #6485a4;border-radius:50%;display:grid;place-content:center;text-align:center;touch-action:none;user-select:none;background:#23374e;color:white}.robot-stick.active{border-color:#00cf9a;box-shadow:0 0 20px #00cf9a55}.robot-camera{background:#080d14;border-radius:12px;margin:16px 0;min-height:240px;max-height:55vh;overflow:hidden;text-align:center}.robot-camera img{width:100%;height:45vh;object-fit:contain}.robot-controls [data-arm]{touch-action:none;padding:18px}.robot-controls .danger{background:#bc263f;color:#fff;font-weight:bold}.robot-controls [data-robot-status]{min-height:1.5em}
 
 .storage-file-actions{display:flex;gap:4px;flex-shrink:0}.capture-pin-dialog{color:inherit;background:var(--panel-bg,#202b38);border:1px solid #65758a;border-radius:12px;max-width:360px;padding:24px}.capture-pin-dialog::backdrop{background:#0009}.capture-pin-dialog input{width:100%;box-sizing:border-box;margin:12px 0}.capture-pin-dialog form>div{display:flex;gap:12px;justify-content:flex-end}.media-icon[data-media-kind=secure][aria-pressed=true]{color:#75e296;border-color:#75e296;box-shadow:0 0 14px #75e29699}
+
+/* Keep the seek overlay transparent even when global disabled-input styles apply. */
+:root .storage-meter input[type="range"]:disabled { opacity:0; }
+
+.storage-progress-wrap { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 12px; }
+.storage-progress-wrap[hidden] { display:none; }
+.storage-progress-wrap .progress-label { grid-column:1/-1; }
+.storage-cancel-upload { padding:6px 12px;min-height:32px; }
+
+.storage-command-meta > .storage-progress-wrap {flex:0 0 100%;width:100%;margin:0}
+.storage-command-meta > [hidden] {display:none}
+.storage-file-list {align-content:start;scrollbar-gutter:stable}
+.storage-custom-ui-toggle {display:flex;align-items:center;justify-content:flex-start;gap:10px;width:fit-content}
+.storage-custom-ui-toggle input[type=checkbox] {width:auto;margin:0;flex:0 0 auto}
+
+.storage-heading-tip {cursor:help}

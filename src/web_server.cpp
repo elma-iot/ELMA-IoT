@@ -4,6 +4,8 @@
 #include "plot_telemetry.h"
 #include "plot_storage.h"
 #include "storage_download.h"
+#include "storage_integrity.h"
+#include <esp_system.h>
 #include "static_asset_policy.h"
 #include "bounded_stream_response.h"
 #include "storage_memory.h"
@@ -232,7 +234,7 @@ String normalizeStoragePath(const String& rawPath, bool allowRoot = false) {
     while (path.indexOf("//") >= 0) {
         path.replace("//", "/");
     }
-    if (path.indexOf("..") >= 0) {
+    if (path.indexOf("..") >= 0 || path.indexOf(".elma-settings-") >= 0) {
         return String();
     }
     while (path.length() > 1 && path.endsWith("/")) {
@@ -562,6 +564,11 @@ void appendStorageEntriesJson(StorageTarget target, const String& directoryPath,
     size_t scannedEntries = 0;
     size_t returnedEntries = 0;
     for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+        const String entryName = storageBaseName(String(entry.path()));
+        if (entryName == ".index" || entryName == ".index.tmp" || entryName.startsWith(".elma-settings-")) {
+            entry.close();
+            continue;
+        }
         if (exhaustiveScan) {
             totalEntries += 1;
         }
@@ -643,7 +650,7 @@ bool rebuildStorageDirectoryIndex(StorageTarget target, const String& directoryP
     for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
         const String path = String(entry.path());
         String name = storageBaseName(path);
-        if (name == ".index" || name == ".index.tmp") {
+        if (name == ".index" || name == ".index.tmp" || name.startsWith(".elma-settings-")) {
             entry.close();
             continue;
         }
@@ -698,7 +705,7 @@ size_t countStorageDirectoryEntries(StorageTarget target, const String& director
     size_t totalEntries = 0;
     for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
         const String name = storageBaseName(String(entry.path()));
-        if (name == ".index" || name == ".index.tmp") {
+        if (name == ".index" || name == ".index.tmp" || name.startsWith(".elma-settings-")) {
             entry.close();
             continue;
         }
@@ -735,6 +742,9 @@ void storageReindexTask(void* rawParams) {
     std::unique_ptr<StorageReindexTaskParams> params(static_cast<StorageReindexTaskParams*>(rawParams));
     const StorageTarget target = params ? params->target : StorageTarget::Sd;
     const String directoryPath = params ? params->directoryPath : String("/");
+restartIndex:
+    while(storageForegroundPending(target)||storageBusy(target))vTaskDelay(pdMS_TO_TICKS(100));
+    bool preempted = false;
     bool success = false;
     String error;
 
@@ -759,8 +769,9 @@ void storageReindexTask(void* rawParams) {
             } else {
                 size_t entryCount = 0;
                 for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+                    if(storageForegroundPending(target)){entry.close();preempted=true;break;}
                     const String name = storageBaseName(String(entry.path()));
-                    if (name == ".index" || name == ".index.tmp") {
+                    if (name == ".index" || name == ".index.tmp" || name.startsWith(".elma-settings-")) {
                         entry.close();
                         continue;
                     }
@@ -775,6 +786,7 @@ void storageReindexTask(void* rawParams) {
                 }
                 root.close();
                 endStorageRead(target);
+                if(preempted){updateStorageReindexStatus([](StorageReindexStatus& status){copyReindexText(status.stage,sizeof(status.stage),"waiting for file operation");});goto restartIndex;}
 
                 updateStorageReindexStatus([entryCount](StorageReindexStatus& status) {
                     status.totalEntries = max<size_t>(entryCount * 2U, 1U);
@@ -802,10 +814,11 @@ void storageReindexTask(void* rawParams) {
                         endStorageWrite(target);
                     } else {
                         size_t writtenEntries = 0;
-                        bool writeOk = true;
+                        bool writeOk = !preempted;
                         for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+                    if(storageForegroundPending(target)){entry.close();preempted=true;break;}
                             String name = storageBaseName(String(entry.path()));
-                            if (name == ".index" || name == ".index.tmp") {
+                            if (name == ".index" || name == ".index.tmp" || name.startsWith(".elma-settings-")) {
                                 entry.close();
                                 continue;
                             }
@@ -832,7 +845,7 @@ void storageReindexTask(void* rawParams) {
                         indexFile.flush();
                         indexFile.close();
 
-                        if (!writeOk) {
+                        if (!writeOk || preempted) {
                             error = "Unable to write index file.";
                             fs->remove(tempIndexPath);
                             endStorageWrite(target);
@@ -854,6 +867,10 @@ void storageReindexTask(void* rawParams) {
         }
     }
 
+    if(preempted){
+        updateStorageReindexStatus([](StorageReindexStatus& status){copyReindexText(status.stage,sizeof(status.stage),"waiting for file operation");});
+        goto restartIndex;
+    }
     updateStorageReindexStatus([&](StorageReindexStatus& status) {
         status.active = false;
         status.completed = true;
@@ -2113,6 +2130,9 @@ void WebServerManager::registerApiRoutes() {
         }else{result["error"]="Explicit erase confirmation required";sendJson(request,result,400);return;}
         sendJson(request,result);
     });
+    // AsyncCallbackWebHandler also matches descendants; register checksum
+    // before the broader /api/storage listing route.
+    registerStorageIntegrityRoutes(server_,[this](AsyncWebServerRequest* request){return ensureAuthorized(request);});
     server_.on("/api/storage", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
@@ -2143,7 +2163,8 @@ void WebServerManager::registerApiRoutes() {
                 return;
             }
 
-            if(storageBusy(target)){request->send(423,"application/json","{\"error\":\"Storage is busy; stop playback/transfers before deleting.\"}");return;}
+            prioritizeStorageOperation(target);
+            if(storageBusy(target)){request->send(423,"application/json","{\"error\":\"Waiting for storage; background indexing is paused. Active transfers or recordings must finish safely.\"}");return;}
             JsonDocument doc;
             if (deserializeJson(doc, data, len) != DeserializationError::Ok) {
                 request->send(400, "application/json", "{\"error\":\"invalid json\"}");
@@ -2159,7 +2180,9 @@ void WebServerManager::registerApiRoutes() {
                 request->send(500, "application/json", "{\"error\":\"Unable to delete path.\"}");
                 return;
             }
-            String indexError;beginStorageReindexJob(target,storageParentPath(path),indexError);
+            // Invalidate the cached listing immediately. A batch must not start a
+            // competing index writer after every deleted file. Live listing is the fallback.
+            storageRemove(target,storageIndexPathForDirectory(storageParentPath(path)));
 
             JsonDocument response;
             response["ok"] = true;
@@ -2226,23 +2249,27 @@ void WebServerManager::registerApiRoutes() {
 
             if(storageUploadOwner_!=request)return;
             JsonDocument response;
+            if(!storageUploadFinished_ && storageUploadError_.isEmpty())storageUploadError_="Upload did not complete";
             if (!storageUploadError_.isEmpty()) {
                 response["error"] = storageUploadError_;
+                const int failureStatus=storageUploadError_.startsWith("Storage is busy") ? 423 : 400;
                 if (storageUploadFile_) {
                     storageUploadFile_.close();
                 }
                 if (storageUploadCreated_ && !storageUploadPath_.isEmpty()) {
-                    storageRemove(storageUploadTarget_, storageUploadPath_);
+                    storageRemove(storageUploadTarget_, storageUploadTempPath_);
                 }
                 releaseStorageUploadLease();storageUploadOwner_=nullptr;
                 storageUploadPath_ = "";
                 storageUploadBytesWritten_ = 0;
                 storageUploadLimitBytes_ = 0;
                 storageUploadError_ = "";
-                sendJson(request, response, 400);
+                sendJson(request, response, failureStatus);
                 return;
             }
 
+            char checksum[9];snprintf(checksum,sizeof(checksum),"%08lx",static_cast<unsigned long>(storageUploadCrc_^0xffffffff));
+            response["crc32"]=checksum;response["sizeBytes"]=storageUploadBytesWritten_;
             response["ok"] = true;
             response["message"] = String("Uploaded ") + storageUploadPath_;
             response["path"] = storageUploadPath_;
@@ -2266,13 +2293,17 @@ void WebServerManager::registerApiRoutes() {
                 request->onDisconnect([this,request](){
                     if(storageUploadOwner_!=request)return;
                     storageUploadFile_.close();
-                    if(storageUploadCreated_&&!storageUploadFinished_)storageRemove(storageUploadTarget_,storageUploadPath_);
+                    if(storageUploadCreated_&&!storageUploadFinished_)storageRemove(storageUploadTarget_,storageUploadTempPath_);
                     releaseStorageUploadLease();storageUploadOwner_=nullptr;storageUploadPath_="";
                 });
                 storageUploadTarget_ = storageTargetFromRequest(request);
                 const String directoryPath = storageDirectoryFromRequest(request);
                 storageUploadError_ = "";
                 storageUploadPath_ = joinStoragePath(directoryPath, sanitizeUploadFilename(filename));
+                storageUploadCrc_=0xffffffff;storageUploadExpectedCrc_=request->header("X-File-CRC32");storageUploadExpectedCrc_.toLowerCase();
+                storageUploadExpectedSize_=request->hasHeader("X-File-Size")?strtoul(request->header("X-File-Size").c_str(),nullptr,10):0;
+                storageUploadTempPath_=storageUploadPath_+".upload-"+String(esp_random(),HEX);
+                if(storageUploadExpectedCrc_.length() && (storageUploadExpectedCrc_.length()!=8 || !storageUploadExpectedSize_)){storageUploadError_="Invalid upload checksum or length";return;}
                 storageUploadBytesWritten_ = 0;
                 storageUploadLimitBytes_ = 0;
 
@@ -2285,21 +2316,19 @@ void WebServerManager::registerApiRoutes() {
                     return;
                 }
 
-                if(storageBusy(storageUploadTarget_)){storageUploadError_="Storage is busy; stop playback/transfers and retry upload";return;}
+                prioritizeStorageOperation(storageUploadTarget_);
+                if(storageBusy(storageUploadTarget_)){storageUploadError_="Storage is busy; waiting for foreground access";return;}
                 beginStorageWrite(storageUploadTarget_);storageUploadLeased_=true;
-                const size_t existingSize = storageExists(storageUploadTarget_, storageUploadPath_)
-                    ? static_cast<size_t>(storageOpen(storageUploadTarget_, storageUploadPath_, "r").size())
-                    : 0;
                 const StorageBackendSummary summary = getStorageSummary(storageUploadTarget_);
                 const size_t freeBytes = summary.freeBytes;
-                const size_t availableBytes = freeBytes + existingSize;
+                const size_t availableBytes = freeBytes; // Stage beside the existing destination; preserve it until verified.
                 storageUploadLimitBytes_ = availableBytes > kStorageReserveBytes ? availableBytes - kStorageReserveBytes : 0;
                 if (storageUploadLimitBytes_ == 0) {
                     storageUploadError_ = "Not enough free space for upload.";
                     return;
                 }
 
-                storageUploadFile_ = storageOpen(storageUploadTarget_, storageUploadPath_, "w");
+                storageUploadFile_ = storageOpen(storageUploadTarget_, storageUploadTempPath_, "w");
                 if (!storageUploadFile_) {
                     storageUploadError_ = "Unable to open destination file.";
                     return;
@@ -2316,14 +2345,14 @@ void WebServerManager::registerApiRoutes() {
                 if ((storageUploadBytesWritten_ + len) > storageUploadLimitBytes_) {
                     storageUploadError_ = "File is larger than remaining filesystem space.";
                     storageUploadFile_.close();
-                    storageRemove(storageUploadTarget_, storageUploadPath_);
+                    storageRemove(storageUploadTarget_, storageUploadTempPath_);
                     releaseStorageUploadLease();
                     return;
                 }
                 if (!ensureStorageTransferBuffer(min<size_t>(4096,len))) {
                     storageUploadError_ = psramFound() ? "Unable to allocate PSRAM-backed transfer buffer." : "Unable to allocate transfer buffer.";
                     storageUploadFile_.close();
-                    storageRemove(storageUploadTarget_, storageUploadPath_);
+                    storageRemove(storageUploadTarget_, storageUploadTempPath_);
                     releaseStorageUploadLease();
                     return;
                 }
@@ -2332,15 +2361,21 @@ void WebServerManager::registerApiRoutes() {
                 if (written != len) {
                     storageUploadError_ = "Failed while writing uploaded file.";
                     storageUploadFile_.close();
-                    storageRemove(storageUploadTarget_, storageUploadPath_);
+                    storageRemove(storageUploadTarget_, storageUploadTempPath_);
                     releaseStorageUploadLease();
                     return;
                 }
+                storageUploadCrc_=StorageIntegrity::update(storageUploadCrc_,data,written);
                 storageUploadBytesWritten_ += written;
             }
             if (final && storageUploadFile_) {
-                storageUploadFile_.flush();storageUploadFinished_=true;
-                storageUploadFile_.close();
+                storageUploadFile_.flush();const size_t storedSize=storageUploadFile_.size();storageUploadFile_.close();
+                char checksum[9];snprintf(checksum,sizeof(checksum),"%08lx",static_cast<unsigned long>(storageUploadCrc_^0xffffffff));
+                if(storedSize!=storageUploadBytesWritten_ || (storageUploadExpectedCrc_.length() && (storageUploadExpectedSize_!=storedSize || storageUploadExpectedCrc_!=checksum))){storageUploadError_="Upload checksum/length mismatch; destination preserved";storageRemove(storageUploadTarget_,storageUploadTempPath_);return;}
+                auto* fs=getStorageFs(storageUploadTarget_);const String backup=storageUploadTempPath_+".previous";const bool existed=fs&&fs->exists(storageUploadPath_);
+                if(!fs || (existed&&!fs->rename(storageUploadPath_,backup))){storageUploadError_="Cannot stage destination replacement";return;}
+                if(!fs->rename(storageUploadTempPath_,storageUploadPath_)){if(existed)fs->rename(backup,storageUploadPath_);storageUploadError_="Cannot finalize verified upload";return;}
+                if(existed)fs->remove(backup);storageUploadFinished_=true;
                 releaseStorageUploadLease();
                 String indexError;beginStorageReindexJob(storageUploadTarget_,storageParentPath(storageUploadPath_),indexError);
             }
@@ -2428,7 +2463,7 @@ void WebServerManager::registerWebRoutes() {
         "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
         "<title>ELMA Legacy OTA</title><style>body{font:16px system-ui;max-width:680px;margin:40px auto;padding:20px}"
         "a{color:#b65f00}</style><h1>ELMA IoT</h1><p>This legacy-partition build keeps audio, MQTT, GPIO, display, "
-        "controls and OTA services. Use ELMA IoT – ESP32 Toolkit on the same LAN for configuration and firmware updates.</p>"
+        "controls and OTA services. Use ELMA IoT РІР‚вЂњ ESP32 Toolkit on the same LAN for configuration and firmware updates.</p>"
         "<p><a href='/api/status'>Device status (JSON)</a></p>";
     auto serveLegacyPage = [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;
@@ -2510,6 +2545,8 @@ void WebServerManager::registerWebRoutes() {
         serveAsset(request,"/index.html");
     });
     server_.on("/system/ui",HTTP_GET | HTTP_HEAD,[serveAsset](AsyncWebServerRequest* request){serveAsset(request,"/index.html");});
+    server_.on("/fallback",HTTP_GET | HTTP_HEAD,[serveAsset](AsyncWebServerRequest* request){if(request->url().endsWith("/")){auto* response=request->beginResponse(302);response->addHeader("Location","/fallback");response->addHeader("Cache-Control","no-store");request->send(response);return;}serveAsset(request,"/index.html");});
+    server_.on("/fallback/",HTTP_GET | HTTP_HEAD,[](AsyncWebServerRequest* request){auto* response=request->beginResponse(302);response->addHeader("Location","/fallback");response->addHeader("Cache-Control","no-store");request->send(response);});
     server_.on("/index.html", HTTP_GET | HTTP_HEAD, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/index.html"); });
     server_.on("/style.css", HTTP_GET | HTTP_HEAD, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/style.css"); });
     server_.on("/app.js", HTTP_GET | HTTP_HEAD, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/app.js"); });

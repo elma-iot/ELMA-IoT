@@ -97,7 +97,14 @@ void DisplayManager::applySettings(const OledSettings& settings) {
 #endif
     if(!SharedI2c::begin(settings_.sdaPin, settings_.sclPin))return;
     if (settings_.driver == "sh1106") {
-        sh1106_.reset(new Adafruit_SH1106G(settings_.width, settings_.height, &SharedI2c::wire(), settings_.resetPin, 100000, 100000));
+        // A full 128x64 frame at 100 kHz blocks the decoder for ~98 ms.
+        // Fast-mode transfer ends by restoring 100 kHz for the shared BNO055.
+#if defined(APP_SPK_BOARD)
+        constexpr uint32_t oledClock=400000;
+#else
+        constexpr uint32_t oledClock=100000;
+#endif
+        sh1106_.reset(new Adafruit_SH1106G(settings_.width, settings_.height, &SharedI2c::wire(), settings_.resetPin, oledClock, 100000));
         if (!sh1106_->begin(settings_.i2cAddress, true)) {
             sh1106_.reset();
             return;
@@ -106,7 +113,12 @@ void DisplayManager::applySettings(const OledSettings& settings) {
         sh1106_->clearDisplay();
         sh1106_->display();
     } else {
-        ssd1306_.reset(new Adafruit_SSD1306(settings_.width, settings_.height, &SharedI2c::wire(), settings_.resetPin, 100000, 100000));
+#if defined(APP_SPK_BOARD)
+        constexpr uint32_t oledClock=400000;
+#else
+        constexpr uint32_t oledClock=100000;
+#endif
+        ssd1306_.reset(new Adafruit_SSD1306(settings_.width, settings_.height, &SharedI2c::wire(), settings_.resetPin, oledClock, 100000));
         if (!ssd1306_->begin(SSD1306_SWITCHCAPVCC, settings_.i2cAddress)) {
             ssd1306_.reset();
             return;

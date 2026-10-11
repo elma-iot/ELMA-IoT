@@ -233,6 +233,7 @@ void loop() {
 #include "display_manager.h"
 #include "mqtt_manager.h"
 #include "motor_control.h"
+#include "interface_security.h"
 #include "ota_manager.h"
 #include "playback_text.h"
 #include "psram_allocator.h"
@@ -3108,7 +3109,7 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
     }
     updated.usingSavedSettings = true;
     if (!settingsManager->save(updated)) {
-        error = "Configuration could not be saved; internal NVS storage is full or unavailable";
+        error = "Configuration could not be saved; internal configuration storage is unavailable or full. Check the device log and free internal flash space.";
         return false;
     }
 
@@ -4133,6 +4134,19 @@ void setup() {
     },[](JsonObjectConst node,JsonVariantConst args,std::string& message){
         String error;bool ok=false;std::string type=node["type"] | "";
         if(type=="hardware.sleep")return requestLogicSleep(node,args,message);
+        if(type=="peripheral.ptz"){
+            if(InterfaceSecurity::device().locked()){message="Unlock the device before PTZ operation";return false;}
+            if(node["peripheral"]["profile"]!="drv8833-dual-motor-driver"){message="PTZ requires the supported DRV8833 driver";return false;}
+            String activeSlot=motorController.driverSlot()<0?String():"control-"+String(motorController.driverSlot());
+            if(activeSlot.isEmpty()||node["peripheral"]["slotId"].as<String>()!=activeSlot){message="PTZ node must reference the active motor driver";return false;}
+            const bool stopping=args["action"]=="stop";
+            if(!stopping && args["enabled"]!=true){message="Enable the PTZ node after assigning camera pan/tilt motors";return false;}
+            for(const char* key:{"pan","tilt","panChannel","tiltChannel","durationMs","panLimitInput","tiltLimitInput"}){double value=args[key].as<double>();if(!args[key].is<double>()||!std::isfinite(value)||std::floor(value)!=value||std::abs(value)>2000){message="PTZ settings must be bounded whole numbers";return false;}}
+            int pan=args["pan"],tilt=args["tilt"],pc=args["panChannel"],tc=args["tiltChannel"],duration=args["durationMs"],pl=args["panLimitInput"],tl=args["tiltLimitInput"];
+            if(pc<0||pc>1||tc<0||tc>1||pl<-1||pl>15||tl<-1||tl>15){message="Invalid PTZ channel or limit input";return false;}
+            if(stopping)pan=tilt=0;else {if(args["invertPan"]==true)pan=-pan;if(args["invertTilt"]==true)tilt=-tilt;}
+            bool moved=motorController.movePtz(pc,tc,pan,tilt,duration,pl,tl,error);message=error.c_str();return moved;
+        }
         if(type=="clock.alarm")return setAlarmClock(args["source"]|"",args["epoch"]|int64_t(0),message);
         if(type=="mainboard.save_data") {
             return queuePlotRecording(args, message);
@@ -4713,6 +4727,16 @@ void loop() {
     }
 
     const unsigned long now = millis();
+    uint32_t audioWorkAt = micros();
+    static uint32_t lastAudioWorkReport=0;
+    auto traceAudioWork = [&](const char* section) {
+        const uint32_t elapsed=micros()-audioWorkAt;
+        if (elapsed>30000 && millis()-lastAudioWorkReport>=2000 && audioPlayer->currentState()=="playing") {
+            DebugLog.printf("[audio] main work=%s blocked_us=%u\n",section,elapsed);
+            lastAudioWorkReport=millis();
+        }
+        audioWorkAt=micros();
+    };
     if(batteryMonitor)MiniExco::setBatteryVoltage(batteryMonitor->latest().filteredVoltage);
     MiniExco::tick(otaManager->isFirmwareTransferActive());
     webServer->securityTick();
@@ -4738,7 +4762,9 @@ void loop() {
     // Logics remains active, but its snapshot/evaluation cadence is reduced
     // while audio is latency-sensitive so it cannot starve the stream.
     if (activeAudioOutputEnabled) {
+        traceAudioWork("security/media");
         audioPlayer->loop();
+        audioWorkAt=micros();
     }
     pollAlarmClock(now);
     const String playbackStateBeforeLogic = audioPlayer->currentState();
@@ -4767,7 +4793,9 @@ void loop() {
     processDeferredActions();
     processLogicSleep(otaManager->isFirmwareTransferActive() || audioLatencySensitive, [](){motorController.prepareForRestart();});
     if (activeAudioOutputEnabled) {
+        traceAudioWork("logic/actions");
         audioPlayer->loop();
+        audioWorkAt=micros();
     }
     serviceWapeTriggerPulse();
     if (now - lastInputPollAt >= kInputPollIntervalMs) {
@@ -4777,6 +4805,7 @@ void loop() {
     motorController.loop();
     publishMotorStateIfNeeded();
     serviceMotorStateRepublish();
+    wifiManager->setLowLatencyMode(audioLatencySensitive || otaManager->isFirmwareTransferActive());
     wifiManager->loop();
     serviceAudioDiagnosticTest();
     static unsigned long lastPlaybackProgressAt = 0;
@@ -4793,6 +4822,9 @@ void loop() {
     const bool batteryUpdated = batteryMonitor->enabled() && batteryMonitor->loop(isBatterySamplingAllowed());
     otaManager->loop();
     mqttManager->loop();
+    traceAudioWork("network/storage");
+    if (activeAudioOutputEnabled) audioPlayer->loop();
+    audioWorkAt=micros();
 
     if (now - lastCpuGovernorSampleAt >= kCpuGovernorSampleIntervalMs) {
         lastCpuGovernorSampleAt = now;
@@ -4812,7 +4844,14 @@ void loop() {
 #if !APP_HAS_ONBOARD_PANEL
         displayManager->loop(runtimeStateSnapshot);
 #endif
+        // OLED transfers and telemetry must not form one long decoder gap.
+        traceAudioWork("display/state");
+        if (activeAudioOutputEnabled) audioPlayer->loop();
+        audioWorkAt=micros();
         Bno055::tick();
+        traceAudioWork("telemetry");
+        if (activeAudioOutputEnabled) audioPlayer->loop();
+        audioWorkAt=micros();
         handleLowBatterySleepPolicy(runtimeStateSnapshot);
         confirmOtaHealthIfReady();
         publishOtaStateIfNeeded(runtimeStateSnapshot);

@@ -20,6 +20,8 @@ struct StorageBackendSummary {
     uint64_t freeBytes = 0;
 };
 
+// Mount existing internal storage without formatting user data (settings load precedes SD startup).
+bool mountSettingsStorage();
 void beginStorageBackends(const SettingsBundle& settings);
 void applyStorageSettings(const SettingsBundle& settings);
 void pollStorageBackends();
@@ -42,6 +44,9 @@ void beginStorageWrite(StorageTarget target);
 void endStorageWrite(StorageTarget target);
 void beginStorageRead(StorageTarget target);
 void endStorageRead(StorageTarget target);
+// Foreground retries renew this lease; background indexing resumes after quiet time.
+void prioritizeStorageOperation(StorageTarget target);
+bool storageForegroundPending(StorageTarget target);
 bool storageBusy(StorageTarget target);
 bool storageWriteBlocked(StorageTarget target);
 fs::FS* getStorageFs(StorageTarget target);

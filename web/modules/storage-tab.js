@@ -1,3 +1,4 @@
+import {verifiedStorageDownload} from './storage-integrity.js';
 export function createStorageTab({
   state,
   elements,
@@ -40,6 +41,11 @@ export function createStorageTab({
   request,
   formatPlaybackClock,
 }) {
+  const rowAudio=new Audio();state.storageRowAudio=rowAudio;state.storageRowPlaybackTargets={};
+  const redrawRows=()=>renderStorageManager({target:state.activeStorageTarget,storage:state.storageInfoByTarget[state.activeStorageTarget]||{},currentPath:state.currentStoragePathByTarget[state.activeStorageTarget]||'/',entries:activeStorageEntries(),...activeStorageMeta()});
+  const stopBrowserRow=()=>{rowAudio.pause();rowAudio.removeAttribute('src');rowAudio.load();state.storageRowBrowserPath=null;};
+  rowAudio.addEventListener('ended',()=>{state.storageRowBrowserPath=null;redrawRows();});
+  rowAudio.addEventListener('error',()=>{state.storageRowBrowserPath=null;redrawRows();setStorageStatus('Browser could not play this file format; try the board.',true);});
   async function refreshExternalStorageTab(directoryPath = state.currentStoragePathByTarget.sd || "/", options = {}) {
     const normalizedDirectoryPath = normalizeStorageDirectoryPath(directoryPath);
     const canReuseCachedDirectory = shouldDeferSdReads()
@@ -223,11 +229,27 @@ export function createStorageTab({
       if(action){
         event.preventDefault();event.stopPropagation();clearTimeout(state.storageClickTimer);state.storageClickTimer=null;
         const path=action.closest('.storage-file-row')?.dataset.storagePath;if(!path)return;
-        if(action.dataset.storageFileAction==='download'){
-          const link=document.createElement('a');link.href='/api/storage/file?target='+encodeURIComponent(state.activeStorageTarget)+'&path='+encodeURIComponent(path)+'&download=1';link.download=path.split('/').pop();link.click();
-        }else if(confirm('Delete '+path+'?')){
+        const entry=activeStorageEntries().find(item=>item.path===path),key=state.activeStorageTarget+'|'+path;
+        if(action.dataset.storageFileAction==='play'||action.dataset.storageFileAction==='target'){
           action.disabled=true;
-          (async()=>{await request('/api/storage/delete?target='+encodeURIComponent(state.activeStorageTarget)+'&dir='+encodeURIComponent(state.currentStoragePathByTarget[state.activeStorageTarget]||'/'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})});clearStorageSelection();await refreshStorageManager(state.activeStorageTarget);setStorageStatus('Deleted '+path);})().catch(handleError).finally(()=>{action.disabled=false;});
+          (async()=>{
+            const browserPlaying=state.storageRowBrowserPath===key&&!rowAudio.paused;
+            const devicePlaying=entry&&storageEntryIsPlaying(entry);
+            if(action.dataset.storageFileAction==='target'){
+              if(browserPlaying)stopBrowserRow();if(devicePlaying)await stopStoragePreviewPlayback();
+              state.storageRowPlaybackTargets[key]=!state.storageRowPlaybackTargets[key];
+            }else if(browserPlaying||devicePlaying){if(browserPlaying)stopBrowserRow();if(devicePlaying)await stopStoragePreviewPlayback();}
+            else if(state.storageRowPlaybackTargets[key]){stopBrowserRow();await queueStoragePlayback(entry,state.activeStorageTarget);}
+            else{stopBrowserRow();state.storageRowBrowserPath=key;rowAudio.src='/api/storage/file?target='+encodeURIComponent(state.activeStorageTarget)+'&path='+encodeURIComponent(path);try{await rowAudio.play();}catch(error){state.storageRowBrowserPath=null;throw error;}}
+            redrawRows();
+          })().catch(error=>{redrawRows();handleError(error);}).finally(()=>{action.disabled=false;});return;
+        }
+        if(action.dataset.storageFileAction==='download'){
+          action.disabled=true;verifiedStorageDownload(state.activeStorageTarget,path,(done,total,attempt)=>setStorageStatus(attempt?`Download retry ${attempt}/3`:total?`Downloading and verifying: ${Math.round(done*100/total)}%`:'Verifying download')).then(result=>setStorageStatus(result?.native?'Android download started':result?.cancelled?'Download cancelled':'Download verified')).catch(handleError).finally(()=>{action.disabled=false;});
+        }else if(confirm('Delete '+path+'?')){
+          if(state.storageRowBrowserPath===key)stopBrowserRow();
+          action.disabled=true;
+          (async()=>{if(entry&&storageEntryIsPlaying(entry))await stopStoragePreviewPlayback();await request('/api/storage/delete?target='+encodeURIComponent(state.activeStorageTarget)+'&dir='+encodeURIComponent(state.currentStoragePathByTarget[state.activeStorageTarget]||'/'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})});clearStorageSelection();await refreshStorageManager(state.activeStorageTarget);setStorageStatus('Deleted '+path);})().catch(handleError).finally(()=>{action.disabled=false;});
         }
         return;
       }

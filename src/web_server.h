@@ -114,6 +114,9 @@ class WebServerManager {
     File storageUploadFile_;
     StorageTarget storageUploadTarget_ = StorageTarget::Flash;
     String storageUploadPath_;
+    String storageUploadTempPath_,storageUploadExpectedCrc_;
+    size_t storageUploadExpectedSize_=0;
+    uint32_t storageUploadCrc_=0xffffffff;
     String storageUploadError_;
     size_t storageUploadBytesWritten_ = 0;
     size_t storageUploadLimitBytes_ = 0;

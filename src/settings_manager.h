@@ -19,6 +19,8 @@ class SettingsManager {
     bool updateFromJson(SettingsBundle& settings, JsonVariantConst root, String& error) const;
 
   private:
+    bool loadFlashSettings(SettingsBundle& settings);
+    bool saveFlashSettings(const SettingsBundle& settings);
     Preferences preferences_;
     bool writeFailed_ = false;
 

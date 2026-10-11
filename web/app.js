@@ -1,3 +1,4 @@
+import {fileCrc32, retryTransfer, storageChecksum} from './modules/storage-integrity.js';
 import {createRobotTab} from "./modules/robot-tab.js";
 import {createMotionCapture} from './modules/motion-capture.js';
 import {createRs485Tab} from "./modules/rs485-tab.js";
@@ -228,7 +229,7 @@ const STORAGE_AUDIO_EXTENSIONS = new Set(["mp3", "wav", "aac", "m4a", "ogg", "op
 const DEFAULT_RADIO_SELECTION = {
   country: "Azerbaijan",
   stationName: "AvtoFM",
-  stationUrl: "",
+  stationUrl: "http://5.191.241.101:8000/avtofm",
 };
 const EFFECT_FILE_SOURCES = [
   { target: "sd", dir: "/media/wav", prefix: "SD" },
@@ -330,7 +331,7 @@ const PERIPHERAL_INPUT_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_STORAGE_PROFILE_OPTIONS = [
-  {value:"viewe-sdmmc",label:"Onboard microSD Р вЂ™Р’В· 4-bit SDMMC"},
+  {value:"viewe-sdmmc",label:"Onboard microSD Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· 4-bit SDMMC"},
 {"value": "camera-sdmmc", "label": "Onboard microSD \u00b7 1-bit SDMMC"},
   { value: "none", label: "None" },
   { value: "microsd-spi", label: "MicroSD SPI" },
@@ -468,7 +469,7 @@ const GPIO_BOARD_PRESENTATION = {
   "viewe-uedx24320028e-wb-a": {
     "rotation": "none",
     "rank": "Touch display board",
-    "recommendation": "VIEWE 240Р вЂњРІР‚вЂќ320 LCD with CHSC6540 touch.",
+    "recommendation": "VIEWE 240Р В Р’В Р Р†Р вЂљРЎС™Р В Р вЂ Р В РІР‚С™Р Р†Р вЂљРЎСљ320 LCD with CHSC6540 touch.",
     "tone": "featured"
   },
   "esp32-s3-super-mini": {
@@ -633,19 +634,19 @@ const GPIO_BOARD_ASSETS = {
   },
   "esp32-2432s028r": {
     "src": "/esp32-2432s028r.svg",
-    "alt": "ESP32-2432S028R · 2.8-inch resistive"
+    "alt": "ESP32-2432S028R Р’В· 2.8-inch resistive"
   },
   "esp32-2432s028c": {
     "src": "/esp32-2432s028c.svg",
-    "alt": "ESP32-2432S028C · 2.8-inch capacitive"
+    "alt": "ESP32-2432S028C Р’В· 2.8-inch capacitive"
   },
   "esp32-3248s035c": {
     "src": "/esp32-3248s035c.svg",
-    "alt": "ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive"
+    "alt": "ESP32-48S035 / ESP32-3248S035C Р’В· 3.5-inch capacitive"
   },
   "esp32-cam": {
     "src": "/esp32-cam.svg",
-    "alt": "ESP32-CAM · AI-Thinker / OV2640"
+    "alt": "ESP32-CAM Р’В· AI-Thinker / OV2640"
   },
   "viewe-uedx24320028e-wb-a": {
     "src": "/viewe-uedx24320028e-wb-a.svg",
@@ -745,7 +746,7 @@ const GPIO_BOARD_ASSETS = {
   },
   "viewe-uedx32480035e-wb-a": {
     "src": "/viewe-uedx32480035e-wb-a.svg",
-    "alt": "VIEWE 3.5-inch 320x480 Р вЂ™Р’В· UEDX32480035E-WB-A"
+    "alt": "VIEWE 3.5-inch 320x480 Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· UEDX32480035E-WB-A"
   },
   "miniexco-v2": {
     "src": "/miniexco-v2.svg",
@@ -7035,16 +7036,16 @@ function peripheralHelperBindingValue(groupKey, index, signalLabel) {
 }
 
 function helperBindingDisplayLabel(groupKey, signalLabel) {
-  if(signalLabel==="I2C_ADDRESS")return "I²C address";
+  if(signalLabel==="I2C_ADDRESS")return "IР’Р†C address";
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
   if (groupKey === "sensor" && normalizedSignal === "SIGNAL") {
     return "ADC Output";
   }
   if (groupKey === "communication" && normalizedSignal === "TX") {
-    return "TX Р Р†РІР‚В РІР‚в„ў RX (ESP)";
+    return "TX Р В Р’В Р В РІР‚В Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РЎС› RX (ESP)";
   }
   if (groupKey === "communication" && normalizedSignal === "RX") {
-    return "RX Р Р†РІР‚В РЎвЂ™ TX (ESP)";
+    return "RX Р В Р’В Р В РІР‚В Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІвЂћСћ TX (ESP)";
   }
   if (groupKey === "input" && normalizedSignal === "SIG") {
     return "GPIO";
@@ -7443,7 +7444,7 @@ function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
 
   const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
   const fixed=board?.bindings?.[groupKey+':'+profileValue]?.[normalizedSignal];
-  if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return [{value:String(fixed),label:`GPIO${fixed} Р’В· onboard`}];
+  if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return [{value:String(fixed),label:`GPIO${fixed} Р В РІР‚в„ўР вЂ™Р’В· onboard`}];
 
   if (groupKey === "power") {
     if (normalizedSignal === "INPUT_VOLTAGE") {
@@ -7827,7 +7828,7 @@ function appendHelperPeripheralBindingControl(container, groupKey, index, signal
   }
   select.disabled = noPinsAvailable;
   if (selectedValue && ![...select.options].some(option => option.value === selectedValue)) {
-    const invalid = new Option(`GPIO${selectedValue} Р Р†Р вЂљРІР‚Сњ invalid/reserved for this board (reassign)`, selectedValue);
+    const invalid = new Option(`GPIO${selectedValue} Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ invalid/reserved for this board (reassign)`, selectedValue);
     invalid.disabled = true;
     select.prepend(invalid);
   }
@@ -7927,7 +7928,7 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
   assignPeripheralDefaults(groupKey,profileValue,index,realDefinitions,helperSignalsForProfile);
   if (isBuiltinPeripheral(groupKey, profileValue, index)) {
     container.hidden = false;
-    container.textContent = 'Built into the board — no external wiring required.';
+    container.textContent = 'Built into the board РІР‚вЂќ no external wiring required.';
     return;
   }
 
@@ -9581,7 +9582,7 @@ function boardPinAssignmentIssues(settings = state.settings) {
   const outputs = new Set(validBoardPins(true));
   const issues = [];
   for (const [pin, roles] of gpioRoleMap(settings, state.status)) {
-    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} Р Р†Р вЂљРІР‚Сњ invalid or reserved on the selected board`);
+    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ invalid or reserved on the selected board`);
   }
   const roleState = gpioConfigRoleState(settings);
   for (const definition of roleState.definitions) {
@@ -10296,7 +10297,7 @@ function firmwareReleaseNote(release) {
     return "HACS build: best choice for Home Assistant MQTT Media Player integration and media-player style control.";
   }
 
-  return "Standard build: general notifier firmware with the local web UI and the projectР Р†Р вЂљРІвЂћСћs default MQTT control model.";
+  return "Standard build: general notifier firmware with the local web UI and the projectР В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р Р†Р вЂљРЎвЂєР РЋРЎвЂєs default MQTT control model.";
 }
 
 function beginFirmwareReconnectReload(initialDelayMs = 12000) {
@@ -10309,7 +10310,7 @@ function beginFirmwareReconnectReload(initialDelayMs = 12000) {
     state.firmwareReloadTimer = null;
   }
   state.rebootOverlayArmed = true;
-  showRebootOverlay("Firmware installed Р Р†Р вЂљРІР‚Сњ rebooting device...", 30);
+  showRebootOverlay("Firmware installed Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ rebooting device...", 30);
   // A GitHub OTA may acknowledge completion several seconds before the
   // scheduled reboot. Do not mistake the still-running old firmware for the
   // restarted device, while still allowing an observed disconnect to reconnect
@@ -11008,7 +11009,7 @@ function updateStoragePreviewProgressUi() {
   const position = fileManagerActive ? Math.min(duration, Math.max(0, Number(state.status?.playback?.positionSeconds || 0))) : 0;
   const trackName = currentStoragePlayingEntry()?.name || selectedStoragePlaybackEntry()?.name || state.storagePreviewItem?.name || "Select a song";
   const clockLabel = `${formatPlaybackClock(position)} / ${formatPlaybackClock(duration)}`;
-  const label = `${trackName} Р вЂ™Р’В· ${clockLabel}`;
+  const label = `${trackName} Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· ${clockLabel}`;
   const progressPercent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
   for (const slider of [elements.storageInlineSeekSlider, elements.storagePreviewSeekSlider]) {
     if (!slider) continue;
@@ -11610,7 +11611,11 @@ function renderStorageRow(entry, selectionMode, selectedPaths) {
   const typeClass = entry?.isDirectory ? "folder" : "file";
   const checkboxId = `storage-checkbox-${dynamicFieldToken(path || entry?.name || "item")}`;
   const checkboxName = `storage.checkbox.${dynamicFieldToken(path || entry?.name || "item")}`;
-  const playing = storageEntryIsPlaying(entry);
+  const rowKey=state.activeStorageTarget+'|'+path;
+  const browserPlaying=state.storageRowBrowserPath===rowKey && state.storageRowAudio && !state.storageRowAudio.paused;
+  const playing = storageEntryIsPlaying(entry) || browserPlaying;
+  const deviceTarget=!!state.storageRowPlaybackTargets?.[rowKey];
+  const mediaControls=!entry?.isDirectory && isAudioStoragePath(path) ? `<button type="button" class="media-icon" data-storage-file-action="target" aria-pressed="${deviceTarget}" title="Playback device: ${deviceTarget?'board':'browser'}" aria-label="Playback device: ${deviceTarget?'board':'browser'}"><svg viewBox="0 0 24 24" aria-hidden="true">${deviceTarget?'<path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8"/>':'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>'}</svg></button><button type="button" class="media-icon" data-storage-file-action="play" title="${playing?'Stop':'Play'} file" aria-label="${playing?'Stop':'Play'} ${escapeHtml(entry?.name||path)}"><svg viewBox="0 0 24 24" aria-hidden="true">${playing?'<rect x="5" y="5" width="14" height="14"/>':'<path d="m8 4 12 8-12 8z"/>'}</svg></button>` : '';
   return `
     <div class="storage-file-row ${entry?.isDirectory ? "storage-folder-row" : ""} ${isSelected ? "selected" : ""} ${playing ? "playing" : ""}" data-storage-path="${escapeHtml(path)}" data-storage-kind="${entry?.isDirectory ? "folder" : "file"}" tabindex="0" aria-selected="${isSelected ? "true" : "false"}" ${playing ? 'aria-current="true"' : ""}>
       <label class="storage-entry-check" for="${checkboxId}" ${selectionMode ? "" : "hidden"}>
@@ -11622,7 +11627,7 @@ function renderStorageRow(entry, selectionMode, selectedPaths) {
         <div class="storage-file-subtitle">${escapeHtml(storageItemSubtitle(entry))}</div>
       </div>
       <div class="storage-file-trailing">
-      ${!entry?.isDirectory ? `<div class="storage-file-actions"><button type="button" class="media-icon" data-storage-file-action="download" title="Download file" aria-label="Download ${escapeHtml(entry?.name || path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button><button type="button" class="media-icon" data-storage-file-action="delete" title="Delete file" aria-label="Delete ${escapeHtml(entry?.name || path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button></div>` : ""}
+      ${!entry?.isDirectory ? `<div class="storage-file-actions">${mediaControls}<button type="button" class="media-icon" data-storage-file-action="download" title="Download file" aria-label="Download ${escapeHtml(entry?.name || path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button><button type="button" class="media-icon" data-storage-file-action="delete" title="Delete file" aria-label="Delete ${escapeHtml(entry?.name || path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button></div>` : ""}
         <div class="storage-file-badge">${escapeHtml(playing ? "Playing" : storageBadgeLabel(entry))}</div>
         <span class="storage-file-chevron" aria-hidden="true">&#8250;</span>
       </div>
@@ -11688,11 +11693,16 @@ async function deleteSelectedStorageItems() {
   }
 
   setStorageStatus(`Deleting ${selectedPaths.length === 1 ? selectedPaths[0] : `${selectedPaths.length} items`}...`);
+  const deleteTarget = state.activeStorageTarget;
+  const deleteDirectory = state.currentStoragePathByTarget[deleteTarget] || "/";
+  let deletedCount = 0;
   for (const path of selectedPaths) {
-    await request(`/api/storage/delete?target=${encodeURIComponent(state.activeStorageTarget)}&dir=${encodeURIComponent(state.currentStoragePathByTarget[state.activeStorageTarget] || "/")}`, {
+    setStorageStatus(`Deleting ${++deletedCount}/${selectedPaths.length}...`);
+    await request(`/api/storage/delete?target=${encodeURIComponent(deleteTarget)}&dir=${encodeURIComponent(deleteDirectory)}`, {
       method: "POST",
       body: JSON.stringify({ path }),
     });
+    await refreshStorageManager(deleteTarget);
   }
 
   clearStorageSelection();
@@ -12118,10 +12128,30 @@ function renderStorageManager(payload) {
     ? '<div class="storage-empty-note">Loading more files...</div>'
     : "";
   elements.storageFileList.innerHTML = `${entries.map((entry) => renderStorageRow(entry, state.storageSelectionMode, selectedPaths)).join("")}${loadingRow}`;
+  constrainStorageFileList();
   updateStorageToolbar(storage);
   updateStoragePreviewPlaybackControls();
 }
 
+let storageListResizeObserver;
+function constrainStorageFileList() {
+  const list=elements.storageFileList;
+  if(!list)return;
+  const resize=()=>{
+    const rows=[...list.querySelectorAll('.storage-file-row,.storage-folder-row')].slice(0,10);
+    if(!rows.length){list.style.maxHeight='';return;}
+    const style=getComputedStyle(list);
+    const height=Math.ceil(rows.at(-1).getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top
+      +parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)
+      +parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth));
+    const value=`${height}px`;
+    if(list.style.maxHeight!==value)list.style.maxHeight=value;
+  };
+  if(!storageListResizeObserver && typeof ResizeObserver!=='undefined'){
+    storageListResizeObserver=new ResizeObserver(resize);storageListResizeObserver.observe(list);
+  }
+  requestAnimationFrame(resize);
+}
 async function loadMoreStorageEntries(target = state.activeStorageTarget) {
   const meta = activeStorageMeta(target);
   if (meta.loadingMore || !meta.hasMore) {
@@ -12318,17 +12348,25 @@ async function createStorageFolder() {
 async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput?.files || [])]) {
   const files = [...selectedFiles].filter((file) => file instanceof File);
   if (!files.length) {
-    setStorageStatus("Select one or more audio files first.", true);
+    setStorageStatus("Select one or more files first.", true);
     return;
   }
 
+  const uploadTarget = state.activeStorageTarget;
+  const uploadDirectory = state.currentStoragePathByTarget[uploadTarget] || "/";
+  const controller=new AbortController();
+  const cancelButton=document.getElementById('storageCancelUploadButton');let activeRequest=null;
+  const cancel=()=>{controller.abort();activeRequest?.abort();if(cancelButton)cancelButton.disabled=true;setStorageStatus('Cancelling uploadРІР‚В¦');};
+  cancelButton?.addEventListener('click',cancel);if(cancelButton)cancelButton.disabled=false;
   state.storageUploadInProgress = true;
+  if(elements.storageStatus)elements.storageStatus.hidden=true;
   let completedUploads = 0;
 
   try {
     for (let index = 0; index < files.length; index += 1) {
+      if(controller.signal.aborted)throw new DOMException('Upload cancelled','AbortError');
       const file = files[index];
-      const info = state.storageInfoByTarget[state.activeStorageTarget] || (await refreshStorageManager(state.activeStorageTarget)).storage || {};
+      const info = state.storageInfoByTarget[uploadTarget] || (await refreshStorageManager(uploadTarget,uploadDirectory)).storage || {};
       const maxUploadBytes = Number(info.maxUploadBytes || 0);
       if (file.size <= 0) {
         throw new Error(`${file.name} is empty.`);
@@ -12337,7 +12375,7 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
         throw new Error(`${file.name} exceeds remaining space. Max upload is ${formatBytes(maxUploadBytes)}.`);
       }
 
-      renderStorageManager({ storage: info, files: [] });
+      // Keep completed files visible while the next file uploads.
       setStorageStatus(`Uploading ${file.name} (${index + 1}/${files.length})...`);
       if (elements.storageProgressWrap) elements.storageProgressWrap.hidden = false;
       elements.storageProgressFill.style.width = "0%";
@@ -12345,11 +12383,23 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
 
       const formData = new FormData();
       formData.append("file", file, file.name);
-      const uploadStartedAt = performance.now();
+      const caption=`${file.name} (${index+1}/${files.length})`;
+      const show=(text,percent)=>{elements.storageProgressLabel.textContent=text;elements.storageProgressFill.style.width=`${percent}%`;};
+      const checksum = await fileCrc32(file,controller.signal,(done,total)=>show(`Preparing checksum: ${caption} Р’В· ${Math.round(done*100/total)}%`,0));
+      const payload = await retryTransfer(async (attempt) => {
+       const uploadStartedAt=performance.now();show(`Uploading ${caption} Р’В· attempt ${attempt+1}/3`,0);
+       if(controller.signal.aborted)throw new DOMException('Upload cancelled','AbortError');
+       const result = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();activeRequest=xhr;let waitingTimer=0;
+        xhr.addEventListener("loadend",()=>clearInterval(waitingTimer));
+        xhr.upload.addEventListener("load",()=>{const sentAt=performance.now();show(`Sent ${caption}; waiting for device write and checksum acknowledgementРІР‚В¦`,90);waitingTimer=setInterval(()=>show(`Sent ${caption}; waiting for device acknowledgement (${Math.round((performance.now()-sentAt)/1000)}s)РІР‚В¦`,90),1000);});
+        xhr.open("POST", `/api/storage/upload?target=${encodeURIComponent(uploadTarget)}&dir=${encodeURIComponent(uploadDirectory)}`);
 
-      const payload = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `/api/storage/upload?target=${encodeURIComponent(state.activeStorageTarget)}&dir=${encodeURIComponent(state.currentStoragePathByTarget[state.activeStorageTarget] || "/")}`);
+        xhr.setRequestHeader("X-File-CRC32", checksum);
+        xhr.setRequestHeader("X-File-Size", String(file.size));
+        xhr.timeout=30*60*1000;
+        xhr.addEventListener("timeout",()=>reject(new Error("Upload interrupted or timed out")));
+        xhr.addEventListener("abort",()=>reject(controller.signal.aborted?new DOMException("Upload cancelled","AbortError"):new Error("Upload interrupted")));
 
         xhr.upload.addEventListener("progress", (event) => {
           if (!event.lengthComputable) {
@@ -12358,8 +12408,7 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
           const percent = Math.max(0, Math.min(100, Math.round((event.loaded * 100) / event.total)));
           const elapsedSeconds = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
           const rate = event.loaded / elapsedSeconds;
-          elements.storageProgressFill.style.width = `${percent}%`;
-          elements.storageProgressLabel.textContent = `Uploading ${file.name} (${index + 1}/${files.length})... ${percent}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)} at ${formatTransferRate(rate)})`;
+          show(`Uploading ${caption} Р’В· attempt ${attempt+1}/3 Р’В· ${percent}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)} at ${formatTransferRate(rate)})`,percent*.9);
         });
 
         xhr.addEventListener("load", () => {
@@ -12374,20 +12423,28 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
             resolve(responsePayload);
             return;
           }
-          reject(new Error(responsePayload.error || xhr.statusText || "Storage upload failed."));
+          const error=new Error(responsePayload.error || xhr.statusText || "Storage upload failed.");
+          error.permanent=[401,403,404].includes(xhr.status);reject(error);
         });
 
         xhr.addEventListener("error", () => reject(new Error("Storage upload failed.")));
         xhr.send(formData);
-      });
+       });
+       if(result.sizeBytes!==file.size || result.crc32!==checksum)throw new Error("Upload acknowledgement checksum/length mismatch");
+       show(`Verifying saved file: ${caption} Р’В· 0%`,90);
+       const stored=await storageChecksum(uploadTarget,result.path,controller.signal,progress=>{if(progress.waiting){show(`Verifying ${caption}: waiting for storage (${progress.status})РІР‚В¦`,90);return;}const total=Number(progress.totalBytes)||file.size,done=Number(progress.processedBytes)||0,percent=Math.min(100,Math.round(done*100/total));show(`Verifying saved file: ${caption} Р’В· ${percent}% (${formatBytes(done)} / ${formatBytes(total)})`,90+percent*.1);});
+       if(stored.sizeBytes!==file.size || stored.crc32!==checksum)throw new Error("Stored file checksum/length mismatch");
+       return result;
+      },(attempt,error)=>show(`Retry ${attempt}/3: restarting ${caption} from the beginning Р’В· ${error.message}`,0));
 
-      renderStorageManager(payload);
-      injectVisibleStorageEntry(state.activeStorageTarget, {
+      activeRequest=null;
+      renderStorageManager({...payload,target:uploadTarget,currentPath:uploadDirectory,append:true});
+      injectVisibleStorageEntry(uploadTarget, {
         path: payload.path,
         name: storageBaseName(payload.path || file.name),
         isDirectory: false,
         sizeBytes: file.size,
-        url: `/api/storage/file?target=${encodeURIComponent(state.activeStorageTarget)}&path=${encodeURIComponent(payload.path || "")}`,
+        url: `/api/storage/file?target=${encodeURIComponent(uploadTarget)}&path=${encodeURIComponent(payload.path || "")}`,
       });
       await loadStatus();
       if (state.activeStorageTarget === "sd" && normalizeStorageDirectoryPath(storageParentPath(payload.path || "")) === "/media/wav") {
@@ -12404,15 +12461,19 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
     const completionMessage = files.length === 1
       ? `Uploaded ${files[0].name}`
       : `Uploaded ${completedUploads} files`;
+    setStorageStatus(completionMessage);
     toast(completionMessage);
   } catch (error) {
-    await refreshStorageManager(state.activeStorageTarget);
+    await refreshStorageManager(uploadTarget);
+    if(controller.signal.aborted || error.name==='AbortError'){setStorageStatus(`Upload cancelled; ${completedUploads} completed file(s) kept.`);return;}
     if (completedUploads > 0 && completedUploads < files.length) {
       throw new Error(`${error.message} (${completedUploads}/${files.length} uploaded)`);
     }
     throw error;
   } finally {
+    cancelButton?.removeEventListener('click',cancel);activeRequest=null;
     state.storageUploadInProgress = false;
+    if(elements.storageStatus)elements.storageStatus.hidden=false;
     if (elements.storageProgressWrap) elements.storageProgressWrap.hidden = true;
     elements.storageFileInput.value = "";
     if (state.storageInfoByTarget[state.activeStorageTarget]) {
@@ -13024,6 +13085,18 @@ async function request(path, options = {}) {
   }
   if (isApiPath(path)) {
     markDeviceReachability(true);
+  }
+  // Mutations wait cooperatively without holding an AsyncTCP callback or
+  // discarding a user's active transfer. Every retry renews foreground priority.
+  if (response.status === 423 && String(path).startsWith("/api/storage/delete")) {
+    await response.text();
+    const waitingSince = options.storageWaitingSince || Date.now();
+    if (Date.now() - waitingSince < 120000) {
+      setStorageStatus("Waiting for storage � background indexing paused; retrying deletion...");
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return request(path, { ...options, storageWaitingSince: waitingSince });
+    }
+    throw new Error("Storage is still occupied by an active transfer or recording. Finish it, then retry deletion.");
   }
   if (!response.ok) {
     const text = await response.text();
@@ -14563,7 +14636,7 @@ window.elmaRefreshFlashSettings = async () => {
   if (!desktopFlashView) return;
   try {
     await loadSettings();
-    elements.localBuilderProgressLabel.textContent = "Designer configuration synchronized Р Р†Р вЂљРІР‚Сњ ready to compile and flash";
+    elements.localBuilderProgressLabel.textContent = "Designer configuration synchronized Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ ready to compile and flash";
   } finally {
     elements.localBuilderCompileFlash.disabled = false;
   }

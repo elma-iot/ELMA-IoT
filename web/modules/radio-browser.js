@@ -1,4 +1,5 @@
 import {installCountrySearch} from './country-search.js';
+import {createRadioDirectory} from './radio-directory.js';
 export function createRadioBrowserModule({
   state,
   elements,
@@ -8,6 +9,9 @@ export function createRadioBrowserModule({
   isPlaybackActive,
   submitPlay,
 }) {
+  const directory = createRadioDirectory();
+  let stationRequest = 0;
+  document.getElementById('radioRefreshButton')?.addEventListener('click', () => loadRadioCountries(true));
   function loadSavedRadioSelection() {
     try {
       const stored = JSON.parse(window.localStorage.getItem(radioSelectionStorageKey) || "{}");
@@ -39,10 +43,6 @@ export function createRadioBrowserModule({
       }));
     } catch {
     }
-  }
-
-  function radioBrowserApiUrl(path) {
-    return `https://all.api.radio-browser.info/json${path}`;
   }
 
   function setRadioBrowserStatus(message, isError = false) {
@@ -131,18 +131,15 @@ export function createRadioBrowserModule({
     }
 
     state.radioCountriesLoading = true;
-    setRadioBrowserStatus("Loading countries...");
+    const initial = directory.fallback('/countries');
+    if (!state.radioCountries.length && initial.rows.length) {
+      state.radioCountries = initial.rows.map(country => ({name: country.name, stationCount: Number(country.stationcount || 0), code: country.iso_3166_1 || ''}));
+      renderRadioCountries(state.radioCountries);
+    }
+    setRadioBrowserStatus("Checking radio directory; fallback countries are available.");
 
     try {
-      const response = await fetch(radioBrowserApiUrl("/countries"), {
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error(`Radio Browser countries failed: ${response.status}`);
-      }
-
-      const payload = await response.json();
+      const { rows: payload, cached, bundled } = await directory.load('/countries');
       state.radioCountries = (Array.isArray(payload) ? payload : [])
         .map((country) => ({
           name: String(country.name || "").trim(),
@@ -154,7 +151,7 @@ export function createRadioBrowserModule({
 
       renderRadioCountries(state.radioCountries);
       resetRadioStationSelect();
-      setRadioBrowserStatus(state.radioCountries.length ? "Choose a country to load stations." : "No countries available.");
+      setRadioBrowserStatus(bundled ? "Built-in countries; directory offline. Choose a country or Retry." : cached ? "Showing saved countries; radio directory is offline." : "Choose a country to load stations.");
 
       const savedSelection = preferredRadioSelection();
       if (savedSelection.country && state.radioCountries.some((country) => country.name === savedSelection.country)) {
@@ -162,7 +159,7 @@ export function createRadioBrowserModule({
         await loadRadioStations(savedSelection.country);
       }
     } catch (error) {
-      renderRadioCountries([]);
+      renderRadioCountries(state.radioCountries);
       resetRadioStationSelect("Radio Browser unavailable");
       setRadioBrowserStatus(error.message, true);
     } finally {
@@ -171,6 +168,7 @@ export function createRadioBrowserModule({
   }
 
   async function loadRadioStations(countryName) {
+    const requestId = ++stationRequest;
     const trimmedCountry = String(countryName || "").trim();
     state.radioStations = [];
 
@@ -181,23 +179,17 @@ export function createRadioBrowserModule({
     }
 
     state.radioStationsLoading = true;
-    resetRadioStationSelect("Loading stations...");
+    const initial = directory.fallback(`/stations/bycountry/${encodeURIComponent(trimmedCountry)}`);
+    if (initial.rows.length) {
+      state.radioStations = initial.rows.map(station => ({name: station.name, url: station.url_resolved || station.url, codec: station.codec, bitrate: station.bitrate}));
+      renderRadioStations(state.radioStations);
+    } else resetRadioStationSelect("Loading stations...");
     setRadioBrowserStatus(`Loading stations for ${trimmedCountry}...`);
     saveRadioSelection({ country: trimmedCountry });
 
     try {
-      const response = await fetch(
-        `${radioBrowserApiUrl(`/stations/bycountry/${encodeURIComponent(trimmedCountry)}`)}?hidebroken=true&order=name`,
-        {
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        },
-      );
-      if (!response.ok) {
-        throw new Error(`Radio Browser stations failed: ${response.status}`);
-      }
-
-      const payload = await response.json();
+      const { rows: payload, cached, bundled } = await directory.load(`/stations/bycountry/${encodeURIComponent(trimmedCountry)}?hidebroken=true&order=name&limit=2000`);
+      if (requestId !== stationRequest) return;
       state.radioStations = (Array.isArray(payload) ? payload : [])
         .map((station) => ({
           name: String(station.name || "").trim(),
@@ -213,7 +205,7 @@ export function createRadioBrowserModule({
       const savedSelection = preferredRadioSelection();
       const savedIndex = state.radioStations.findIndex((station) => (
         (savedSelection.stationUrl && station.url === savedSelection.stationUrl) ||
-        (savedSelection.stationName && station.name === savedSelection.stationName)
+        (savedSelection.stationName && station.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === savedSelection.stationName.replace(/[^a-z0-9]/gi, "").toLowerCase())
       ));
       if (savedIndex >= 0 && elements.radioStationSelect) {
         elements.radioStationSelect.value = String(savedIndex);
@@ -222,19 +214,21 @@ export function createRadioBrowserModule({
 
       setRadioBrowserStatus(
         state.radioStations.length
-          ? `Loaded ${state.radioStations.length} station(s) for ${trimmedCountry}.`
+          ? `${bundled ? 'Built-in' : cached ? 'Saved' : 'Loaded'} ${state.radioStations.length} station(s) for ${trimmedCountry}.${cached || bundled ? ' Directory offline; Retry to update.' : ''}`
           : `No stations found for ${trimmedCountry}.`,
       );
     } catch (error) {
+      if (requestId !== stationRequest) return;
       resetRadioStationSelect("Station list unavailable");
       setRadioBrowserStatus(error.message, true);
     } finally {
-      state.radioStationsLoading = false;
+      if (requestId === stationRequest) state.radioStationsLoading = false;
     }
   }
 
   async function applySelectedRadioStation(options = {}) {
     const { autoPlay = false } = options;
+    if (!elements.radioStationSelect?.value) return;
     const selectedIndex = Number(elements.radioStationSelect?.value ?? -1);
     if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= state.radioStations.length) {
       return;

@@ -24,7 +24,9 @@ class MotorController {
     void prepareForRestart();
     void loop();
     bool available() const;
+    int driverSlot() const {return driverSlot_;}
     bool runChannel(uint8_t channelIndex, bool forward, uint32_t durationMs, int8_t limitInputIndex, String& error);
+    bool movePtz(uint8_t panChannel,uint8_t tiltChannel,int pan,int tilt,uint32_t durationMs,int8_t panLimit,int8_t tiltLimit,String& error);
     void appendStatus(JsonObject root) const;
     uint32_t stateVersion() const;
 
@@ -51,6 +53,7 @@ class MotorController {
     ChannelRuntime runtimeChannels_[2];
     LimitInputReader limitInputReader_;
     uint32_t stateVersion_ = 0;
+    int driverSlot_ = -1;
 
     void releaseConfiguredPins();
     void configurePins();

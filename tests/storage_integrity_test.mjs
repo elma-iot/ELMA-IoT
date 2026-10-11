@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {crc32Update,crc32Hex,fileCrc32,retryTransfer,storageChecksum} from '../web/modules/storage-integrity.js';
+const bytes=new TextEncoder().encode('123456789');assert.equal(crc32Hex(crc32Update(0xffffffff,bytes)),'cbf43926');assert.equal(crc32Hex(crc32Update(crc32Update(0xffffffff,bytes.slice(0,4)),bytes.slice(4))),'cbf43926');
+const blob=new Blob([bytes]);assert.equal(await fileCrc32(blob),'cbf43926');
+let calls=0,retries=[];assert.equal(await retryTransfer(async()=>{if(++calls<3)throw Error('connection interrupted');return 'complete'},n=>retries.push(n)),'complete');assert.deepEqual(retries,[2,3]);
+let cancelled=0;await assert.rejects(retryTransfer(async()=>{cancelled++;throw new DOMException('Cancelled','AbortError')}),/Cancelled/);assert.equal(cancelled,1);
+let permanent=0;await assert.rejects(retryTransfer(async()=>{permanent++;const e=Error('Forbidden');e.permanent=true;throw e}),/Forbidden/);assert.equal(permanent,1);
+const controller=new AbortController();controller.abort();await assert.rejects(fileCrc32(blob,controller.signal),/cancelled/);
+let fetched=[];globalThis.fetch=async(url)=>{fetched.push(url);return {ok:true,status:fetched.length===1?202:200,json:async()=>fetched.length===1?{id:'test',complete:false}:{id:'test',complete:true,sizeBytes:9,crc32:'cbf43926'}}};
+assert.equal((await storageChecksum('sd','/web/a.txt')).crc32,'cbf43926');assert(fetched[1].includes('id=test'));
+console.log('PASS CRC32 known vector, chunk boundaries, file hashing, bounded retries, permanent failure, cancellation and checksum polling');
+globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({entries:[],storage:{}})});
+await assert.rejects(storageChecksum('sd','/web/a.txt'),/Invalid checksum response/);
+console.log('PASS misrouted directory response fails promptly instead of hanging');

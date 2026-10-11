@@ -50,8 +50,32 @@ template <typename Operation> auto onSd(Operation operation) {
     return operation(SD);
 }
 
+// Run while the mount maintenance lease excludes readers and writers.
+// A file at a required directory path is reported, never replaced.
+void ensureSdFeatureDirectories() {
+    // A persisted root listing can predate newly inserted files or feature
+    // folders. Discard only the firmware's generated directory index.
+    onSd([](auto& card){if(card.exists("/.index")&&!card.remove("/.index"))DebugLog.println("[storage] Could not invalidate root directory index");return true;});
+    for (const char* path : {"/web", "/record", "/security", "/3d", "/media", "/media/wav"}) {
+        onSd([path](auto& card) {
+            if (card.exists(path)) {
+                File entry = card.open(path, FILE_READ);
+                const bool directory = entry && entry.isDirectory();
+                if (entry) entry.close();
+                if (!directory) DebugLog.printf("[storage] Required folder blocked by file or read error: %s\n", path);
+            } else if (!card.mkdir(path)) {
+                DebugLog.printf("[storage] Cannot create required SD folder: %s\n", path);
+            } else {
+                DebugLog.printf("[storage] Created SD folder: %s\n", path);
+            }
+            return true;
+        });
+    }
+}
+
 StorageBackendSummary sdSummaryCache;
 portMUX_TYPE storageStateMux = portMUX_INITIALIZER_UNLOCKED;
+uint32_t sdForegroundUntil = 0;
 uint32_t sdWriteDepth = 0;
 uint32_t sdReadDepth = 0;
 uint8_t sdConsecutiveMountFailures = 0;
@@ -233,7 +257,7 @@ void summaryWorker(void*) {
         if(uint32_t(millis()-lastSummary)<30000)continue;
         lastSummary=millis();
         portENTER_CRITICAL(&storageStateMux);
-        bool refresh=sdSummaryDirty && !sdMaintenance && sdWriteDepth==0 && sdReadDepth==0;
+        bool refresh=sdSummaryDirty && int32_t(sdForegroundUntil-millis())<=0 && !sdMaintenance && sdWriteDepth==0 && sdReadDepth==0;
         if(refresh){sdSummaryDirty=false;++sdReadDepth;}
         portEXIT_CRITICAL(&storageStateMux);
         if(refresh){if(sdMounted)refreshSdSummaryCache();decrementSdReadDepth();}
@@ -244,7 +268,8 @@ const esp_partition_t* flashFilesystemPartition() {
     return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, nullptr);
 }
 
-void mountFlashStorage() {
+void mountFlashStorage(bool allowFormat = true) {
+    if (flashMounted) return;
     const esp_partition_t* partition = flashFilesystemPartition();
     if (partition == nullptr) {
         flashMounted = false;
@@ -257,7 +282,7 @@ void mountFlashStorage() {
     // label discovered from the partition table instead of relying on that
     // unrelated default.
     flashMounted = LittleFS.begin(false, "/littlefs", 10, partition->label);
-    if (!flashMounted) {
+    if (!flashMounted && allowFormat) {
         DebugLog.println("[storage] LittleFS mount failed, attempting format");
         flashMounted = LittleFS.begin(true, "/littlefs", 10, partition->label);
     }
@@ -403,6 +428,7 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
 #endif
         if (sdMounted) {
             resetSdMountRetryState();
+            ensureSdFeatureDirectories();
             refreshSdSummaryCache();
         } else {
             SD_MMC.end();
@@ -469,6 +495,7 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
         sdMountedClock=frequencyHz;sdClockCeiling=frequencyHz;
         sdMounted = true;
         resetSdMountRetryState();
+        ensureSdFeatureDirectories();
         DebugLog.printf("[storage] SD mounted cs=%u sck=%u mosi=%u miso=%u freq=%lu card=%llu total=%u used=%u\n",
                       static_cast<unsigned>(settings.csPin),
                       static_cast<unsigned>(settings.sckPin),
@@ -501,6 +528,11 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
     return sdMounted;
 }
 }  // namespace
+
+bool mountSettingsStorage() {
+    mountFlashStorage(false);
+    return flashMounted;
+}
 
 void beginStorageBackends(const SettingsBundle& settings) {
     mountFlashStorage();
@@ -718,6 +750,14 @@ void endStorageRead(StorageTarget target) {
     }
 }
 
+void prioritizeStorageOperation(StorageTarget target) {
+    if(target!=StorageTarget::Sd)return;
+    portENTER_CRITICAL(&storageStateMux);sdForegroundUntil=millis()+3000;portEXIT_CRITICAL(&storageStateMux);
+}
+bool storageForegroundPending(StorageTarget target) {
+    if(target!=StorageTarget::Sd)return false;
+    portENTER_CRITICAL(&storageStateMux);bool pending=int32_t(sdForegroundUntil-millis())>0;portEXIT_CRITICAL(&storageStateMux);return pending;
+}
 bool storageBusy(StorageTarget target) {
     if(target!=StorageTarget::Sd)return false;
     portENTER_CRITICAL(&storageStateMux);bool busy=sdMaintenance||sdFormatPending||formatState==SdFormatState::Formatting||sdWriteDepth||sdReadDepth;portEXIT_CRITICAL(&storageStateMux);return busy;

@@ -5,6 +5,13 @@
 #include "can_contract.h"
 #include <driver/gpio.h>
 #include "settings_manager.h"
+#include "settings_flash_record.h"
+#include "storage_backend.h"
+#include "storage_memory.h"
+#include "device_log.h"
+#include <LittleFS.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "web_access_policy.h"
 #include "panel_geometry.h"
 #include "generated_project_defaults.h"
@@ -20,6 +27,11 @@
 #include "gpio_pin_policy.h"
 
 namespace {
+SemaphoreHandle_t settingsLock = nullptr;
+struct SettingsGuard {
+    SettingsGuard() { if (settingsLock) xSemaphoreTakeRecursive(settingsLock, portMAX_DELAY); }
+    ~SettingsGuard() { if (settingsLock) xSemaphoreGiveRecursive(settingsLock); }
+};
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 constexpr auto kPinChip = GpioPinPolicy::Chip::S3;
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
@@ -605,7 +617,11 @@ String normalizePeripheralProfileSelections(String value) {
 bool isSafeOutputPinForBoard(uint8_t pin) {return safeOutputPin(pin);}
 
 bool SettingsManager::begin() {
-    if (!preferences_.begin(PREF_NAMESPACE, false)) return false;
+    if (!settingsLock) settingsLock = xSemaphoreCreateRecursiveMutex();
+    if (!settingsLock) return false;
+    SettingsGuard guard;
+    const bool flashReady = mountSettingsStorage();
+    if (!preferences_.begin(PREF_NAMESPACE, false)) return flashReady;
     // A failed first provision can leave many keys behind without the final
     // marker. load() ignores those keys, so reclaim only this incomplete
     // namespace; valid saved settings and other NVS users stay intact.
@@ -1077,7 +1093,9 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
 }
 
 SettingsBundle SettingsManager::load() {
+    SettingsGuard guard;
     SettingsBundle settings = defaults();
+    if (loadFlashSettings(settings)) return settings;
     settings.usingSavedSettings = readBool(PREF_MARKER, false);
     if (!settings.usingSavedSettings) {
         settings.mqtt.clientId = settings.device.deviceName;
@@ -1244,7 +1262,103 @@ SettingsBundle SettingsManager::load() {
     return settings;
 }
 
+
+bool SettingsManager::loadFlashSettings(SettingsBundle& settings) {
+    if (!mountSettingsStorage()) return false;
+    SettingsFlash::Header headers[2];
+    const bool valid0 = SettingsFlash::inspect(LittleFS, SettingsFlash::paths[0], headers[0]);
+    const bool valid1 = SettingsFlash::inspect(LittleFS, SettingsFlash::paths[1], headers[1]);
+    if (!valid0 && !valid1) return false;
+    const int newest = valid1 && (!valid0 || headers[1].sequence > headers[0].sequence) ? 1 : 0;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        const int slot = attempt ? 1 - newest : newest;
+        if (!(slot ? valid1 : valid0)) continue;
+        File file = LittleFS.open(SettingsFlash::paths[slot], "r");
+        if (!file || !file.seek(sizeof(SettingsFlash::Header))) continue;
+        JsonDocument doc(storageJsonAllocator());
+        if (deserializeJson(doc, file) || doc["schema"] != 1 || !doc["settings"].is<JsonObject>()) continue;
+        const std::unique_ptr<SettingsBundle> candidate(new (std::nothrow) SettingsBundle(defaults()));
+        String error;
+        if (!candidate || !updateFromJson(*candidate, doc["settings"], error)) continue;
+        candidate->usingSavedSettings = true;
+        const bool localeChanged = String(doc["compiledLanguage"] | "") != APP_COMPILED_LANGUAGE_CODE;
+        const bool themeChanged = String(doc["compiledTheme"] | "") != APP_COMPILED_THEME_CODE;
+        if (localeChanged) candidate->ui.language = APP_COMPILED_LANGUAGE_CODE;
+        if (themeChanged) candidate->ui.theme = APP_COMPILED_THEME_CODE;
+        settings = *candidate;
+        if (localeChanged || themeChanged) saveFlashSettings(settings);
+        return true;
+    }
+    DebugLog.println("[settings] Internal flash records invalid; using legacy NVS fallback");
+    return false;
+}
+
+bool SettingsManager::saveFlashSettings(const SettingsBundle& settings) {
+    const std::unique_ptr<SettingsBundle> sanitized(new (std::nothrow) SettingsBundle(settings));
+    if (!sanitized) return false;
+    sanitizeInPlace(*sanitized);
+    sanitized->usingSavedSettings = true;
+    JsonDocument doc(storageJsonAllocator());
+    doc["schema"] = 1;
+    toJson(*sanitized, doc["settings"].to<JsonObject>());
+    doc["compiledLanguage"] = APP_COMPILED_LANGUAGE_CODE;
+    doc["compiledTheme"] = APP_COMPILED_THEME_CODE;
+    const size_t length = measureJson(doc);
+    if (doc.overflowed() || !length || length > SettingsFlash::maxBytes) return false;
+    SettingsFlash::Header headers[2];
+    bool valid[2] = {
+        SettingsFlash::inspect(LittleFS, SettingsFlash::paths[0], headers[0]),
+        SettingsFlash::inspect(LittleFS, SettingsFlash::paths[1], headers[1])
+    };
+    const int newest = valid[1] && (!valid[0] || headers[1].sequence > headers[0].sequence) ? 1 : 0;
+    SettingsFlash::CheckedWriter expected;
+    if (serializeJson(doc, expected) != length) return false;
+    if (valid[0] && valid[1] && headers[newest].length == length && headers[newest].crc == expected.crc()) return true;
+    const uint32_t sequence = (valid[newest] ? headers[newest].sequence : 0) + 1;
+    if (!sequence) return false;
+    auto writeSlot = [&](int slot) {
+        const String temporary = String(SettingsFlash::paths[slot]) + ".tmp";
+        File file = LittleFS.open(temporary, "w");
+        SettingsFlash::Header header;
+        SettingsFlash::CheckedWriter writer(file);
+        if (!file || file.write(reinterpret_cast<const uint8_t*>(&header), sizeof(header)) != sizeof(header) ||
+            serializeJson(doc, writer) != length) {
+            if (file) file.close(); LittleFS.remove(temporary); return false;
+        }
+        file.flush(); file.close();
+        File check = LittleFS.open(temporary, "r");
+        uint32_t crc = 0;
+        const bool complete = check && check.size() == length + sizeof(header) &&
+            check.seek(sizeof(header)) && SettingsFlash::checksum(check, length, crc) && crc == writer.crc();
+        if (check) check.close();
+        if (!complete) { LittleFS.remove(temporary); return false; }
+        header = {SettingsFlash::magic, sequence, static_cast<uint32_t>(length), crc};
+        file = LittleFS.open(temporary, "r+");
+        if (!file || file.write(reinterpret_cast<const uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
+            if (file) file.close(); LittleFS.remove(temporary); return false;
+        }
+        file.flush(); file.close();
+        SettingsFlash::Header verified;
+        if (!SettingsFlash::inspect(LittleFS, temporary.c_str(), verified)) { LittleFS.remove(temporary); return false; }
+        // Only the inactive slot is replaced; the current record remains recoverable.
+        if (LittleFS.exists(SettingsFlash::paths[slot]) && !LittleFS.remove(SettingsFlash::paths[slot])) return false;
+        if (!LittleFS.rename(temporary, SettingsFlash::paths[slot])) return false;
+        return SettingsFlash::inspect(LittleFS, SettingsFlash::paths[slot], verified);
+    };
+    const int destination = valid[newest] ? 1 - newest : 0;
+    if (!writeSlot(destination)) { DebugLog.println("[settings] Internal flash write/verification failed; previous settings retained"); return false; }
+    // First migration creates two checked copies before reclaiming large legacy values.
+    if (!valid[0] && !valid[1] && !writeSlot(1 - destination)) return true;
+    const char* largeKeys[] = {"ui_diag", "ui_helpers", "ui_profiles", "ui_motor", "lcd_menu"};
+    for (const char* key : largeKeys) if (preferences_.isKey(key)) preferences_.remove(key);
+    DebugLog.printf("[settings] Saved verified internal flash configuration (%u bytes); NVS free entries=%u\n",
+        static_cast<unsigned>(length), static_cast<unsigned>(preferences_.freeEntries()));
+    return true;
+}
+
 bool SettingsManager::save(const SettingsBundle& settings) {
+    SettingsGuard guard;
+    if (mountSettingsStorage()) return saveFlashSettings(settings);
     writeFailed_ = false;
     // Also recover when provisioning is retried without a device reboot.
     if (!preferences_.getBool(PREF_MARKER, false) &&
@@ -1437,6 +1551,16 @@ bool SettingsManager::save(const SettingsBundle& settings) {
 }
 
 bool SettingsManager::saveAudioEqualizer(const AudioSettings& audio) {
+    SettingsGuard guard;
+    if (mountSettingsStorage()) {
+        const std::unique_ptr<SettingsBundle> settings(new (std::nothrow) SettingsBundle(load()));
+        if (!settings) return false;
+        settings->audio.equalizerPreset = audio.equalizerPreset;
+        settings->audio.equalizerLowDb = audio.equalizerLowDb;
+        settings->audio.equalizerPresenceDb = audio.equalizerPresenceDb;
+        settings->audio.equalizerHighDb = audio.equalizerHighDb;
+        return saveFlashSettings(*settings);
+    }
     writeFailed_ = false;
     AudioSettings sanitized = audio;
     normalizeEqualizer(sanitized);
@@ -1452,6 +1576,14 @@ bool SettingsManager::saveAudioEqualizer(const AudioSettings& audio) {
 }
 
 bool SettingsManager::reset() {
+    SettingsGuard guard;
+    if (mountSettingsStorage()) {
+        for (const char* path : SettingsFlash::paths) {
+            if (LittleFS.exists(path) && !LittleFS.remove(path)) return false;
+            const String temporary = String(path) + ".tmp";
+            if (LittleFS.exists(temporary) && !LittleFS.remove(temporary)) return false;
+        }
+    }
     return preferences_.clear();
 }
 
@@ -1871,7 +2003,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         if(access["httpsEnabled"].is<bool>())settings.webAccess.httpsEnabled=access["httpsEnabled"].as<bool>();
         if(access["httpsPort"].is<unsigned>()){
             unsigned port=access["httpsPort"].as<unsigned>();
-            if(port!=443 && (port<1024 || port>65535)){error="HTTPS port must be 443 or 1024–65535.";return false;}
+            if(port!=443 && (port<1024 || port>65535)){error="HTTPS port must be 443 or 1024вЂ“65535.";return false;}
             settings.webAccess.httpsPort=port;
         }
     }

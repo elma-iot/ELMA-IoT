@@ -253,7 +253,9 @@ void WiFiManager::loop() {
             }
         }
 
-        if (apShutdownPending_ && static_cast<long>(millis() - apShutdownAt_) >= 0) {
+        // Switching Wi-Fi modes can block for hundreds of milliseconds; wait
+        // until playback/OTA releases its low-latency requirement.
+        if (apShutdownPending_ && !lowLatencyMode_ && static_cast<long>(millis() - apShutdownAt_) >= 0) {
             DebugLog.println("[wifi] AP grace period elapsed, stopping AP");
             stopAccessPoint();
         }

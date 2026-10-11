@@ -6,6 +6,7 @@
 #include <memory>
 #include <atomic>
 #include "device_log.h"
+#include "interface_security.h"
 namespace {
 struct Frame {uint8_t* bytes=nullptr;size_t size=0;uint16_t width=0,height=0;~Frame(){free(bytes);}};
 struct Command {uint8_t field;int value;};
@@ -14,6 +15,29 @@ const int minimum[]={0,4,-2,-2,-2,0,0,0,0,0,0,0,0,-2,0,0,0,0,0,0,0,0,0,0,-2},max
 int values[]={1,15,0,0,0,0,0,1,1,1,1,0,0,0,300,0,0,0,1,1,1,1,0,0,0};
 SemaphoreHandle_t lock=nullptr;QueueHandle_t commands=nullptr;
 std::shared_ptr<Frame> latest;std::atomic<uint32_t> requestedAt{0};std::atomic<bool> ready{false};std::atomic<int> failure{0};
+std::atomic<bool> integrationEnabled{false};std::atomic<unsigned> integrationFps{5},streamClients{0};
+struct MjpegSession {
+ std::shared_ptr<Frame> frame;String header;size_t offset=0;uint32_t nextAt=0,waitingAt=0;bool first=true;
+ ~MjpegSession(){streamClients.fetch_sub(1);}
+ size_t fill(uint8_t* output,size_t capacity){
+  if(!integrationEnabled.load()||InterfaceSecurity::device().locked())return 0;
+  requestedAt=millis();
+  // Commit response headers before a warm-up TRY_AGAIN. Older Async responses
+  // otherwise retain headers while advancing state and can truncate a chunk.
+  if(first){if(capacity<2)return RESPONSE_TRY_AGAIN;output[0]='\r';output[1]='\n';first=false;return 2;}
+  if(!frame){
+   if(int32_t(millis()-nextAt)<0)return RESPONSE_TRY_AGAIN;
+   if(lock){xSemaphoreTake(lock,portMAX_DELAY);frame=latest;xSemaphoreGive(lock);}
+   if(!frame){if(!waitingAt)waitingAt=millis();return uint32_t(millis()-waitingAt)>30000?0:RESPONSE_TRY_AGAIN;}
+   waitingAt=0;header="\r\n--elma-frame\r\nContent-Type: image/jpeg\r\nContent-Length: "+String(frame->size)+"\r\n\r\n";offset=0;
+  }
+  const size_t headerSize=header.length(),total=headerSize+frame->size;size_t count=std::min(capacity,total-offset),written=0;
+  if(offset<headerSize){written=std::min(count,headerSize-offset);memcpy(output,header.c_str()+offset,written);offset+=written;}
+  if(written<count){memcpy(output+written,frame->bytes+offset-headerSize,count-written);offset+=count-written;}
+  if(offset==total){frame.reset();nextAt=millis()+1000/integrationFps.load();}
+  return count;
+ }
+};
 const framesize_t sizes[]={FRAMESIZE_QQVGA,FRAMESIZE_QVGA,FRAMESIZE_VGA,FRAMESIZE_SVGA,FRAMESIZE_XGA,FRAMESIZE_HD,FRAMESIZE_SXGA,FRAMESIZE_UXGA};
 int apply(sensor_t* sensor,int field,int value){
  switch(field){case 0:return sensor->set_framesize ? sensor->set_framesize(sensor,sizes[value]) : -1;
@@ -44,16 +68,28 @@ void task(void*){
 #endif
  config.jpeg_quality=15;config.fb_count=psramFound()?2:1;config.fb_location=psramFound()?CAMERA_FB_IN_PSRAM:CAMERA_FB_IN_DRAM;
  config.grab_mode=psramFound()?CAMERA_GRAB_LATEST:CAMERA_GRAB_WHEN_EMPTY;
- int error=esp_camera_init(&config);failure=error;
- if(error){DebugLog.printf("[camera] Init failed: 0x%x\n",error);vTaskDelete(nullptr);return;}
- auto* sensor=esp_camera_sensor_get();Preferences prefs;prefs.begin("camera",false);
- for(int i=0;i<25;i++){values[i]=constrain(prefs.getInt(names[i],values[i]),minimum[i],maximum[i]);if(i==0&&!psramFound())values[i]=min(values[i],1);apply(sensor,i,values[i]);}
- ready=true;
+ Preferences prefs;prefs.begin("camera",false);
+ for(int i=0;i<25;i++){values[i]=constrain(prefs.getInt(names[i],values[i]),minimum[i],maximum[i]);if(i==0&&!psramFound())values[i]=min(values[i],1);}
+ sensor_t* sensor=nullptr;bool initialized=false;uint32_t retryAt=0;
  for(;;){
+  uint32_t requested=requestedAt.load();
+  const bool wanted=requested && uint32_t(millis()-requested)<2500;
+  if(wanted&&!initialized&&int32_t(millis()-retryAt)>=0){
+   int error=esp_camera_init(&config);failure=error;
+   if(error){DebugLog.printf("[camera] Init failed: 0x%x\n",error);retryAt=millis()+5000;}
+   else {initialized=true;sensor=esp_camera_sensor_get();for(int i=0;i<25;i++)apply(sensor,i,values[i]);ready=true;DebugLog.println("[camera] Capture resumed on demand");}
+  }
+  if(!wanted&&initialized){
+   ready=false;xSemaphoreTake(lock,portMAX_DELAY);latest.reset();xSemaphoreGive(lock);
+   // fb_count > 1 captures continuously in the SDK even without fb_get().
+   // Deinitialization stops DMA/XCLK and releases driver buffers/tasks.
+   esp_camera_deinit();sensor=nullptr;initialized=false;
+   DebugLog.println("[camera] Capture suspended: no preview, recording or detector demand");
+  }
+  if(!initialized){vTaskDelay(pdMS_TO_TICKS(50));continue;}
   Command c;
   while(xQueueReceive(commands,&c,0)==pdTRUE){int result=apply(sensor,c.field,c.value);failure=result;if(result)continue;xSemaphoreTake(lock,portMAX_DELAY);values[c.field]=c.value;latest.reset();xSemaphoreGive(lock);prefs.putInt(names[c.field],c.value);}
-  uint32_t requested=requestedAt.load();
-  if(requested && uint32_t(millis()-requested)<2500){
+  if(wanted){
    auto* fb=esp_camera_fb_get();
    if(fb){
     auto next=std::make_shared<Frame>();next->size=fb->len;next->width=fb->width;next->height=fb->height;
@@ -76,13 +112,33 @@ bool withCameraFrame(const std::function<bool(const uint8_t*,size_t,uint16_t,uin
  return frame&&frame->bytes&&callback(frame->bytes,frame->size,frame->width,frame->height);
 }
 void beginCameraService(){
+ Preferences network;network.begin("camera-net",true);integrationEnabled=network.getBool("mjpeg",false);integrationFps=constrain(network.getUInt("fps",5),1u,10u);network.end();
  lock=xSemaphoreCreateMutex();commands=xQueueCreate(8,sizeof(Command));
  if(!lock||!commands||xTaskCreate(task,"camera",6144,nullptr,1,nullptr)!=pdPASS)failure=-1;
 }
 void registerCameraRoutes(AsyncWebServer& server,std::function<bool(AsyncWebServerRequest*)> authorized){
  server.on("/api/camera/status",HTTP_GET,[authorized](AsyncWebServerRequest* request){
-  if(!authorized(request))return;JsonDocument doc;doc["ready"]=ready.load();doc["errorCode"]=failure.load();doc["psram"]=psramFound();
-  if(ready.load()&&lock){xSemaphoreTake(lock,portMAX_DELAY);for(int i=0;i<25;i++)doc[names[i]]=values[i];xSemaphoreGive(lock);}json(request,doc);
+  if(!authorized(request))return;JsonDocument doc;doc["ready"]=ready.load();doc["suspended"]=!ready.load()&&!failure.load();doc["errorCode"]=failure.load();doc["psram"]=psramFound();
+  doc["mjpegEnabled"]=integrationEnabled.load();doc["mjpegFps"]=integrationFps.load();doc["streamClients"]=streamClients.load();doc["mjpegPath"]="/api/camera/stream";doc["snapshotPath"]="/api/camera/frame";doc["ptzAvailable"]=false;
+  if(lock){xSemaphoreTake(lock,portMAX_DELAY);for(int i=0;i<25;i++)doc[names[i]]=values[i];xSemaphoreGive(lock);}json(request,doc);
+ });
+ server.on("/api/camera/integration",HTTP_POST,[authorized](AsyncWebServerRequest* request){
+  if(!authorized(request))return;JsonDocument doc;
+  if(!request->hasParam("enabled",true)||!request->hasParam("fps",true)){doc["error"]="Missing integration settings";json(request,doc,400);return;}
+  String raw=request->getParam("fps",true)->value();char* end=nullptr;long fps=strtol(raw.c_str(),&end,10);String flag=request->getParam("enabled",true)->value();
+  if(raw.isEmpty()||*end||fps<1||fps>10||(flag!="0"&&flag!="1")){doc["error"]="Use 1–10 FPS and enabled 0 or 1";json(request,doc,400);return;}
+  Preferences network;if(!network.begin("camera-net",false)){doc["error"]="Configuration storage unavailable";json(request,doc,507);return;}
+  bool saved=network.putBool("mjpeg",flag=="1")==sizeof(bool)&&network.putUInt("fps",fps)==sizeof(unsigned);network.end();
+  if(!saved){doc["error"]="Configuration storage full; settings were not applied";json(request,doc,507);return;}
+  integrationEnabled=flag=="1";integrationFps=fps;doc["saved"]=true;json(request,doc);
+ });
+ server.on("/api/camera/stream",HTTP_GET,[authorized](AsyncWebServerRequest* request){
+  if(!authorized(request))return;
+  if(!integrationEnabled){request->send(403,"text/plain","Enable Home Assistant MJPEG in camera settings");return;}
+  if(streamClients.fetch_add(1)){streamClients.fetch_sub(1);request->send(429,"text/plain","One external stream is already connected");return;}
+  auto session=std::make_shared<MjpegSession>();requestedAt=millis();
+  auto* response=request->beginChunkedResponse("multipart/x-mixed-replace; boundary=elma-frame",[session](uint8_t* output,size_t capacity,size_t){return session->fill(output,capacity);});
+  if(!response){request->send(503);return;}response->addHeader("Cache-Control","no-store");response->addHeader("X-Content-Type-Options","nosniff");request->send(response);
  });
  server.on("/api/camera/control",HTTP_POST,[authorized](AsyncWebServerRequest* request){
   if(!authorized(request))return;JsonDocument doc;

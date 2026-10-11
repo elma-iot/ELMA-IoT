@@ -189,6 +189,7 @@ class AudioPlayer::Impl {
     uint8_t channelCount = DefaultConfig::AUDIO_FORCE_MONO ? 1 : 2;
     bool diagnosticTestMode = false;
     bool mediaHeld = false,mediaResume = false,mediaLeasePaused = false, outputDriverReady = true;
+    bool mediaRequested = false, storageForegroundHeld = false;
     uint32_t mediaSavedRate = 0;
     String state = "idle";
     String type = "idle";
@@ -208,6 +209,7 @@ class AudioPlayer::Impl {
     bool durationProbePending = false;
     bool streamWarmupPending = false;
     unsigned long streamWarmupStartedAt = 0;
+    uint32_t lastServiceUs = 0, maximumServiceGapUs = 0, lastTimingReport = 0;
     size_t streamWarmupHighWaterBytes = 0;
     OverlayState overlay;
 
@@ -611,7 +613,15 @@ void AudioPlayer::loop() {
     if (impl_ == nullptr) {
         return;
     }
+    holdForMedia(impl_->mediaRequested);
     if (impl_->mediaHeld || !impl_->outputDriverReady) return;
+    if (impl_->state == "playing" && impl_->lastServiceUs) {
+        impl_->maximumServiceGapUs = max(impl_->maximumServiceGapUs, uint32_t(micros()-impl_->lastServiceUs));
+        if (millis()-impl_->lastTimingReport >= 10000) {
+            DebugLog.printf("[audio] service max_gap_us=%u input_bytes=%u rate=%u\n", impl_->maximumServiceGapUs, unsigned(impl_->audio.inBufferFilled()), unsigned(impl_->activeSampleRateHz));
+            impl_->maximumServiceGapUs=0;impl_->lastTimingReport=millis();
+        }
+    } else impl_->maximumServiceGapUs=0;
     if (impl_->speechRendering) {
         int16_t pcm[512];const size_t count = (impl_->renderingPiano?impl_->piano->render(pcm,512):impl_->speech->render(pcm,512));
         if (count) {
@@ -645,7 +655,7 @@ void AudioPlayer::loop() {
                             elapsed,
                             warmupExpired && !bufferReady ? " fallback" : "");
             impl_->markPlaying();
-            impl_->fadeToPercent(impl_->volume, kStartFadeInMs);
+            impl_->fadeToPercent(impl_->volume, kStartFadeInMs, true);
         }
     }
     const uint32_t decodedRate=impl_->audio.getSampleRate();
@@ -668,6 +678,7 @@ void AudioPlayer::loop() {
         impl_->applyHardwareVolumePercent(0);
         impl_->publish();
     }
+    impl_->lastServiceUs = micros();
 }
 
 bool AudioPlayer::play(const String& url, const String& title, const String& mediaType, const String& source) {
@@ -1205,12 +1216,12 @@ bool AudioPlayer::playSource(JsonVariantConst source, String& error) {
 namespace {
 bool configureMediaOutput(AudioPlayer::Impl* impl,bool media,uint32_t rate){
  if(!impl->outputEnabled||impl->bclkPin==255)return false;
- // Keep intercom DMA bounded to 3 x 128 frames; SPK music uses 4 x 256.
+ // Keep intercom DMA bounded to 3 x 128 frames; music uses 16 x 512.
  i2s_driver_uninstall(kSpeakerI2s);i2s_config_t config{};
  config.mode=i2s_mode_t(I2S_MODE_MASTER|I2S_MODE_TX);config.sample_rate=rate;config.bits_per_sample=I2S_BITS_PER_SAMPLE_16BIT;
  config.channel_format=I2S_CHANNEL_FMT_RIGHT_LEFT;config.communication_format=I2S_COMM_FORMAT_STAND_I2S;config.intr_alloc_flags=ESP_INTR_FLAG_LEVEL1;
  #if defined(APP_SPK_BOARD)
- config.dma_buf_count=media?3:4;config.dma_buf_len=media?128:256;
+ config.dma_buf_count=media?3:16;config.dma_buf_len=media?128:512;
 #else
  config.dma_buf_count=media?3:16;config.dma_buf_len=media?128:512;
 #endif
@@ -1222,13 +1233,23 @@ bool configureMediaOutput(AudioPlayer::Impl* impl,bool media,uint32_t rate){
 }
 }
 void AudioPlayer::holdForMedia(bool hold) {
- if(!impl_ || impl_->mediaHeld==hold)return;
+ if(!impl_)return;
+ impl_->mediaRequested=hold;
+#if !APP_DISABLE_SD
+ // Pause SD playback on the audio task, never inside an AsyncTCP callback.
+ // Capture/intercom keeps its own hold reason and resumes independently.
+ impl_->storageForegroundHeld=(storageForegroundPending(StorageTarget::Sd) ||
+     (impl_->storageForegroundHeld && storageBusy(StorageTarget::Sd))) &&
+     ((impl_->storageLeaseActive && impl_->storageTarget==StorageTarget::Sd) || impl_->storageForegroundHeld);
+ hold=hold||impl_->storageForegroundHeld;
+#endif
+ if(impl_->mediaHeld==hold)return;
  if(hold){impl_->mediaSavedRate=impl_->clockRate?impl_->clockRate:44100;impl_->mediaResume=impl_->audio.isRunning();
   impl_->fadeToPercent(0,70,true);impl_->mediaResume=impl_->audio.isRunning();if(impl_->mediaResume)impl_->audio.pauseResume();impl_->mediaHeld=true;impl_->mediaLeasePaused=impl_->storageLeaseActive;if(impl_->mediaLeasePaused)releaseStorageLease(impl_);
   requestAudioPerformanceClock();impl_->outputDriverReady=configureMediaOutput(impl_,true,16000);impl_->clockRate=16000;impl_->state=impl_->outputDriverReady?"paused":"error";impl_->publish();
  }else{impl_->mediaHeld=false;impl_->outputDriverReady=configureMediaOutput(impl_,false,impl_->mediaSavedRate);impl_->clockRate=impl_->mediaSavedRate;
   if(!impl_->outputDriverReady){impl_->mediaResume=false;impl_->state="error";impl_->publish();return;}
-  if(impl_->mediaLeasePaused){if(storageMounted(impl_->storageTarget))acquireStorageLease(impl_,impl_->storageTarget);else{impl_->audio.stopSong();impl_->mediaResume=false;}impl_->mediaLeasePaused=false;}
+  if(impl_->mediaLeasePaused){StorageTarget target;String path;bool sourceExists=storageMounted(impl_->storageTarget) && (!parseAudioFileReference(impl_->url,target,path) || storageExists(target,path));if(sourceExists)acquireStorageLease(impl_,impl_->storageTarget);else{impl_->audio.stopSong();impl_->mediaResume=false;}impl_->mediaLeasePaused=false;}
   if(impl_->mediaResume){impl_->audio.pauseResume();impl_->state=impl_->streamWarmupPending?"buffering":"playing";impl_->fadeToPercent(impl_->volume,90,true);}else{impl_->state="idle";impl_->applyHardwareVolumePercent(impl_->volume);}impl_->mediaResume=false;impl_->publish();}
 }
 bool AudioPlayer::mediaHeld() const {return impl_ && impl_->mediaHeld;}
