@@ -1,0 +1,32 @@
+{
+  "name": "ELMA_TFLite",
+  "version": "1.0.0",
+  "frameworks": [
+    "arduino"
+  ],
+  "platforms": [
+    "espressif32"
+  ],
+  "build": {
+    "flags": [
+      "-DTF_LITE_DISABLE_X86_NEON"
+    ],
+    "libArchive": true,
+    "srcFilter": [
+      "+<tensorflow/>",
+      "-<**/*test*.*>",
+      "-<tensorflow/lite/micro/mock_micro_graph.cpp>",
+      "-<tensorflow/lite/micro/kernels/*>",
+      "+<tensorflow/lite/micro/kernels/conv.cpp>",
+      "+<tensorflow/lite/micro/kernels/conv_common.cpp>",
+      "+<tensorflow/lite/micro/kernels/depthwise_conv.cpp>",
+      "+<tensorflow/lite/micro/kernels/depthwise_conv_common.cpp>",
+      "+<tensorflow/lite/micro/kernels/pooling.cpp>",
+      "+<tensorflow/lite/micro/kernels/reshape.cpp>",
+      "+<tensorflow/lite/micro/kernels/softmax.cpp>",
+      "+<tensorflow/lite/micro/kernels/kernel_util.cpp>",
+      "+<tensorflow/lite/micro/kernels/pooling_common.cpp>",
+      "+<tensorflow/lite/micro/kernels/softmax_common.cpp>"
+    ]
+  }
+}

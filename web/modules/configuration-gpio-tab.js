@@ -1,3 +1,4 @@
+import {ONBOARD_BOARDS} from './onboard-boards.js';
 import {gpioRoleWireColor} from './peripheral-pin-model.js';
 import {BOARD_DEFAULTS} from './board-defaults.js';
 export function createConfigurationGpioTab({
@@ -493,6 +494,23 @@ export function createConfigurationGpioTab({
   }
 
   function applyBoardLedDefaults(board) {
+    const robot=ONBOARD_BOARDS[board];
+    if(robot?.robot){
+      for(const section of ['audio','oled','sd','battery']){
+        state.settings[section]={...state.settings[section],...robot.defaults[section]};
+        for(const [key,value] of Object.entries(robot.defaults[section]||{})){
+          const field=document.querySelector(`[name="${section}.${key}"]`);
+          if(field){if(field.type==='checkbox')field.checked=!!value;else field.value=String(value);}
+        }
+      }
+      for(const [key,values] of Object.entries({peripheralAudioProfiles:['spk-ns4168'],peripheralAudioInProfiles:['spk-dual-mic'],peripheralDisplayProfiles:['i2c-oled'],peripheralStorageProfiles:['microsd-spi'],peripheralSensorProfiles:['bno055','battery-voltage-divider-220k']})){
+        state[key]=values;
+        const field=elements[key.replace('Profiles','Profile')];if(field)field.value=values[0];
+      }
+      if(elements.peripheralSensorsList)elements.peripheralSensorsList.innerHTML='';
+      state.peripheralHelperBindings={'sensor:0':{SDA:15,SCL:14},'sensor:1':{SIGNAL:13},'audioIn:0':{SCK:39,WS:40,SD:38},'storage:0':{CS:2,SCK:11,MOSI:3,MISO:12}};
+      state.settings.ui.peripheralHelperBindings=state.peripheralHelperBindings;
+    }
     const defaults=BOARD_DEFAULTS[board];
     if (!defaults || defaults.preserveExternalLed) return;
     for (const [key,value] of Object.entries(defaults)) {

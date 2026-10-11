@@ -3,6 +3,7 @@
 #include "led_audio.h"
 #include <driver/i2s.h>
 #include <soc/soc_caps.h>
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -14,6 +15,11 @@ inline std::atomic<bool>& enabled(){static std::atomic<bool> value{true};return 
 inline std::atomic<int>& gain(){static std::atomic<int> value{1};return value;}
 inline std::atomic<int>& peakLeft(){static std::atomic<int> value{0};return value;}
 inline std::atomic<int>& peakRight(){static std::atomic<int> value{0};return value;}
+// Bounded PCM queue; capture never waits for HTTP or storage.
+struct PcmBlock {int16_t samples[64];uint16_t count=0;};
+inline std::atomic<uint32_t>& pcmDropped(){static std::atomic<uint32_t> count{0};return count;}
+inline QueueHandle_t& pcm(){static StaticQueue_t state;static QueueHandle_t q=[](){auto* memory=static_cast<uint8_t*>(heap_caps_malloc(512*sizeof(PcmBlock),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));return memory?xQueueCreateStatic(512,sizeof(PcmBlock),memory,&state):xQueueCreate(64,sizeof(PcmBlock));}();return q;}
+inline std::atomic<uint32_t>& mediaUntil(){static std::atomic<uint32_t> t{0};return t;}
 inline void worker(void*){
 #if SOC_I2S_NUM > 1
  constexpr i2s_port_t port=I2S_NUM_1;
@@ -40,21 +46,26 @@ inline void worker(void*){
   size_t received=0;
   if(installed&&paused==enabled().load()){paused=!enabled().load();if(paused)i2s_stop(port);else i2s_start(port);}
   if(paused){peakLeft()=0;peakRight()=0;}
-  if(installed&&!paused&&i2s_read(port,samples,sizeof(samples),&received,0)==ESP_OK){
-   int l=0,r=0,multiplier=gain().load();
+  if(installed&&!paused&&i2s_read(port,samples,sizeof(samples),&received,pdMS_TO_TICKS(10))==ESP_OK){
+   int l=0,r=0,multiplier=gain().load();PcmBlock block;
    for(unsigned i=0;i<received/sizeof(int32_t);i+=next.stereo?2:1){
     int16_t left=int16_t(samples[i]>>16),right=next.stereo&&i+1<received/sizeof(int32_t)?int16_t(samples[i+1]>>16):left;
     left=constrain(int(left)*multiplier,-32768,32767);right=constrain(int(right)*multiplier,-32768,32767);
     l=std::max(l,abs(int(left)));r=std::max(r,abs(int(right)));
     LedAudio::microphone().push(left,right,32000);
+    block.samples[block.count++]=int16_t((int(left)+int(right))/2);
    }
    peakLeft()=l;peakRight()=r;
+   if(pcm()&&int32_t(mediaUntil().load()-millis())>0&&block.count&&xQueueSend(pcm(),&block,0)!=pdTRUE)++pcmDropped();
   }
-  vTaskDelay(1);
+  // A fixed scheduler tick per 64 words discards most 32 kHz samples. Drain
+  // DMA continuously while it supplies data; the blocking read yields when
+  // empty. Keep the disabled/unconfigured path asleep.
+  if(received)taskYIELD();else vTaskDelay(1);
  }
 }
 inline void configure(Config config){
- if(!commands()){commands()=xQueueCreate(1,sizeof(Config));if(!commands())return;if(xTaskCreate(worker,"led-mic",2048,nullptr,tskIDLE_PRIORITY,nullptr)!=pdPASS){vQueueDelete(commands());commands()=nullptr;return;}}
+ if(!commands()){commands()=xQueueCreate(1,sizeof(Config));if(!commands())return;if(xTaskCreate(worker,"led-mic",2048,nullptr,tskIDLE_PRIORITY+2,nullptr)!=pdPASS){vQueueDelete(commands());commands()=nullptr;return;}}
  xQueueOverwrite(commands(),&config);
 }
 }

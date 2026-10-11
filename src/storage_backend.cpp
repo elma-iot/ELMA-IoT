@@ -716,6 +716,10 @@ bool storageBusy(StorageTarget target) {
     if(target!=StorageTarget::Sd)return false;
     portENTER_CRITICAL(&storageStateMux);bool busy=sdMaintenance||sdFormatPending||formatState==SdFormatState::Formatting||sdWriteDepth||sdReadDepth;portEXIT_CRITICAL(&storageStateMux);return busy;
 }
+bool storageWriteBlocked(StorageTarget target){
+ if(target!=StorageTarget::Sd)return false;
+ portENTER_CRITICAL(&storageStateMux);bool busy=sdMaintenance||sdFormatPending||formatState==SdFormatState::Formatting||sdWriteDepth;portEXIT_CRITICAL(&storageStateMux);return busy;
+}
 
 fs::FS* getStorageFs(StorageTarget target) {
     if (target == StorageTarget::Sd) {

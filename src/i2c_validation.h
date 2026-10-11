@@ -16,7 +16,7 @@ inline bool validateI2cConfiguration(const SettingsBundle& settings,String& erro
  for(int g=0;g<5;g++){int index=0;for(JsonVariantConst profile:profiles[keys[g]].as<JsonArrayConst>()) {
   const int slotIndex=index++;String name=String(groups[g])+":"+profile.as<String>();
   if(catalog[name].isNull())continue;
-  auto pins=bindings[String(groups[g])+":"+String(slotIndex)];
+  JsonVariantConst pins=bindings[String(groups[g])+":"+String(slotIndex)];
   Device device{name,number(pins["SDA"]),number(pins["SCL"]),{},name=="sensor:ds3231-rtc"||name=="sensor:bno055"||name=="display:i2c-oled"};
   int address=number(pins["I2C_ADDRESS"]);
   if(name=="display:i2c-oled"&&slotIndex==0){device.sda=settings.oled.sdaPin;device.scl=settings.oled.sclPin;address=settings.oled.i2cAddress;}

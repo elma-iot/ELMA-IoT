@@ -23,7 +23,7 @@ export function installOnlineHelpLinks(){
  for(const row of document.querySelectorAll('.online-help-heading')){const heading=row.querySelector(':scope > h1,:scope > h2,:scope > h3');if(heading)row.replaceWith(heading);}
  for(const [tab,id] of Object.entries(TAB_HELP)){
   const panel=document.getElementById('tab-'+tab);if(!panel)continue;
-  let heading=panel.querySelector(':scope > h1,:scope > h2,:scope > h3,:scope > .device-log-heading > h2');
+  let heading=panel.querySelector(':scope > h1,:scope > h2,:scope > h3,:scope > .device-log-heading > h2,:scope > .panel-head > h2,:scope > .panel-head > h3');
   if(!heading){heading=document.createElement('h2');heading.textContent=panel.getAttribute('aria-label')||document.querySelector(`[aria-controls="tab-${tab}"]`)?.getAttribute('aria-label')||tab;panel.prepend(heading);}
   bindContextHelp(heading,id);
   bindContextHelp(document.querySelector(`[aria-controls="tab-${tab}"],[data-tab="${tab}"]`),id);

@@ -183,6 +183,8 @@ struct SdSettings {
 };
 
 struct EffectSettings {
+    String captureFile;
+    uint8_t captureVolumePercent = 60;
     String startupFile;
     uint8_t startupVolumePercent = 100;
     String alarmFile;
@@ -236,6 +238,7 @@ struct DeviceSettings {
 #endif
 
 struct UiSettings {
+    bool customWebInterface = false;
     String language = APP_COMPILED_LANGUAGE_CODE;
     String theme = APP_COMPILED_THEME_CODE;
     bool gpioSafetyOverride = false;
@@ -248,7 +251,15 @@ struct UiSettings {
     String motorRuntimeConfig = "{}";
 };
 
+struct WebAccessSettings {
+    bool mdnsEnabled = false;
+    String hostname; // Empty means the MAC-derived device name.
+    bool httpsEnabled = false;
+    uint16_t httpsPort = 443;
+};
+
 struct SettingsBundle {
+    WebAccessSettings webAccess;
     WiFiSettings wifi;
     MqttSettings mqtt;
     OtaSettings ota;

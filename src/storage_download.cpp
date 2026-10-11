@@ -52,7 +52,7 @@ void StorageDownload::worker(void* argument) {
                 free=capacity_-self->count_;xSemaphoreGive(self->mutex_);
             }
             if (!free) {if(uint32_t(millis()-lastProgress)>30000)break;vTaskDelay(1);continue;}
-            if(!remaining)break;
+            if(!remaining||!storageMounted(self->target_))break;
             const size_t got=self->file_.read(chunk,std::min(remaining,std::min(free,sizeof(chunk))));
             if (!got) break;
             remaining-=got;lastProgress=millis();

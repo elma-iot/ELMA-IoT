@@ -2422,14 +2422,15 @@ export function createPeripheralDiagramWiringModule({
             connection.signalLabel,
             Number(state.peripheralDiagramPositions?.[node.id]?.rotation || 0),
           );
-          const assetLayout = peripheralColumnLabelLayout(visualRect, boardRect, connections.map(item=>item.signalLabel), index);
+          const calibrated = /(?:i2c-oled|bno055)-breadboard\.svg$/.test(node.src);
+          const assetLayout = calibrated && pinContact ? contactLabelLayout(visualRect, connection.signalLabel, pinContact) : peripheralColumnLabelLayout(visualRect, boardRect, connections.map(item=>item.signalLabel), index);
           nodeSignalLabels.set(labelId, {
             id: labelId,
             label: normalizeSignalLabel(connection.signalLabel),
             dividerMaximum:node.groupKey==='sensor'&&String(node.profileValue||'').includes('battery-voltage-divider')&&signalKey(connection.signalLabel)==='SIGNAL'?voltageDividerMaximum(state.settings?.battery):null,
             palette: classifyWireColor(connection),
             defaultLayout: assetLayout || signalLabelDefaultLayout(visualRect, defaultAnchor, connection.signalLabel, boardRect),
-            pinContact: {column:true},
+            pinContact: calibrated && pinContact ? pinContact : {column:true},
             legacyIds: String(node.groupKey || "") === "sensor"
               && String(node.profileValue || "").includes("battery-voltage-divider")
               && signalKey(connection.signalLabel) === "SIGNAL"
@@ -2453,15 +2454,16 @@ export function createPeripheralDiagramWiringModule({
       const resolvedLabelsById = new Map();
       resolvedLabels.forEach((entry, index) => {
         const source = nodeSignalLabels.get(entry.id);
-        const usesSavedLayout = savedNodeLabelIds.has(entry.id)
-          || (entry.legacyIds || []).some((legacyId) => savedNodeLabelIds.has(String(legacyId)));
+        const calibratedContact = source?.pinContact && !source.pinContact.column;
+        const usesSavedLayout = !calibratedContact && (savedNodeLabelIds.has(entry.id)
+          || (entry.legacyIds || []).some((legacyId) => savedNodeLabelIds.has(String(legacyId))));
         const baseLayout = {
           ...(source?.defaultLayout || floatingLabelDefaultLayout(nodeRect, index, resolvedLabels.length)),
-          xFactor: entry.xFactor,
-          yFactor: entry.yFactor,
-          rotation: entry.rotation,
+          xFactor: calibratedContact ? source.defaultLayout.xFactor : entry.xFactor,
+          yFactor: calibratedContact ? source.defaultLayout.yFactor : entry.yFactor,
+          rotation: calibratedContact ? source.defaultLayout.rotation : entry.rotation,
         };
-        const layout = entry.coordinateSpace === "visual"
+        const layout = calibratedContact || entry.coordinateSpace === "visual"
           ? baseLayout
           : convertLayoutToVisualSpace(baseLayout, nodeRect, visualRect);
         const resolvedEntry = {

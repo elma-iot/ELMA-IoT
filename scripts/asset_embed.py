@@ -74,6 +74,7 @@ def audit_board_assets(source, target, env):
     print("[size-fit] Mainboard SVG audit passed for board " + str(selected_board_id))
 
 default_board_ids = {
+    "miniexco_v2": "32",
     "viewe_rotary_gc9503": "30", "viewe_rotary_st7701s": "31",
     "viewe_rotary_gc9503_uart":"30", "viewe_rotary_st7701s_uart":"31",
     "viewe_rotary_gc9503_smoke":"30", "viewe_rotary_st7701s_smoke":"31",
@@ -112,7 +113,7 @@ peripheral_svg_manifest=load_manifest(ROOT)
 peripheral_svg_paths=sorted(peripheral_svg_manifest)
 active_profiles_text=os.environ.get("ELMA_ACTIVE_PERIPHERAL_PROFILES")
 # No configured peripherals means no detailed illustrations; explicit project masks still win.
-active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else []
+active_profiles=json.loads(active_profiles_text) if active_profiles_text is not None else (["sensor:bno055","display:i2c-oled"] if env.get("PIOENV")=="esp32s3_spk_n16r8" else [])
 try:peripheral_svg_budget=int(os.environ.get("ELMA_PERIPHERAL_SVG_BUDGET_BYTES","98304"))
 except ValueError:raise SystemExit("ELMA_PERIPHERAL_SVG_BUDGET_BYTES must be a byte count")
 peripheral_svg_mask=budgeted_mask(ROOT,peripheral_svg_manifest,active_profiles,peripheral_svg_budget)

@@ -5,6 +5,7 @@
 #include "can_contract.h"
 #include <driver/gpio.h>
 #include "settings_manager.h"
+#include "web_access_policy.h"
 #include "panel_geometry.h"
 #include "generated_project_defaults.h"
 
@@ -399,7 +400,9 @@ String fallbackIfEmpty(const String& value, const String& fallback) {
 
 String hardwareIdSuffix(bool uppercase = false) {
     const uint64_t chipId = ESP.getEfuseMac();
-    const uint32_t shortId = static_cast<uint32_t>(chipId & 0xFFFFFF);
+    // ESP.getEfuseMac() stores the vendor bytes in the low 24 bits. Use the
+    // device-specific half so default names do not collide across one vendor.
+    const uint32_t shortId = static_cast<uint32_t>((chipId >> 24) & 0xFFFFFF);
 
     char buffer[7];
     snprintf(buffer, sizeof(buffer), uppercase ? "%06lX" : "%06lx", static_cast<unsigned long>(shortId));
@@ -763,6 +766,17 @@ SettingsBundle SettingsManager::defaults() const {
     settings.ui.peripheralHelperBindings = defaultPeripheralHelperBindings();
     settings.ui.peripheralProfileSelections = defaultPeripheralProfileSelections();
     settings.ui.motorRuntimeConfig = defaultMotorRuntimeConfig();
+#if defined(APP_ROBOT_BOARD)
+    settings.ui.gpioBoardSelection="miniexco-v2";
+    settings.ui.gpioBoardAutodetect=false;
+    settings.device.statusLedPin=255;
+    settings.oled.enabled=true;settings.oled.sdaPin=15;settings.oled.sclPin=14;
+    settings.audio.doutPin=9;settings.audio.bclkPin=10;settings.audio.wsPin=45;
+    settings.sd.enabled=true;settings.sd.csPin=2;settings.sd.sckPin=11;settings.sd.mosiPin=3;settings.sd.misoPin=12;
+    settings.battery.adcPin=13;settings.battery.dividerR1Ohms=22000;settings.battery.dividerR2Ohms=10000;settings.battery.dividerMaxVin=8.4f;settings.battery.calibrationMultiplier=2.688f;settings.battery.chargingSensePin=0;
+    settings.ui.peripheralProfileSelections=R"({"audioProfiles":["spk-ns4168"],"audioProfile":"spk-ns4168","audioInProfiles":["spk-dual-mic"],"displayProfiles":["i2c-oled"],"storage":["microsd-spi"],"sensors":["bno055","battery-voltage-divider-220k"]})";
+    settings.ui.peripheralHelperBindings=R"({"sensor:0":{"SDA":15,"SCL":14},"sensor:1":{"SIGNAL":13},"audio:0":{"DIN":9,"BCLK":10,"WS":45,"CTRL":46},"audioIn:0":{"WS":40,"SD":38,"SCK":39},"storage:0":{"CS":2,"SCK":11,"MOSI":3,"MISO":12}})";
+#endif
     settings.usingSavedSettings = false;
     JsonDocument compiled;String error;
     if (deserializeJson(compiled,ELMA_COMPILED_PROJECT_DEFAULTS)==DeserializationError::Ok && compiled.is<JsonObject>()) updateFromJson(settings,compiled.as<JsonVariantConst>(),error);
@@ -852,6 +866,10 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     settings.ota.assetTemplate.trim();
     settings.ota.manifestUrl.trim();
     settings.webAuth.username.trim();
+    settings.webAccess.hostname.trim();
+    std::string webHostname;
+    if (settings.webAccess.hostname.length() && WebAccessPolicy::hostname(settings.webAccess.hostname.c_str(), webHostname)) settings.webAccess.hostname=webHostname.c_str();
+    if (settings.webAccess.httpsPort < 1024 && settings.webAccess.httpsPort != 443) settings.webAccess.httpsPort=443;
     settings.ui.gpioBoardSelection.trim();
     settings.ui.language.trim();
     settings.ui.language.toLowerCase();
@@ -923,6 +941,8 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     if (settings.device.statusLedPin != 255 && settings.device.statusLedType == "rgb" && (settings.device.statusLedGreenPin == 255 || settings.device.statusLedBluePin == 255 || settings.device.statusLedPin == settings.device.statusLedGreenPin || settings.device.statusLedPin == settings.device.statusLedBluePin || settings.device.statusLedGreenPin == settings.device.statusLedBluePin)) settings.device.statusLedType = "regular";
     settings.device.button1Action = normalizeButtonAction(settings.device.button1Action, DefaultConfig::BUTTON1_DEFAULT_ACTION);
     settings.device.button2Action = normalizeButtonAction(settings.device.button2Action, DefaultConfig::BUTTON2_DEFAULT_ACTION);
+    settings.effects.captureFile = normalizeEffectFileRef(settings.effects.captureFile);
+    settings.effects.captureVolumePercent = constrain(settings.effects.captureVolumePercent, uint8_t(15), uint8_t(100));
     settings.effects.startupFile = normalizeEffectFileRef(settings.effects.startupFile);
     settings.effects.startupVolumePercent = clampValue<uint8_t>(settings.effects.startupVolumePercent, static_cast<uint8_t>(0), static_cast<uint8_t>(100));
     settings.effects.alarmFile = normalizeEffectFileRef(settings.effects.alarmFile);
@@ -1126,6 +1146,8 @@ SettingsBundle SettingsManager::load() {
     settings.audio.lastPlayback.source = readString("aud_lp_src", settings.audio.lastPlayback.source);
     settings.audio.lastPlayback.resumeAfterBoot = readBool("aud_lp_res", settings.audio.lastPlayback.resumeAfterBoot);
 
+    settings.effects.captureFile = readString("eff_capture", settings.effects.captureFile);
+    settings.effects.captureVolumePercent = readUInt("eff_capvol", settings.effects.captureVolumePercent);
     settings.effects.startupFile = readString("eff_start", settings.effects.startupFile);
     settings.effects.startupVolumePercent = readUInt("eff_st_vol", settings.effects.startupVolumePercent);
     settings.effects.alarmFile = readString("eff_alarm", settings.effects.alarmFile);
@@ -1184,6 +1206,11 @@ SettingsBundle SettingsManager::load() {
     settings.device.touchHoldFactoryResetEnabled = readBool("dev_thf_reset", settings.device.touchHoldFactoryResetEnabled);
     settings.device.lowBatterySleepThresholdPercent = readUInt("dev_lbs_pct", settings.device.lowBatterySleepThresholdPercent);
     settings.device.lowBatteryWakeIntervalMinutes = readUInt("dev_lbs_wk", settings.device.lowBatteryWakeIntervalMinutes);
+    settings.ui.customWebInterface = readBool("ui_custom_web", settings.ui.customWebInterface);
+    settings.webAccess.mdnsEnabled=readBool("web_mdns",settings.webAccess.mdnsEnabled);
+    settings.webAccess.hostname=readString("web_hostname",settings.webAccess.hostname);
+    settings.webAccess.httpsEnabled=readBool("web_https",settings.webAccess.httpsEnabled);
+    settings.webAccess.httpsPort=readUInt("web_tls_port",settings.webAccess.httpsPort);
     settings.ui.gpioSafetyOverride = readBool("ui_gpio_ovr", settings.ui.gpioSafetyOverride);
     settings.ui.gpioBoardAutodetect = readBool("ui_gpio_auto", settings.ui.gpioBoardAutodetect);
     // A newly compiled APK locale becomes the default once. Preserve later
@@ -1325,6 +1352,8 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         changed |= storeString("aud_lp_src", sanitized.audio.lastPlayback.source, baseline.audio.lastPlayback.source);
         changed |= storeBool("aud_lp_res", sanitized.audio.lastPlayback.resumeAfterBoot, baseline.audio.lastPlayback.resumeAfterBoot);
 
+        changed |= storeString("eff_capture", sanitized.effects.captureFile, baseline.effects.captureFile);
+        changed |= storeUInt("eff_capvol", sanitized.effects.captureVolumePercent, baseline.effects.captureVolumePercent);
         changed |= storeString("eff_start", sanitized.effects.startupFile, baseline.effects.startupFile);
         changed |= storeUInt("eff_st_vol", sanitized.effects.startupVolumePercent, baseline.effects.startupVolumePercent);
         changed |= storeString("eff_alarm", sanitized.effects.alarmFile, baseline.effects.alarmFile);
@@ -1382,6 +1411,11 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         changed |= storeBool("dev_thf_reset", sanitized.device.touchHoldFactoryResetEnabled, baseline.device.touchHoldFactoryResetEnabled);
         changed |= storeUInt("dev_lbs_pct", sanitized.device.lowBatterySleepThresholdPercent, baseline.device.lowBatterySleepThresholdPercent);
         changed |= storeUInt("dev_lbs_wk", sanitized.device.lowBatteryWakeIntervalMinutes, baseline.device.lowBatteryWakeIntervalMinutes);
+        changed |= storeBool("ui_custom_web", sanitized.ui.customWebInterface, baseline.ui.customWebInterface);
+        changed |= storeBool("web_mdns",sanitized.webAccess.mdnsEnabled,baseline.webAccess.mdnsEnabled);
+        changed |= storeString("web_hostname",sanitized.webAccess.hostname,baseline.webAccess.hostname);
+        changed |= storeBool("web_https",sanitized.webAccess.httpsEnabled,baseline.webAccess.httpsEnabled);
+        changed |= storeUInt("web_tls_port",sanitized.webAccess.httpsPort,baseline.webAccess.httpsPort);
         changed |= storeBool("ui_gpio_ovr", sanitized.ui.gpioSafetyOverride, baseline.ui.gpioSafetyOverride);
         changed |= storeBool("ui_gpio_auto", sanitized.ui.gpioBoardAutodetect, baseline.ui.gpioBoardAutodetect);
         changed |= storeString("ui_lang", sanitized.ui.language, baseline.ui.language);
@@ -1518,6 +1552,8 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     }
     if(!section || strcmp(section,"effects") == 0){
     JsonObject effects = root["effects"].to<JsonObject>();
+    effects["captureFile"] = settings.effects.captureFile;
+    effects["captureVolumePercent"] = settings.effects.captureVolumePercent;
     effects["startupFile"] = settings.effects.startupFile;
     effects["startupVolumePercent"] = settings.effects.startupVolumePercent;
     effects["alarmFile"] = settings.effects.alarmFile;
@@ -1591,6 +1627,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     JsonObject ui = root["ui"].to<JsonObject>();
     ui["language"] = settings.ui.language;
     ui["theme"] = settings.ui.theme;
+    ui["customWebInterface"] = settings.ui.customWebInterface;
     ui["gpioSafetyOverride"] = settings.ui.gpioSafetyOverride;
     ui["gpioBoardAutodetect"] = settings.ui.gpioBoardAutodetect;
     ui["gpioBoardSelection"] = settings.ui.gpioBoardSelection;
@@ -1603,6 +1640,11 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
 
     }
     root["usingSavedSettings"] = settings.usingSavedSettings;
+    if(!section || strcmp(section,"webAccess")==0){
+        JsonObject access=root["webAccess"].to<JsonObject>();
+        access["mdnsEnabled"]=settings.webAccess.mdnsEnabled;access["hostname"]=settings.webAccess.hostname;
+        access["httpsEnabled"]=settings.webAccess.httpsEnabled;access["httpsPort"]=settings.webAccess.httpsPort;
+    }
 }
 
 bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst root, String& error) const {
@@ -1742,6 +1784,8 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
 
     JsonObjectConst effects = object["effects"];
     if (!effects.isNull()) {
+        copyString(effects, "captureFile", settings.effects.captureFile);
+        if (effects["captureVolumePercent"].is<uint8_t>()) settings.effects.captureVolumePercent = effects["captureVolumePercent"].as<uint8_t>();
         copyString(effects, "startupFile", settings.effects.startupFile);
         if (effects["startupVolumePercent"].is<uint8_t>()) settings.effects.startupVolumePercent = effects["startupVolumePercent"].as<uint8_t>();
         copyString(effects, "alarmFile", settings.effects.alarmFile);
@@ -1818,9 +1862,23 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     }
 
     JsonObjectConst ui = object["ui"];
+    JsonObjectConst access=object["webAccess"];
+    if(!access.isNull()){
+        copyString(access,"hostname",settings.webAccess.hostname);
+        std::string normalized;
+        if(settings.webAccess.hostname.length() && !WebAccessPolicy::hostname(settings.webAccess.hostname.c_str(),normalized)){error="Use a single DNS hostname label (letters, digits, hyphens), optionally ending in .local.";return false;}
+        if(access["mdnsEnabled"].is<bool>())settings.webAccess.mdnsEnabled=access["mdnsEnabled"].as<bool>();
+        if(access["httpsEnabled"].is<bool>())settings.webAccess.httpsEnabled=access["httpsEnabled"].as<bool>();
+        if(access["httpsPort"].is<unsigned>()){
+            unsigned port=access["httpsPort"].as<unsigned>();
+            if(port!=443 && (port<1024 || port>65535)){error="HTTPS port must be 443 or 1024–65535.";return false;}
+            settings.webAccess.httpsPort=port;
+        }
+    }
     if (!ui.isNull()) {
         copyString(ui, "language", settings.ui.language);
         copyString(ui, "theme", settings.ui.theme);
+        if (ui["customWebInterface"].is<bool>()) settings.ui.customWebInterface = ui["customWebInterface"].as<bool>();
         if (ui["gpioSafetyOverride"].is<bool>()) settings.ui.gpioSafetyOverride = ui["gpioSafetyOverride"].as<bool>();
         if (ui["gpioBoardAutodetect"].is<bool>()) settings.ui.gpioBoardAutodetect = ui["gpioBoardAutodetect"].as<bool>();
         copyString(ui, "gpioBoardSelection", settings.ui.gpioBoardSelection);

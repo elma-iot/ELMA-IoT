@@ -1,3 +1,4 @@
+#include "robot_control_policy.h"
 #include "logic_validation.h"
 #ifdef APP_ESP8266_COMPACT
 #include "generated_esp8266_catalog.h"
@@ -43,6 +44,9 @@ bool validateLogicHardware(JsonObject n,std::string& error) {
     std::set<std::string> enabled;
     if(type=="hardware.gpio") {
         if(!n["parameters"]["pin"].is<int>()){error="GPIO must be an integer";return false;}
+#if defined(APP_ROBOT_BOARD)
+        if(RobotControlPolicy::reservedPin(n["parameters"]["pin"].as<int>())){error="GPIO belongs to MiniExco robot controls";return false;}
+#endif
         int pin=n["parameters"]["pin"];
         JsonVariantConst caps=n["binding"]["allowedPins"][std::to_string(pin)];
         std::string mode=n["parameters"]["mode"]|"";
