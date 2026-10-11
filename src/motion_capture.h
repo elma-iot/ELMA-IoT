@@ -4,6 +4,7 @@
 #include <functional>
 namespace MotionCapture {
 void begin();
+bool armed();
 void tick(bool otaActive);
 void routes(AsyncWebServer&,std::function<bool(AsyncWebServerRequest*)>);
 }

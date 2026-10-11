@@ -17,26 +17,26 @@
     {
       "file": "robot.js",
       "destination": "/web/miniexco-v2/robot.js",
-      "size": 17927,
-      "sha256": "7a30cf44b35c98bce10dd8b80dd6c03b0755368f43dd8b8ac13542e93fabca27"
+      "size": 20714,
+      "sha256": "32b3be5ac2d418ec691b262896aa146bea8029bcf62f338e2a68ba578c352b24"
     },
     {
       "file": "robot.js.gz",
       "destination": "/web/miniexco-v2/robot.js.gz",
-      "size": 7106,
-      "sha256": "f68894dded2c2086475a8aab5326f32721fba2c12f83c66d1c90b62d309e7231"
+      "size": 8037,
+      "sha256": "9ed741cf0871c817567d811a7a895038ca580f5191b4ef20b78ca0365cf66989"
     },
     {
       "file": "robot.css",
       "destination": "/web/miniexco-v2/robot.css",
-      "size": 1886,
-      "sha256": "cf46bd8ab797a842544426eaf6cab7a1dc759531952baba22281b4fa19f34cab"
+      "size": 2405,
+      "sha256": "75db8f7b572955390c8f2d35fea378aa4a6f4b95d6fedbd96eea1551b51501f4"
     },
     {
       "file": "robot.css.gz",
       "destination": "/web/miniexco-v2/robot.css.gz",
-      "size": 803,
-      "sha256": "3521c5d7ee09e572c7d2009d06e7ffbfe75441b1f18d1651d8ce3e8d0e22e0d1"
+      "size": 967,
+      "sha256": "38c56ae2f3aa3091b677e5d3d37deae79cd7d2fb1e9f2b1aa68b80fc4b8ccb3c"
     },
     {
       "file": "rover.webp",

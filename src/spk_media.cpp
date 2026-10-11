@@ -1,4 +1,5 @@
 #include "spk_media.h"
+#include "motion_capture.h"
 #if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO) && !defined(APP_DISABLE_WEB_UI)
 #include "led_microphone.h"
 #include "storage_backend.h"
@@ -11,6 +12,8 @@
 #include <memory>
 #include <vector>
 #include <time.h>
+#include <errno.h>
+#include "device_log.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -43,7 +46,7 @@ void worker(void*){
  File file;SpkAvi avi;CameraFrameBytes jpeg;uint32_t videoAt=0;uint32_t bytes=0,started=0,recordLimit=1800000,recordRate=16000;struct Scratch {uint8_t pending[512],recorded[4096];};
  auto* scratch=allocatePreferPsram<Scratch>();if(!scratch){vTaskDelete(nullptr);return;}
  auto& pending=scratch->pending;auto& recorded=scratch->recorded;size_t used=0,recordedSize=0;
- auto flushAudio=[&](){if(!recordedSize)return;bool ok=true;if(file){ok=file.write(recorded,recordedSize)==recordedSize;if(ok)bytes+=recordedSize;}else if(avi.active())ok=avi.audio(recorded,recordedSize);recordedSize=0;if(!ok){command=2;xSemaphoreTake(mutex,portMAX_DELAY);error="SD write failed; recording stopped";xSemaphoreGive(mutex);}};
+ auto flushAudio=[&](){if(!recordedSize)return;bool ok=true;if(file){size_t written=file.write(recorded,recordedSize);ok=written==recordedSize;if(ok)bytes+=recordedSize;else DebugLog.printf("[media] SD audio write short: %u/%u errno=%d position=%u\n",unsigned(written),unsigned(recordedSize),errno,unsigned(file.position()));}else if(avi.active())ok=avi.audio(recorded,recordedSize);recordedSize=0;if(!ok){command=2;xSemaphoreTake(mutex,portMAX_DELAY);error="SD write failed; recording stopped";xSemaphoreGive(mutex);}};
  for(;;){
   int c=command.exchange(0);
   bool security=c==5||c==6,captureCuePlayed=false;
@@ -129,7 +132,7 @@ void registerSpkMediaRoutes(AsyncWebServer& server,std::function<bool(AsyncWebSe
   }
  });
  server.addHandler(&mediaSocket);
- server.on("/api/media/status",HTTP_GET,[auth](AsyncWebServerRequest* r){if(!auth(r))return;JsonDocument d;d["recording"]=recording.load();d["video"]=videoRecording.load();d["directPcm"]=true;d["micDroppedBlocks"]=LedMicrophone::pcmDropped().load();d["talkPcmFrames"]=talkPcmFrames.load();d["talkPcmErrors"]=talkPcmErrors.load();d["capturingPhoto"]=photoRequested.load();d["recordingPending"]=recordRequested.load()&&!recording.load();d["sampleRate"]=LedMicrophone::sampleRate().load();d["pcmBlockMs"]=256000/LedMicrophone::sampleRate().load();d["talkQueueMs"]=128;d["audioHeld"]=mediaAudioReady.load();d["talking"]=int32_t(talkUntil.load()-millis())>0;d["listening"]=int32_t(listenAudioUntil.load()-millis())>0;d["sd"]=storageMounted(StorageTarget::Sd);xSemaphoreTake(mutex,portMAX_DELAY);d["path"]=recordPath;d["photoPath"]=photoPath;d["error"]=error;xSemaphoreGive(mutex);json(r,d);});
+ server.on("/api/media/status",HTTP_GET,[auth](AsyncWebServerRequest* r){if(!auth(r))return;JsonDocument d;d["armed"]=MotionCapture::armed();d["recording"]=recording.load();d["video"]=videoRecording.load();d["directPcm"]=true;d["micDroppedBlocks"]=LedMicrophone::pcmDropped().load();d["talkPcmFrames"]=talkPcmFrames.load();d["talkPcmErrors"]=talkPcmErrors.load();d["capturingPhoto"]=photoRequested.load();d["recordingPending"]=recordRequested.load()&&!recording.load();d["sampleRate"]=LedMicrophone::sampleRate().load();d["pcmBlockMs"]=256000/LedMicrophone::sampleRate().load();d["talkQueueMs"]=128;d["audioHeld"]=mediaAudioReady.load();d["talking"]=int32_t(talkUntil.load()-millis())>0;d["listening"]=int32_t(listenAudioUntil.load()-millis())>0;d["sd"]=storageMounted(StorageTarget::Sd);xSemaphoreTake(mutex,portMAX_DELAY);d["path"]=recordPath;d["photoPath"]=photoPath;d["error"]=error;xSemaphoreGive(mutex);json(r,d);});
  server.on("/api/media/record",HTTP_POST,[auth](AsyncWebServerRequest* r){if(!auth(r))return;JsonDocument d;
   String action=r->hasParam("action",true)?r->getParam("action",true)->value():"";
   if(action!="start"&&action!="video"&&action!="stop"){d["error"]="Invalid recording action";json(r,d,400);return;}

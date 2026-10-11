@@ -1,6 +1,7 @@
 #include "motion_capture.h"
 #if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO) && !defined(APP_DISABLE_WEB_UI)
 #include "camera_service.h"
+#include "interface_security.h"
 #include "spk_media.h"
 #include "bno055_service.h"
 #include "storage_backend.h"
@@ -18,7 +19,7 @@
 #include <cmath>
 namespace MotionCapture { namespace {
 struct Config {bool enabled=false,human=true,picture=true,video=false,telemetry=false;uint16_t seconds=15;uint8_t humanSensitivity=50,telemetrySensitivity=50;};
-Config config;SemaphoreHandle_t lock=nullptr;TaskHandle_t detectorTask=nullptr;
+Config config;SemaphoreHandle_t lock=nullptr;std::atomic<bool> detectorRunning{false};std::atomic<uint32_t> detectorStackFree{0};
 std::atomic<bool> enabled{false},human{true},ota{false},humanEvent{false};std::atomic<int> sensitivity{50},score{0};
 std::atomic<uint32_t> inferenceMs{0};std::atomic<bool> runtimeReady{false};
 std::atomic<int> validationPersonScore{-1},validationOtherScore{-1};
@@ -38,6 +39,10 @@ void detector(void*) {
  resolver.AddAveragePool2D();resolver.AddConv2D();resolver.AddDepthwiseConv2D();resolver.AddReshape();resolver.AddSoftmax();
  tflite::MicroInterpreter* interpreter=nullptr;unsigned streak=0,absent=0;bool latched=false;
  for(;;){
+  detectorStackFree=uxTaskGetStackHighWaterMark(nullptr);
+  if(!enabled.load()||!human.load()||ota.load()){
+   delete interpreter;heap_caps_free(arena);heap_caps_free(rgb);runtimeReady=false;score=0;detectorStackFree=0;detectorRunning=false;vTaskDelete(nullptr);return;
+  }
   if(!enabled.load()||!human.load()||ota.load()||spkMediaRecording()){if(!enabled.load()){streak=absent=0;latched=false;}vTaskDelay(pdMS_TO_TICKS(500));continue;}
   if(!interpreter){
    arena=static_cast<uint8_t*>(heap_caps_malloc(arenaSize,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
@@ -72,10 +77,10 @@ void detector(void*) {
   vTaskDelay(pdMS_TO_TICKS(1000));
  }
 }
-void status(JsonObject d){Config c=readConfig();d["supported"]=true;d["enabled"]=c.enabled;d["human"]=c.human;d["picture"]=c.picture;d["video"]=c.video;d["seconds"]=c.seconds;d["telemetry"]=c.telemetry;d["humanSensitivity"]=c.humanSensitivity;d["telemetrySensitivity"]=c.telemetrySensitivity;d["telemetryAvailable"]=telemetryAvailable;d["telemetryReady"]=telemetryReady;d["runtimeReady"]=runtimeReady.load();d["personScore"]=score.load();d["validationPersonScore"]=validationPersonScore.load();d["validationOtherScore"]=validationOtherScore.load();d["inferenceMs"]=inferenceMs.load();d["engine"]="TFLite Micro int8 person presence 96x96";d["folder"]="/security";d["cooldownSeconds"]=30;d["captures"]=captures;xSemaphoreTake(lock,portMAX_DELAY);d["lastTrigger"]=lastReason;d["error"]=lastError;xSemaphoreGive(lock);}
+void status(JsonObject d){Config c=readConfig();d["supported"]=true;d["stackFreeBytes"]=detectorStackFree.load();d["enabled"]=c.enabled;d["human"]=c.human;d["picture"]=c.picture;d["video"]=c.video;d["seconds"]=c.seconds;d["telemetry"]=c.telemetry;d["humanSensitivity"]=c.humanSensitivity;d["telemetrySensitivity"]=c.telemetrySensitivity;d["telemetryAvailable"]=telemetryAvailable;d["telemetryReady"]=telemetryReady;d["runtimeReady"]=runtimeReady.load();d["personScore"]=score.load();d["validationPersonScore"]=validationPersonScore.load();d["validationOtherScore"]=validationOtherScore.load();d["inferenceMs"]=inferenceMs.load();d["engine"]="TFLite Micro int8 person presence 96x96";d["folder"]="/security";d["cooldownSeconds"]=30;d["captures"]=captures;xSemaphoreTake(lock,portMAX_DELAY);d["lastTrigger"]=lastReason;d["error"]=lastError;xSemaphoreGive(lock);}
 }
 void begin(){if(lock)return;lock=xSemaphoreCreateMutex();if(!lock)return;Preferences p;if(p.begin("elma-motion",true)){JsonDocument d;if(!deserializeJson(d,p.getString("config","{}"))){config.enabled=d["enabled"]|false;config.human=d["human"]|true;config.picture=d["picture"]|true;config.video=d["video"]|false;config.telemetry=d["telemetry"]|false;config.seconds=constrain(d["seconds"]|15,1,300);config.humanSensitivity=constrain(d["humanSensitivity"]|50,0,100);config.telemetrySensitivity=constrain(d["telemetrySensitivity"]|50,0,100);}uint8_t b[6];if(p.getBytesLength("packed")==sizeof(b)&&p.getBytes("packed",b,sizeof(b))==sizeof(b)&&b[0]==1){config.enabled=b[1]&1;config.human=b[1]&2;config.picture=b[1]&4;config.video=b[1]&8;config.telemetry=b[1]&16;config.seconds=constrain(unsigned(b[2])|(unsigned(b[3])<<8),1,300);config.humanSensitivity=constrain(b[4],0,100);config.telemetrySensitivity=constrain(b[5],0,100);}p.end();}enabled=config.enabled;human=config.human;sensitivity=config.humanSensitivity;}
-void tick(bool otaActive){if(!lock)return;ota=otaActive;Config c=readConfig();if(c.enabled&&c.human&&!detectorTask){if(!psramFound())error("Person detection requires PSRAM");else if(xTaskCreatePinnedToCore(detector,"person-detect",8192,nullptr,1,&detectorTask,1)!=pdPASS)error("Cannot start person detector");}
+void tick(bool otaActive){if(!lock)return;ota=otaActive;Config c=readConfig();if(c.enabled&&c.human&&!otaActive&&!detectorRunning.load()){if(!psramFound())error("Person detection requires PSRAM");else{detectorRunning=true;if(xTaskCreatePinnedToCore(detector,"person-detect",8192,nullptr,1,nullptr,1)!=pdPASS){detectorRunning=false;error("Cannot start person detector");}}}
  bool telemetryEvent=false;
  if(int32_t(millis()-nextTelemetry)>=0){nextTelemetry=millis()+100;JsonDocument d;Bno055::snapshot(d.to<JsonObject>());telemetryAvailable=d["configured"]|false;telemetryReady=(d["ready"]|false)&&(d["ageMs"]|9999)<1000;
   if(telemetryReady){float q[4],norm=0,dot=0,acceleration=0;
@@ -96,6 +101,7 @@ void tick(bool otaActive){if(!lock)return;ota=otaActive;Config c=readConfig();if
   if(triggerSpkSecurityCapture(c.picture,c.video,c.seconds)){lastCapture=millis();++captures;xSemaphoreTake(lock,portMAX_DELAY);lastReason=personEvent?"person":"telemetry";lastError="";xSemaphoreGive(lock);}else error("Capture deferred: microphone, recording or SD unavailable");
  }
 }
+bool armed(){return enabled.load();}
 void routes(AsyncWebServer& server,std::function<bool(AsyncWebServerRequest*)> auth){begin();
  server.on("/api/security/capture",HTTP_GET,[auth](AsyncWebServerRequest* r){if(!auth(r))return;JsonDocument d;status(d.to<JsonObject>());String s;serializeJson(d,s);r->send(200,"application/json",s);});
  server.on("/api/security/capture",HTTP_POST,[auth](AsyncWebServerRequest* r){if(!auth(r))return;if(r->hasHeader("Origin")&&r->header("Origin")!="http://"+r->host()&&r->header("Origin")!="https://"+r->host()){r->send(403);return;}Config c=readConfig();
@@ -107,6 +113,11 @@ void routes(AsyncWebServer& server,std::function<bool(AsyncWebServerRequest*)> a
   if(!boolean("enabled",c.enabled)||!boolean("human",c.human)||!boolean("picture",c.picture)||!boolean("video",c.video)||!boolean("telemetry",c.telemetry)){r->send(400);return;}
   for(const char* name:{"seconds","humanSensitivity","telemetrySensitivity"})if(r->hasParam(name,true)){String text=r->getParam(name,true)->value();char* end;long value=strtol(text.c_str(),&end,10);if(text.isEmpty()||*end||value<0||value>(String(name)=="seconds"?300:100)||(String(name)=="seconds"&&value<1)){r->send(400);return;}if(String(name)=="seconds")c.seconds=value;else if(String(name)=="humanSensitivity")c.humanSensitivity=value;else c.telemetrySensitivity=value;}
   if(c.enabled&&((!c.picture&&!c.video)||(!c.human&&!c.telemetry)||(c.telemetry&&!telemetryAvailable)||!storageMounted(StorageTarget::Sd))){r->send(409,"application/json","{\"error\":\"Choose a capture type and available trigger, and mount SD\"}");return;}
+  if(readConfig().enabled&&!c.enabled){
+   JsonDocument response;String pin=r->hasParam("pin",true)?r->getParam("pin",true)->value():"";
+   int code=InterfaceSecurity::device().authorizeProtectedChange(pin,response.to<JsonObject>());pin="";
+   if(code!=200){String body;serializeJson(response,body);r->send(code,"application/json",body);return;}
+  }
   if(!save(c)){r->send(507);return;}xSemaphoreTake(lock,portMAX_DELAY);config=c;lastError="";xSemaphoreGive(lock);enabled=c.enabled;human=c.human;sensitivity=c.humanSensitivity;humanEvent=false;r->send(200,"application/json","{\"ok\":true}");
  });
 }

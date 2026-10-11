@@ -11622,6 +11622,7 @@ function renderStorageRow(entry, selectionMode, selectedPaths) {
         <div class="storage-file-subtitle">${escapeHtml(storageItemSubtitle(entry))}</div>
       </div>
       <div class="storage-file-trailing">
+      ${!entry?.isDirectory ? `<div class="storage-file-actions"><button type="button" class="media-icon" data-storage-file-action="download" title="Download file" aria-label="Download ${escapeHtml(entry?.name || path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button><button type="button" class="media-icon" data-storage-file-action="delete" title="Delete file" aria-label="Delete ${escapeHtml(entry?.name || path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button></div>` : ""}
         <div class="storage-file-badge">${escapeHtml(playing ? "Playing" : storageBadgeLabel(entry))}</div>
         <span class="storage-file-chevron" aria-hidden="true">&#8250;</span>
       </div>

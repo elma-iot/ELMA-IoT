@@ -102,7 +102,7 @@ class WebServerManager {
     SimpleHandler serverShutdownHandler_;
     SimpleHandler rebootHandler_;
     SimpleHandler factoryResetHandler_;
-#if APP_ROTARY_HMI
+#if APP_ROTARY_HMI || defined(APP_SPK_BOARD)
     InterfaceSecurity& security_=InterfaceSecurity::device();
 #else
     mutable InterfaceSecurity security_;

@@ -14,6 +14,7 @@ public:
     bool locked();
     void status(JsonObject);
     int command(JsonVariantConst,JsonObject);
+    int authorizeProtectedChange(const String& pin, JsonObject response);
     void externalLock(bool);
 private:
     SemaphoreHandle_t mutex_=nullptr;

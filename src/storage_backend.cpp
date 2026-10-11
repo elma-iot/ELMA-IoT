@@ -25,14 +25,20 @@ void serviceStorageBackends();
 
 namespace {
 // Arduino ESP32 2.x sd_diskio caps transfers at 25 MHz. Do not report requested 80 MHz as actual speed.
+// The SPK board shares sustained SD writes with camera DMA and PDM capture.
+// Its onboard SPI wiring was unstable at 25 MHz under that load.
+#if defined(APP_SPK_BOARD)
+constexpr uint32_t kSdFrequenciesHz[] = {10000000UL, 4000000UL, 1000000UL, 400000UL};
+#else
 constexpr uint32_t kSdFrequenciesHz[] = {25000000UL, 20000000UL, 10000000UL, 4000000UL, 1000000UL, 400000UL};
+#endif
 constexpr unsigned long kSdHotplugPollIntervalMs = 2000UL;
 constexpr unsigned long kSdRetryBackoffMs[] = {2000UL, 5000UL, 15000UL, 60000UL};
 
 bool flashMounted = false;
 bool sdMounted = false;
 bool sdSpiStarted = false;
-uint32_t sdClockCeiling=25000000UL,sdMountedClock=0;
+uint32_t sdClockCeiling=kSdFrequenciesHz[0],sdMountedClock=0;
 unsigned long lastSdHotplugPollAt = 0;
 unsigned long nextSdMountAttemptAt = 0;
 SdSettings activeSdSettings;

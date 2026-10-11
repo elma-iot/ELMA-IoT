@@ -108,3 +108,16 @@ int InterfaceSecurity::command(JsonVariantConst input,JsonObject out){
     save();return finish(200);
 }
 void InterfaceSecurity::externalLock(bool value){if(!mutex_)return;Guard guard(mutex_);if(!ready_||(!value&&enabled_))return;locked_=value;ticket_="";save();}
+
+int InterfaceSecurity::authorizeProtectedChange(const String& pin,JsonObject out){
+ if(!mutex_){out["error"]="Security unavailable";return 503;}
+ Guard guard(mutex_);expire();
+ auto finish=[&](int code,const char* error){writeStatus(out);if(*error)out["error"]=error;return ready_?code:503;};
+ if(!ready_)return finish(503,"Security storage unavailable");
+ if(!enabled_)return 200;
+ if(pin.isEmpty())return finish(403,"Enter the unlock PIN to disarm");
+ if(cooldown_)return finish(429,"Too many attempts. Wait before trying again.");
+ if(failures_==5){failures_=6;cooldown_=60;waitUntil_=now()+60000;save();return finish(429,"Too many attempts. Wait before trying again.");}
+ if(!verify(pin))return finish(cooldown_?429:403,"Incorrect PIN");
+ return 200;
+}

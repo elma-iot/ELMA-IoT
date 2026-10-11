@@ -1,5 +1,7 @@
 #pragma once
 #include <FS.h>
+#include <errno.h>
+#include "device_log.h"
 // MJPEG + uncompressed mono PCM. No transcoding and no in-memory index.
 class SpkAvi {
  File file_;uint32_t frames_=0,audio_=0,started_=0,audioRate_=16000;uint16_t width_=0,height_=0;uint32_t movi_=0,frameCountOffset_=0,videoLength_=0,audioLength_=0,rateOffset_=0;
@@ -19,7 +21,7 @@ class SpkAvi {
   tag("strf");u32(16);u16(1);u16(1);u32(audioRate_);u32(audioRate_*2);u16(2);u16(16);patch(audioList+4,file_.position()-audioList-8);patch(16,file_.position()-20);
   movi_=file_.position();list("movi");return true;
  }
- bool chunk(const char* id,const uint8_t* data,size_t n){tag(id);u32(n);if(file_.write(data,n)!=n)return false;if(n&1)file_.write(uint8_t(0));return true;}
+ bool chunk(const char* id,const uint8_t* data,size_t n){tag(id);u32(n);size_t written=file_.write(data,n);if(written!=n){DebugLog.printf("[media] AVI %s write short: %u/%u errno=%d position=%u\n",id,unsigned(written),unsigned(n),errno,unsigned(file_.position()));return false;}if(n&1)file_.write(uint8_t(0));return true;}
  bool video(const uint8_t* data,size_t n){if(!chunk("00dc",data,n))return false;frames_++;return true;}
  bool audio(const uint8_t* data,size_t n){if(!chunk("01wb",data,n))return false;audio_+=n;return true;}
  bool active()const{return bool(file_);}

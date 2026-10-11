@@ -219,6 +219,18 @@ export function createStorageTab({
       createStorageFolder().catch(handleError);
     });
     elements.storageFileList?.addEventListener("click", (event) => {
+      const action=event.target.closest('[data-storage-file-action]');
+      if(action){
+        event.preventDefault();event.stopPropagation();clearTimeout(state.storageClickTimer);state.storageClickTimer=null;
+        const path=action.closest('.storage-file-row')?.dataset.storagePath;if(!path)return;
+        if(action.dataset.storageFileAction==='download'){
+          const link=document.createElement('a');link.href='/api/storage/file?target='+encodeURIComponent(state.activeStorageTarget)+'&path='+encodeURIComponent(path)+'&download=1';link.download=path.split('/').pop();link.click();
+        }else if(confirm('Delete '+path+'?')){
+          action.disabled=true;
+          (async()=>{await request('/api/storage/delete?target='+encodeURIComponent(state.activeStorageTarget)+'&dir='+encodeURIComponent(state.currentStoragePathByTarget[state.activeStorageTarget]||'/'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})});clearStorageSelection();await refreshStorageManager(state.activeStorageTarget);setStorageStatus('Deleted '+path);})().catch(handleError).finally(()=>{action.disabled=false;});
+        }
+        return;
+      }
       const checkbox = event.target.closest("[data-storage-checkbox]");
       if (checkbox) {
         return;
@@ -252,6 +264,7 @@ export function createStorageTab({
       toggleStorageSelection(checkbox.dataset.storageCheckbox, { additive: true });
     });
     elements.storageFileList?.addEventListener("dblclick", (event) => {
+      if(event.target.closest('[data-storage-file-action]'))return;
       const row = event.target.closest(".storage-file-row");
       if (!row) {
         return;
