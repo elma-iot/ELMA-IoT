@@ -106,13 +106,13 @@
       
 <section class="panel panel-wide">
         <div class="tabs" role="tablist" aria-label="ELMA IoT tabs">
-          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-camera" data-tab="camera" title="Camera" data-tooltip="Camera" aria-label="Camera" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
           <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-rs485" data-tab="rs485" title="RS485 / Modbus RTU" data-tooltip="RS485 / Modbus RTU" aria-label="RS485 / Modbus RTU" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-4-4M20 17H4l4 4M5 4v6M19 14v6"/></svg></button>
           <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-bno055" data-tab="bno055" title="Orientation sensor" data-tooltip="Orientation sensor" aria-label="Orientation sensor" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m16 8-2 6-6 2 2-6z"/></svg></button>
-          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-microphones" data-tab="microphones" title="Microphones" data-tooltip="Microphones" aria-label="Microphones" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></button>
           <button class="tab-button tab-button-icon tab-gpio" type="button" role="tab" aria-label="Configuration" data-tooltip="Configuration" title="Configuration" aria-selected="true" aria-controls="tab-gpio" data-tab="gpio">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h4v4H6z"></path><path d="M14 6h4v4h-4z"></path><path d="M6 14h4v4H6z"></path><path d="M14 14h4v4h-4z"></path><path d="M10 8h4"></path><path d="M8 10v4"></path><path d="M16 10v4"></path><path d="M10 16h4"></path></svg>
           </button>
+          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-camera" data-tab="camera" title="Camera" data-tooltip="Camera" aria-label="Camera" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
+          <button type="button" class="tab-button tab-button-icon" role="tab" aria-selected="false" aria-controls="tab-microphones" data-tab="microphones" title="Microphones" data-tooltip="Microphones" aria-label="Microphones" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></button>
           <button class="tab-button tab-button-icon tab-logics" type="button" role="tab" aria-label="Logics" data-tooltip="Logics" title="Logics" aria-selected="false" aria-controls="tab-logics" data-tab="logics"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="7" height="6" rx="1"></rect><rect x="15" y="15" width="7" height="6" rx="1"></rect><path d="M9 6h9v9M5 9v9h10"></path></svg></button>
           <button class="tab-button tab-button-icon tab-wled" type="button" role="tab" aria-label="WLED" data-tooltip="WLED" title="WLED" aria-selected="false" aria-controls="tab-wled" data-tab="wled" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="3"></rect><circle cx="7" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="17" cy="12" r="1.5"></circle><path d="M7 3v2m10-2v2M7 19v2m10-2v2"></path></svg></button>
           <button id="motorTabButton" class="tab-button tab-button-icon tab-motor" type="button" role="tab" aria-label="Motor" data-tooltip="Motor" title="Motor" aria-selected="false" aria-controls="tab-motor" data-tab="motor" hidden>
@@ -191,7 +191,7 @@
           <label>Right <meter min="0" max="100" value="0" data-mic-right></meter></label>
         </div>
         <div id="tab-camera" class="tab-panel" role="tabpanel" aria-label="Camera">
-          <div class="camera-viewport"><img alt="Live camera feed"/><button type="button" data-camera-settings class="camera-settings-overlay" title="Camera settings" aria-label="Camera settings">⚙</button></div>
+          <div class="camera-viewport"><img alt="Live camera feed"/><button type="button" data-camera-settings class="camera-settings-overlay" title="Camera settings" aria-label="Camera settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/><circle cx="12" cy="12" r="3"/></svg></button><button type="button" data-camera-fit class="camera-fit-overlay" title="Fit / fill video" aria-label="Fit / fill video">⛶</button></div>
           <p data-camera-status>Open the Camera tab to view the feed.</p>
           <dialog class="camera-controls-dialog"><h3>Camera settings</h3><form data-camera-controls method="dialog"></form><button type="button" data-close>Close</button></dialog>
         </div>
@@ -1262,6 +1262,8 @@
 
         <div id="tab-storage-external" class="tab-panel" role="tabpanel" hidden>
           <h2>External Storage</h2>
+          <label><input id="customWebInterface" form="settingsForm" name="ui.customWebInterface" type="checkbox"> Use Custom Web Interface</label>
+          <p class="note">Serve /web/index.html or /web/index.html.gz from SD. Prepare gzip files on your PC. <a href="/web/">Open custom UI</a> · <a href="/system/ui">Built-in recovery UI</a></p>
           <p class="note">Manage SD card melodies and folders here. The Hardware tab now reports storage status only.</p>
           <div class="storage-modal-shell storage-embedded-shell">
             <div class="storage-modal-head storage-embedded-head">

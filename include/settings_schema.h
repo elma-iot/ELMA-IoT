@@ -236,6 +236,7 @@ struct DeviceSettings {
 #endif
 
 struct UiSettings {
+    bool customWebInterface = false;
     String language = APP_COMPILED_LANGUAGE_CODE;
     String theme = APP_COMPILED_THEME_CODE;
     bool gpioSafetyOverride = false;

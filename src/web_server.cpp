@@ -2,12 +2,15 @@
 #include "plot_telemetry.h"
 #include "plot_storage.h"
 #include "storage_download.h"
+#include "static_asset_policy.h"
+#include "bounded_stream_response.h"
 #include "storage_memory.h"
 #include <sys/time.h>
 #include "web_server.h"
 #include "bno055_service.h"
 #include "rs485_service.h"
 #include "microphone_service.h"
+#include "spk_media.h"
 #include "device_log.h"
 
 #ifdef APP_DISABLE_WEB_UI
@@ -178,7 +181,7 @@ bool requestMatchesEtag(AsyncWebServerRequest* request, const String& tag) {
         return false;
     }
     const AsyncWebHeader* header = request->getHeader("If-None-Match");
-    return header != nullptr && header->value() == tag;
+    return header != nullptr && StaticAssetPolicy::etagMatches(header->value().c_str(), tag.c_str());
 }
 
 void sendCloneFlashRegion(
@@ -372,14 +375,29 @@ String parseIndexedStorageEntryPath(const String& directoryPath, const String& r
 }
 
 bool isAllowedStoragePath(const String& path) {
-    const String lower = path;
+    String lower = path;lower.toLowerCase();
     return lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".aac") || lower.endsWith(".m4a") ||
         lower.endsWith(".ogg") || lower.endsWith(".opus") || lower.endsWith(".flac") ||
         lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp");
 }
 
 const char* contentTypeForPath(const String& path) {
-    const String lower = path;
+    String lower = path;lower.toLowerCase();
+    if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html; charset=utf-8";
+    if (lower.endsWith(".css")) return "text/css; charset=utf-8";
+    if (lower.endsWith(".js") || lower.endsWith(".mjs")) return "application/javascript; charset=utf-8";
+    if (lower.endsWith(".json") || lower.endsWith(".map")) return "application/json";
+    if (lower.endsWith(".svg")) return "image/svg+xml";
+    if (lower.endsWith(".xml")) return "application/xml";
+    if (lower.endsWith(".txt") || lower.endsWith(".csv")) return "text/plain; charset=utf-8";
+    if (lower.endsWith(".wasm")) return "application/wasm";
+    if (lower.endsWith(".woff")) return "font/woff";
+    if (lower.endsWith(".woff2")) return "font/woff2";
+    if (lower.endsWith(".ttf")) return "font/ttf";
+    if (lower.endsWith(".otf")) return "font/otf";
+    if (lower.endsWith(".ico")) return "image/x-icon";
+    if (lower.endsWith(".gif")) return "image/gif";
+    if (lower.endsWith(".avif")) return "image/avif";
     if (lower.endsWith(".mp3")) return "audio/mpeg";
     if (lower.endsWith(".wav")) return "audio/wav";
     if (lower.endsWith(".aac")) return "audio/aac";
@@ -1119,6 +1137,7 @@ void WebServerManager::registerApiRoutes() {
     });bnoHandler->setMaxContentLength(512);bnoHandler->setMethod(HTTP_POST);server_.addHandler(bnoHandler);
 #if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO)
     registerMicrophoneRoutes(server_,[this](AsyncWebServerRequest* request){return !redirectCaptivePortalIfNeeded(request)&&ensureAuthorized(request);});
+    registerSpkMediaRoutes(server_,[this](AsyncWebServerRequest* request){return !redirectCaptivePortalIfNeeded(request)&&ensureAuthorized(request);});
 #endif
 #if APP_HAS_CAMERA
     beginCameraService();
@@ -2335,6 +2354,39 @@ void WebServerManager::registerApiRoutes() {
 #endif
 }
 
+bool WebServerManager::serveStorageWebAsset(AsyncWebServerRequest* request,const String& url,bool fallback) {
+    if(request->method()!=HTTP_GET && request->method()!=HTTP_HEAD)return false;
+    if(!settingsGetter_().ui.customWebInterface)return false;
+    if(!storageMounted(StorageTarget::Sd))return false;
+    std::string normalized;if(!StaticAssetPolicy::webPath(url.c_str(),normalized))return false;
+    if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return true;
+    auto error=[&](int code,const char* message){if(fallback)return false;auto* response=new(std::nothrow) BoundedBufferResponse(message,strlen(message),"text/plain; charset=utf-8",code,true);if(!response){request->send(503);return true;}response->addHeader("Cache-Control","no-store");response->addHeader("Vary","Accept-Encoding");request->send(response);return true;};
+    beginStorageRead(StorageTarget::Sd);struct Lease{~Lease(){endStorageRead(StorageTarget::Sd);}} lease;
+    String path=normalized.c_str();
+    String header=request->hasHeader("Accept-Encoding")?request->getHeader("Accept-Encoding")->value():String();
+    auto encoding=StaticAssetPolicy::encodings(header.c_str());
+    File file;bool gzip=false;
+    if(encoding.gzip>0){file=storageOpen(StorageTarget::Sd,path+".gz","r");if(file&&file.isDirectory())file.close();gzip=bool(file);}
+    if(!file&&encoding.identity>0){file=storageOpen(StorageTarget::Sd,path,"r");if(file&&file.isDirectory())file.close();}
+    if(!file){bool exists=storageExists(StorageTarget::Sd,path)||storageExists(StorageTarget::Sd,path+".gz");return error(exists?406:404,exists?"No acceptable representation. Enable gzip or upload the uncompressed asset.":"Custom web asset not found.");}
+    const size_t size=file.size();if(size>16u*1024u*1024u)return error(413,"Custom web asset exceeds the 16 MiB limit.");
+    if(gzip){uint8_t magic[10];if(size<18||file.read(magic,sizeof(magic))!=sizeof(magic)||magic[0]!=0x1f||magic[1]!=0x8b||magic[2]!=8||!file.seek(0))return error(500,"Invalid or unreadable gzip asset.");}
+    if(request->url()=="/"){auto* response=request->beginResponse(302);response->addHeader("Location","/web/");response->addHeader("Cache-Control","no-store");response->addHeader("Vary","Accept-Encoding");request->send(response);return true;}
+    const time_t modified=file.getLastWrite();
+    const bool html=path.endsWith(".html")||path.endsWith(".htm");
+    String tag;if(modified>0){uint32_t hash=2166136261u;for(char c:normalized)hash=(hash^uint8_t(c))*16777619u;tag="W/\"sd:"+String(hash,HEX)+":"+String(static_cast<unsigned long>(modified))+":"+String(size)+(gzip?":gz\"":":raw\"");}
+    auto headers=[&](AsyncWebServerResponse* response){response->addHeader("Vary","Accept-Encoding");response->addHeader("X-Content-Type-Options","nosniff");response->addHeader("Accept-Ranges","none");if(gzip)response->addHeader("Content-Encoding","gzip");if(tag.length())response->addHeader("ETag",tag);response->addHeader("Cache-Control",html||!tag.length()?"no-store, no-cache, must-revalidate, max-age=0":"public, max-age=0, must-revalidate");};
+    if(!html&&tag.length()&&requestMatchesEtag(request,tag)){auto* response=request->beginResponse(304);headers(response);request->send(response);return true;}
+    AsyncWebServerResponse* response=nullptr;
+    if(request->method()==HTTP_HEAD){response=new(std::nothrow) BoundedBufferResponse("",size,contentTypeForPath(path),200,true);}
+    else {
+        auto stream=StorageDownload::create(StorageTarget::Sd,std::move(file));if(!stream)return error(503,"Storage stream limit or memory reserve reached.");
+        response=new(std::nothrow) BoundedStreamResponse<StorageDownload>(stream,size,contentTypeForPath(path));
+        if(!response||!stream->start()){delete response;return error(503,"Storage reader unavailable.");}
+    }
+    if(!response)return error(503,"Device busy; retry shortly.");headers(response);request->send(response);return true;
+}
+
 void WebServerManager::registerWebRoutes() {
 #ifdef APP_LEGACY_OTA_FIT
     static const char kLegacyPage[] =
@@ -2380,14 +2432,20 @@ void WebServerManager::registerWebRoutes() {
             return;
         }
         const bool isHtmlShell = path == "/index.html";
+        String encodingHeader=request->hasHeader("Accept-Encoding")?request->getHeader("Accept-Encoding")->value():String();
+        const auto encoding=StaticAssetPolicy::encodings(encodingHeader.c_str());
+        if((asset->gzip && encoding.gzip<=0)||(!asset->gzip && encoding.identity<=0)){
+            static const char message[]="No acceptable representation. This built-in asset requires gzip.";
+            auto* error=new(std::nothrow) BoundedBufferResponse(message,sizeof(message)-1,"text/plain; charset=utf-8",406,true);
+            if(!error){request->send(503);return;}error->addHeader("Vary","Accept-Encoding");error->addHeader("Cache-Control","no-store");request->send(error);return;
+        }
         const String tag = assetEtag(*asset);
         if (!isHtmlShell && requestMatchesEtag(request, tag)) {
             AsyncWebServerResponse* notModified = request->beginResponse(304);
             notModified->addHeader("ETag", tag);
             notModified->addHeader("Cache-Control", "public, max-age=0, must-revalidate");
-            if (asset->gzip) {
-                notModified->addHeader("Vary", "Accept-Encoding");
-            }
+            notModified->addHeader("Vary", "Accept-Encoding");
+            if(asset->gzip)notModified->addHeader("Content-Encoding","gzip");
             request->send(notModified);
             return;
         }
@@ -2398,9 +2456,9 @@ void WebServerManager::registerWebRoutes() {
             return;
         }
         response->addHeader("ETag", tag);
+        response->addHeader("Vary", "Accept-Encoding");
         if (asset->gzip) {
             response->addHeader("Content-Encoding", "gzip");
-            response->addHeader("Vary", "Accept-Encoding");
         }
         if (isHtmlShell) {
             response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
@@ -2412,16 +2470,22 @@ void WebServerManager::registerWebRoutes() {
         request->send(response);
     };
 
-    server_.on("/", HTTP_GET, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/index.html"); });
-    server_.on("/index.html", HTTP_GET, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/index.html"); });
-    server_.on("/style.css", HTTP_GET, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/style.css"); });
-    server_.on("/app.js", HTTP_GET, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/app.js"); });
+    server_.on("/", HTTP_GET | HTTP_HEAD, [this,serveAsset](AsyncWebServerRequest* request) {
+        if(serveStorageWebAsset(request,"/web/index.html",true))return;
+        serveAsset(request,"/index.html");
+    });
+    server_.on("/system/ui",HTTP_GET | HTTP_HEAD,[serveAsset](AsyncWebServerRequest* request){serveAsset(request,"/index.html");});
+    server_.on("/index.html", HTTP_GET | HTTP_HEAD, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/index.html"); });
+    server_.on("/style.css", HTTP_GET | HTTP_HEAD, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/style.css"); });
+    server_.on("/app.js", HTTP_GET | HTTP_HEAD, [serveAsset](AsyncWebServerRequest* request) { serveAsset(request, "/app.js"); });
     server_.on("/generate_204", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
     server_.on("/hotspot-detect.html", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
     server_.on("/connecttest.txt", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
     server_.on("/ncsi.txt", HTTP_GET, [this](AsyncWebServerRequest* request) { request->redirect("/"); });
 
     server_.onNotFound([this, serveAsset](AsyncWebServerRequest* request) {
+        if(request->method()!=HTTP_GET&&request->method()!=HTTP_HEAD){request->send(405,"text/plain","Method not allowed");return;}
+        if(serveStorageWebAsset(request,request->url()))return;
         if (redirectCaptivePortalIfNeeded(request)) {
             return;
         }

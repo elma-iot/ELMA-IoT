@@ -18,6 +18,7 @@ public:
     }
     bool _sourceValid() const override { return data_ != nullptr; }
     void _respond(AsyncWebServerRequest* request) override {
+        headOnly_ = request->method() == HTTP_HEAD;
         addHeader("Connection", "close", false);
         _assembleHead(head_, request->version());
         _state = RESPONSE_HEADERS;
@@ -33,7 +34,7 @@ public:
                 head_ = "";
                 _state = RESPONSE_CONTENT;
             }
-            if (_state == RESPONSE_CONTENT && _sentLength == _contentLength) {
+            if (_state == RESPONSE_CONTENT && (headOnly_ || _sentLength == _contentLength)) {
                 if (_ackedLength >= _writtenLength) _state = RESPONSE_END;
                 return total;
             }
@@ -59,6 +60,7 @@ public:
 private:
     const char* data_;
     bool immutableFlash_;
+    bool headOnly_ = false;
     String head_;
     size_t headerOffset_ = 0;
 };

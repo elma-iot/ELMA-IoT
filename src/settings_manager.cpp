@@ -1184,6 +1184,7 @@ SettingsBundle SettingsManager::load() {
     settings.device.touchHoldFactoryResetEnabled = readBool("dev_thf_reset", settings.device.touchHoldFactoryResetEnabled);
     settings.device.lowBatterySleepThresholdPercent = readUInt("dev_lbs_pct", settings.device.lowBatterySleepThresholdPercent);
     settings.device.lowBatteryWakeIntervalMinutes = readUInt("dev_lbs_wk", settings.device.lowBatteryWakeIntervalMinutes);
+    settings.ui.customWebInterface = readBool("ui_custom_web", settings.ui.customWebInterface);
     settings.ui.gpioSafetyOverride = readBool("ui_gpio_ovr", settings.ui.gpioSafetyOverride);
     settings.ui.gpioBoardAutodetect = readBool("ui_gpio_auto", settings.ui.gpioBoardAutodetect);
     // A newly compiled APK locale becomes the default once. Preserve later
@@ -1382,6 +1383,7 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         changed |= storeBool("dev_thf_reset", sanitized.device.touchHoldFactoryResetEnabled, baseline.device.touchHoldFactoryResetEnabled);
         changed |= storeUInt("dev_lbs_pct", sanitized.device.lowBatterySleepThresholdPercent, baseline.device.lowBatterySleepThresholdPercent);
         changed |= storeUInt("dev_lbs_wk", sanitized.device.lowBatteryWakeIntervalMinutes, baseline.device.lowBatteryWakeIntervalMinutes);
+        changed |= storeBool("ui_custom_web", sanitized.ui.customWebInterface, baseline.ui.customWebInterface);
         changed |= storeBool("ui_gpio_ovr", sanitized.ui.gpioSafetyOverride, baseline.ui.gpioSafetyOverride);
         changed |= storeBool("ui_gpio_auto", sanitized.ui.gpioBoardAutodetect, baseline.ui.gpioBoardAutodetect);
         changed |= storeString("ui_lang", sanitized.ui.language, baseline.ui.language);
@@ -1591,6 +1593,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     JsonObject ui = root["ui"].to<JsonObject>();
     ui["language"] = settings.ui.language;
     ui["theme"] = settings.ui.theme;
+    ui["customWebInterface"] = settings.ui.customWebInterface;
     ui["gpioSafetyOverride"] = settings.ui.gpioSafetyOverride;
     ui["gpioBoardAutodetect"] = settings.ui.gpioBoardAutodetect;
     ui["gpioBoardSelection"] = settings.ui.gpioBoardSelection;
@@ -1821,6 +1824,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     if (!ui.isNull()) {
         copyString(ui, "language", settings.ui.language);
         copyString(ui, "theme", settings.ui.theme);
+        if (ui["customWebInterface"].is<bool>()) settings.ui.customWebInterface = ui["customWebInterface"].as<bool>();
         if (ui["gpioSafetyOverride"].is<bool>()) settings.ui.gpioSafetyOverride = ui["gpioSafetyOverride"].as<bool>();
         if (ui["gpioBoardAutodetect"].is<bool>()) settings.ui.gpioBoardAutodetect = ui["gpioBoardAutodetect"].as<bool>();
         copyString(ui, "gpioBoardSelection", settings.ui.gpioBoardSelection);

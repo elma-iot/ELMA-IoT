@@ -14,6 +14,10 @@ inline std::atomic<bool>& enabled(){static std::atomic<bool> value{true};return 
 inline std::atomic<int>& gain(){static std::atomic<int> value{1};return value;}
 inline std::atomic<int>& peakLeft(){static std::atomic<int> value{0};return value;}
 inline std::atomic<int>& peakRight(){static std::atomic<int> value{0};return value;}
+// Bounded PCM queue; capture never waits for HTTP or storage.
+struct PcmBlock {int16_t samples[64];uint16_t count=0;};
+inline QueueHandle_t& pcm(){static QueueHandle_t q=xQueueCreate(64,sizeof(PcmBlock));return q;}
+inline std::atomic<uint32_t>& mediaUntil(){static std::atomic<uint32_t> t{0};return t;}
 inline void worker(void*){
 #if SOC_I2S_NUM > 1
  constexpr i2s_port_t port=I2S_NUM_1;
@@ -41,14 +45,16 @@ inline void worker(void*){
   if(installed&&paused==enabled().load()){paused=!enabled().load();if(paused)i2s_stop(port);else i2s_start(port);}
   if(paused){peakLeft()=0;peakRight()=0;}
   if(installed&&!paused&&i2s_read(port,samples,sizeof(samples),&received,0)==ESP_OK){
-   int l=0,r=0,multiplier=gain().load();
+   int l=0,r=0,multiplier=gain().load();PcmBlock block;
    for(unsigned i=0;i<received/sizeof(int32_t);i+=next.stereo?2:1){
     int16_t left=int16_t(samples[i]>>16),right=next.stereo&&i+1<received/sizeof(int32_t)?int16_t(samples[i+1]>>16):left;
     left=constrain(int(left)*multiplier,-32768,32767);right=constrain(int(right)*multiplier,-32768,32767);
     l=std::max(l,abs(int(left)));r=std::max(r,abs(int(right)));
     LedAudio::microphone().push(left,right,32000);
+    block.samples[block.count++]=int16_t((int(left)+int(right))/2);
    }
    peakLeft()=l;peakRight()=r;
+   if(pcm()&&int32_t(mediaUntil().load()-millis())>0&&block.count)xQueueSend(pcm(),&block,0);
   }
   vTaskDelay(1);
  }

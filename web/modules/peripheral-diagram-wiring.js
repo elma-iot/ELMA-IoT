@@ -2422,14 +2422,15 @@ export function createPeripheralDiagramWiringModule({
             connection.signalLabel,
             Number(state.peripheralDiagramPositions?.[node.id]?.rotation || 0),
           );
-          const assetLayout = peripheralColumnLabelLayout(visualRect, boardRect, connections.map(item=>item.signalLabel), index);
+          const calibrated = /(?:i2c-oled|bno055)-breadboard\.svg$/.test(node.src);
+          const assetLayout = calibrated && pinContact ? contactLabelLayout(visualRect, connection.signalLabel, pinContact) : peripheralColumnLabelLayout(visualRect, boardRect, connections.map(item=>item.signalLabel), index);
           nodeSignalLabels.set(labelId, {
             id: labelId,
             label: normalizeSignalLabel(connection.signalLabel),
             dividerMaximum:node.groupKey==='sensor'&&String(node.profileValue||'').includes('battery-voltage-divider')&&signalKey(connection.signalLabel)==='SIGNAL'?voltageDividerMaximum(state.settings?.battery):null,
             palette: classifyWireColor(connection),
             defaultLayout: assetLayout || signalLabelDefaultLayout(visualRect, defaultAnchor, connection.signalLabel, boardRect),
-            pinContact: {column:true},
+            pinContact: calibrated && pinContact ? pinContact : {column:true},
             legacyIds: String(node.groupKey || "") === "sensor"
               && String(node.profileValue || "").includes("battery-voltage-divider")
               && signalKey(connection.signalLabel) === "SIGNAL"

@@ -8955,6 +8955,7 @@ function normalizeUiSettings(uiSettings = {}) {
     theme: ["automatic", "light", "dark"].includes(String(source.theme || "automatic").toLowerCase())
       ? String(source.theme || "automatic").toLowerCase()
       : "automatic",
+    customWebInterface: Boolean(source.customWebInterface),
     gpioSafetyOverride: Boolean(source.gpioSafetyOverride),
     gpioBoardAutodetect: Object.prototype.hasOwnProperty.call(source, "gpioBoardAutodetect")
       ? Boolean(source.gpioBoardAutodetect)

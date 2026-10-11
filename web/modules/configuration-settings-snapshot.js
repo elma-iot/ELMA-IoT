@@ -81,6 +81,7 @@ export function createConfigurationSettingsSnapshotModule({
       language: String(window.ElmaAndroidConfig?.language?.() || persistedUi.language || "en"),
       theme: String(persistedUi.theme || "automatic"),
       gpioBoardAutodetect: Boolean(elements.gpioBoardAutodetect?.checked ?? true),
+      customWebInterface: Boolean(elements.settingsForm?.elements.namedItem("ui.customWebInterface")?.checked ?? persistedUi.customWebInterface),
       gpioSafetyOverride: Boolean(elements.gpioSafetyOverride?.checked),
       gpioBoardSelection: String(elements.gpioBoardSelector?.value || ""),
       customBoard: cloneSettingsObject(state.settings?.ui?.customBoard || persistedUi.customBoard) || {},

@@ -1,7 +1,9 @@
+import {attachMedia} from './spk-media.js';
 export function createMicrophonesTab({request}){
  const tab=document.querySelector('[data-tab="microphones"]'),panel=document.getElementById('tab-microphones');
  const enabled=panel.querySelector('[data-mic-enabled]'),gain=panel.querySelector('[data-mic-gain]'),notice=panel.querySelector('[data-mic-status]');
  const left=panel.querySelector('[data-mic-left]'),right=panel.querySelector('[data-mic-right]');
+ const media=attachMedia({request,panel,notice});
  let active=false,available=false,busy=false,saving=false,timer;
  async function poll(){
   clearTimeout(timer);if(!active||!available||document.hidden||busy)return;busy=true;
@@ -16,5 +18,5 @@ export function createMicrophonesTab({request}){
  }
  enabled.addEventListener('change',save);gain.addEventListener('change',save);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll();});
- return {setActive(value){active=value;clearTimeout(timer);if(value)poll();},update(status){available=!!status?.firmware?.microphones&&!status?.system?.webUiLocked;tab.hidden=!available;if(!available)clearTimeout(timer);else if(active&&!busy)poll();}};
+ return {setActive(value){media.setActive(value);active=value;clearTimeout(timer);if(value)poll();},update(status){media.update(status);available=!!status?.firmware?.microphones&&!status?.system?.webUiLocked;tab.hidden=!available;if(!available)clearTimeout(timer);else if(active&&!busy)poll();}};
 }
