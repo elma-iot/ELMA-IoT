@@ -20,13 +20,13 @@ The USB-powered 3248 board keeps Wi-Fi modem sleep disabled to reduce power-savi
 
 ## Audio
 
-The onboard SC8002B is an analog amplifier on GPIO26, driven by DAC2; GPIO25 belongs to the touch controller. PCM gain is applied before 8-bit DAC conversion. Start/stop gain and DAC-bias ramps reduce switching clicks. Twice-rate interpolation, triangular dither and bounded quantization-error feedback reduce low-level quantization harmonics without heap allocation. This is software processing; this ESP32 has no hardware MP3/AAC/FLAC decoder.
+The onboard SC8002B is an analog amplifier on GPIO26, driven by DAC2; GPIO25 belongs to the touch controller. PCM gain is applied before 8-bit DAC conversion. Start/stop gain and DAC-bias ramps reduce switching clicks. Test.48 removes experimental twice-rate interpolation, dither and error feedback after listening on the board showed worse sound despite a favorable host simulation. Playback uses native sample rates and one independently biased PCM frame per decoder frame. This is software processing; this ESP32 has no hardware MP3/AAC/FLAC decoder.
 
 The audio owner task serializes decoder operations. MP3 workspaces that permit aligned 32-bit access can use IRAM; byte-addressed data stays in DRAM. Internal-DAC DMA has extra frames to retain its buffered duration at twice the sample rate. The audio manager preserves the doubled DAC clock during decoded playback. Pressing Stop reconstructs the muted idle engine to release retained decoder and network caches; switching tabs never does this. Music starts stopped after reboot.
 
 ## Validation limits
 
-Use internal 8-bit heap and largest free block, not aggregate heap including word-only IRAM, to assess headroom. A universal “under 50% SRAM” target is not guaranteed for every simultaneous LCD, decoder and network workload. Validate repeated LCD toggles, browser polling, SD playback and radio with the actual device. Host quantizer tests establish numerical behavior; speaker distortion and interference still require listening on the board.
+Use internal 8-bit heap and largest free block, not aggregate heap including word-only IRAM, to assess headroom. A universal “under 50% SRAM” target is not guaranteed for every simultaneous LCD, decoder and network workload. Validate repeated LCD toggles, browser polling, SD playback and radio with the actual device. Host tests establish frame size, native clock and silence behavior; speaker distortion and interference still require listening on the board.
 
 Firmware updates preserve existing configuration, SD media and Wi-Fi credentials. The factory-only partition layout does not permit writing an OTA selector at 0xE000 because that address is inside NVS.
 

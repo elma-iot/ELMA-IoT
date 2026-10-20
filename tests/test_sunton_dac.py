@@ -66,6 +66,13 @@ int main(){
  const uint32_t pcm=(uint32_t(uint16_t(30000))<<16)|uint16_t(-20000);
  for(int gain=0;gain<=100;++gain){uint32_t scaled=elmaScaleDacPcm(pcm,gain);assert(int16_t(scaled>>16)==30000*gain/100);assert(int16_t(scaled)==-20000*gain/100);}
  assert(elmaScaleDacPcm(pcm,0)==0);assert(elmaScaleDacPcm(pcm,100)==pcm);
+ assert(elmaDacSampleRate(44100,true)==44100);
+ assert(elmaDacSampleRate(48000,false)==48000);
+ assert(elmaAudioFrameBytes(true)==4);
+ assert(elmaAudioDmaLength(256,true)==256);
+ size_t written=0;
+ elmaWriteAudioSample(0,0,true,&written,100);
+ assert(written==4);bytesPrimed=0;writeCalls=0;
  assert(!elmaAudioAutoClear(true));assert(elmaAudioAutoClear(false));
  elmaStartDacOutput(0,I2S_DAC_CHANNEL_LEFT_EN,4,256);
  assert(mode==0&&rampCalls==0&&writeCalls==16&&zeroCalls==0);

@@ -153,4 +153,4 @@ for source in audio_sources:
     if text.count(old)!=2:raise RuntimeError('Unexpected DMA frame length')
     text=text.replace(old,'m_i2s_config.dma_buf_len = elmaAudioDmaLength((psramFound()?512:256),internalDAC);')
     source.write_text(text,encoding='utf-8')
-    print('[audio] Sunton 3248 DAC: 2x interpolation and shaped/dithered eight-bit conversion')
+    print('[audio] Sunton 3248 DAC: native-rate signed PCM with independent channel bias')

@@ -16,29 +16,23 @@ inline uint32_t elmaScaleDacPcm(uint32_t sample,uint8_t percent) {
 }
 
 inline SuntonDacQuality& elmaDacQuality(){static SuntonDacQuality quality;return quality;}
+// Keep the native decoder clock and one output frame per input frame.
+// The experimental doubled-rate noise shaper degraded the physical board.
 inline uint32_t elmaDacSampleRate(uint32_t rate,bool internal){
-#if APP_SUNTON_PANEL == 3
-    if(internal)return rate*2;
-#endif
-    return rate;
+    (void)internal;return rate;
 }
 inline size_t elmaAudioFrameBytes(bool internal){
-#if APP_SUNTON_PANEL == 3
-    if(internal)return 8;
-#endif
-    return 4;
+    (void)internal;return sizeof(uint32_t);
 }
 inline int elmaAudioDmaLength(int frames,bool internal){
-#if APP_SUNTON_PANEL == 3
-    if(internal)return frames*2; // Preserve DMA duration at the doubled rate.
-#endif
-    return frames;
+    (void)internal;return frames;
 }
 inline int elmaWriteAudioSample(i2s_port_t port,uint32_t sample,bool internal,size_t* written,int timeout){
-#if APP_SUNTON_PANEL == 3
-    if(internal){uint32_t frames[2];elmaDacQuality().expand(sample,frames);return i2s_write(port,frames,sizeof(frames),written,timeout);}
-#endif
-    if(internal)sample+=0x80008000U;
+    if(internal){
+        // Bias each signed channel independently, without inter-channel carry.
+        sample=(uint32_t(uint16_t(uint16_t(sample>>16)^0x8000U))<<16)
+              |uint16_t(uint16_t(sample)^0x8000U);
+    }
     return i2s_write(port,&sample,sizeof(sample),written,timeout);
 }
 
