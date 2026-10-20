@@ -19,6 +19,11 @@ struct ScanResultsGuard {
 extern "C" esp_err_t __real_esp_wifi_init(const wifi_init_config_t* config);
 extern "C" esp_err_t __wrap_esp_wifi_init(const wifi_init_config_t* config) {
     if(!config)return __real_esp_wifi_init(config);
+#if APP_SUNTON_PANEL == 3
+    // Use SDK defaults while investigating STA IP traffic stalls on this board.
+    DebugLog.println("[wifi] Sunton compatibility profile: SDK default buffers");
+    return __real_esp_wifi_init(config);
+#else
     wifi_init_config_t tuned=*config;
     tuned.static_rx_buf_num=6;
     tuned.dynamic_rx_buf_num=12;
@@ -26,8 +31,8 @@ extern "C" esp_err_t __wrap_esp_wifi_init(const wifi_init_config_t* config) {
     tuned.static_tx_buf_num=0;
     tuned.dynamic_tx_buf_num=12;
     tuned.rx_ba_win=6;
-    DebugLog.println("[wifi] Sunton memory profile: static RX=6 dynamic RX=12 dynamic TX=12 BA=6");
     return __real_esp_wifi_init(&tuned);
+#endif
 }
 #endif
 #include <time.h>

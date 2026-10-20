@@ -1,15 +1,25 @@
-"""Bound AsyncTCP's default task stack on the no-PSRAM Sunton LCD boards."""
+"""Keep measured stack headroom on the no-PSRAM Sunton LCD boards."""
 from pathlib import Path
 Import("env")
 root=Path(env.subst("$PROJECT_LIBDEPS_DIR"))/env.subst("$PIOENV")
 old="#define CONFIG_ASYNC_TCP_STACK_SIZE 8192 * 2"
 new="""#if APP_SUNTON_PANEL
+#if APP_SUNTON_PANEL == 3
+#define CONFIG_ASYNC_TCP_STACK_SIZE 12288
+#else
 #define CONFIG_ASYNC_TCP_STACK_SIZE 6144
+#endif
 #else
 #define CONFIG_ASYNC_TCP_STACK_SIZE 8192 * 2
 #endif"""
 for source in root.glob("AsyncTCP/src/AsyncTCP.h"):
  text=source.read_text(encoding="utf8")
+ previous="""#if APP_SUNTON_PANEL
+#define CONFIG_ASYNC_TCP_STACK_SIZE 6144
+#else
+#define CONFIG_ASYNC_TCP_STACK_SIZE 8192 * 2
+#endif"""
+ if previous in text:text=text.replace(previous,new,1);source.write_text(text,encoding="utf8")
  if new in text:continue
  if text.count(old)!=1:raise RuntimeError("Unexpected AsyncTCP stack configuration")
  source.write_text(text.replace(old,new),encoding="utf8")

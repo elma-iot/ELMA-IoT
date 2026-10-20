@@ -25,6 +25,8 @@
 #include <esp_ota_ops.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <esp_wifi.h>
+#include <lwip/etharp.h>
 #if APP_HAS_ONBOARD_PANEL && defined(ESP32)
 #include <rom/ets_sys.h>
 #endif
@@ -910,6 +912,14 @@ bool parseStorageFileReference(const String& raw, StorageTarget& target, String&
 }
 
 void applyCpuFrequencyPolicy() {
+#if APP_SUNTON_PANEL == 3
+    // On this classic ESP32, manual 240->160/80 MHz PLL changes can stall
+    // the Wi-Fi task after LCD/audio demand disappears. Keep the radio and
+    // internal-DAC timing stable, including when the LCD is fully disabled.
+    if(ESP.getCpuFreqMHz()!=240U)setCpuFrequencyMhz(240U);
+    activeCpuFrequencyMhz=ESP.getCpuFreqMHz();
+    return;
+#endif
     const unsigned long now = millis();
     const uint32_t measuredFrequencyMhz = ESP.getCpuFreqMHz();
     if (measuredFrequencyMhz != 0 && measuredFrequencyMhz != activeCpuFrequencyMhz) {
@@ -3313,6 +3323,33 @@ void serviceCloneProvisioningSerial() {
             if(sscanf(command.c_str(),"ELMA_PLOTS_GET %lu %lu",&after,&boot)==2){
                 JsonDocument response;plotSerialNext(uint32_t(after),uint32_t(boot),response);
                 String packet="@ELMA_PLOTS ";serializeJson(response,packet);Serial.println(packet);
+            }
+        } else if (command == "ELMA_WIFI_LEGACY_TEST" || command == "ELMA_WIFI_NORMAL_TEST") {
+            // Volatile USB compatibility test, never changes saved credentials.
+            const uint8_t protocols=command=="ELMA_WIFI_LEGACY_TEST" ? WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G : WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N;
+            const esp_err_t result=esp_wifi_set_protocol(WIFI_IF_STA,protocols);
+            DebugLog.printf("[network-probe] protocol_mask=%u result=%d\n",protocols,result);
+            if(result==ESP_OK){esp_wifi_disconnect();delay(20);esp_wifi_connect();}
+        } else if (command.startsWith("ELMA_NETWORK_PROBE ")) {
+            // Explicit USB diagnostic only: no saved settings or network changes.
+            unsigned a,b,c,d,port;
+            if(sscanf(command.c_str(),"ELMA_NETWORK_PROBE %u.%u.%u.%u %u",&a,&b,&c,&d,&port)==5 &&
+               a<256 && b<256 && c<256 && d<256 && port>0 && port<65536) {
+                DebugLog.printf("[network-probe] mac=%s gateway=%s mask=%s channel=%d\n",
+                    WiFi.macAddress().c_str(),WiFi.gatewayIP().toString().c_str(),WiFi.subnetMask().toString().c_str(),WiFi.channel());
+                for(size_t i=0;i<ARP_TABLE_SIZE;++i){
+                    ip4_addr_t* address=nullptr;struct netif* iface=nullptr;struct eth_addr* mac=nullptr;
+                    if(etharp_get_entry(i,&address,&iface,&mac))DebugLog.printf("[network-probe] arp=%s mac=%02x:%02x:%02x:%02x:%02x:%02x\n",ip4addr_ntoa(address),mac->addr[0],mac->addr[1],mac->addr[2],mac->addr[3],mac->addr[4],mac->addr[5]);
+                }
+                const IPAddress hosts[]={WiFi.localIP(),WiFi.gatewayIP(),IPAddress(a,b,c,d)};
+                const uint16_t ports[]={80,80,uint16_t(port)};
+                for(unsigned i=0;i<3;++i){
+                    WiFiClient probe;const uint32_t started=millis();
+                    const bool ok=probe.connect(hosts[i],ports[i],1000);
+                    DebugLog.printf("[network-probe] target=%s port=%u connected=%d ms=%lu\n",
+                        hosts[i].toString().c_str(),ports[i],ok,millis()-started);
+                    probe.stop();delay(1);
+                }
             }
         } else if (command == "ELMA_NETWORK_STATUS") {
             // Requested after USB re-enumeration, when boot-time log messages
