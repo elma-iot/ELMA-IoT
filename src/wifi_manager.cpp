@@ -21,13 +21,12 @@ extern "C" esp_err_t __wrap_esp_wifi_init(const wifi_init_config_t* config) {
     if(!config)return __real_esp_wifi_init(config);
     wifi_init_config_t tuned=*config;
     tuned.static_rx_buf_num=6;
-    tuned.dynamic_rx_buf_num=8;
+    tuned.dynamic_rx_buf_num=12;
     tuned.tx_buf_type=1;
     tuned.static_tx_buf_num=0;
-    tuned.dynamic_tx_buf_num=4;
-    tuned.cache_tx_buf_num=2;
-    tuned.rx_ba_win=4;
-    DebugLog.println("[wifi] Sunton memory profile: static RX=6 dynamic RX=8 dynamic TX=4 BA=4");
+    tuned.dynamic_tx_buf_num=12;
+    tuned.rx_ba_win=6;
+    DebugLog.println("[wifi] Sunton memory profile: static RX=6 dynamic RX=12 dynamic TX=12 BA=6");
     return __real_esp_wifi_init(&tuned);
 }
 #endif

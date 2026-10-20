@@ -13,6 +13,12 @@
 #define LV_MEM_CUSTOM_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 #define LV_MEM_CUSTOM_FREE heap_caps_free
 #define LV_MEM_CUSTOM_REALLOC(ptr,size) heap_caps_realloc(ptr,size,MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#if APP_SUNTON_PANEL == 3
+// Tile opacity/rotation work instead of reserving desktop-sized scratch blocks.
+#define LV_LAYER_SIMPLE_BUF_SIZE (4 * 1024)
+#define LV_LAYER_SIMPLE_FALLBACK_BUF_SIZE (2 * 1024)
+#define LV_DISP_ROT_MAX_BUF (2 * 1024)
+#endif
 #define LV_DISP_DEF_REFR_PERIOD 20
 #define LV_INDEV_DEF_READ_PERIOD 10
 #define LV_FONT_MONTSERRAT_14 1
