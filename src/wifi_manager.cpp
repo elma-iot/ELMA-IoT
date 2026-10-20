@@ -76,7 +76,13 @@ void WiFiManager::applyRadioSleep() {
     // Keep streaming/update latency low, but do not leave the RF receiver
     // continuously powered after playback stops. STA modem sleep keeps the
     // association and MQTT connection alive between beacon intervals.
+#if APP_SUNTON_PANEL == 3
+    // This USB-powered LCD board intermittently stops answering HTTP with
+    // modem sleep enabled, even though association and RSSI remain valid.
+    WiFi.setSleep(false);
+#else
     WiFi.setSleep(!apMode_ && !lowLatencyMode_);
+#endif
 }
 
 void WiFiManager::setLowLatencyMode(bool enabled) {
