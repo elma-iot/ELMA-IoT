@@ -76,7 +76,8 @@ if audio_sources:
         if(audio_info)audio_info("Local file read failed; card removed or storage unavailable");
         return;
     }""",1)
-    source.write_text(text,encoding="utf-8")
+    if text != source.read_text(encoding="utf-8"):
+        source.write_text(text,encoding="utf-8")
 
 # Helix's four large integer-only workspaces can use the classic ESP32's
 # otherwise unused word-accessible IRAM heap. Byte streams and PCM stay DRAM.
@@ -154,3 +155,143 @@ for source in audio_sources:
     text=text.replace(old,'m_i2s_config.dma_buf_len = elmaAudioDmaLength((psramFound()?512:256),internalDAC);')
     source.write_text(text,encoding='utf-8')
     print('[audio] Sunton 3248 DAC: native-rate signed PCM with independent channel bias')
+
+
+# Correct concrete PCM hazards in the pinned decoder without replacing it.
+for source in audio_sources:
+    text=source.read_text(encoding='utf8')
+    if '// ELMA_PCM_INTEGRITY' in text:continue
+    import re
+    text,count=re.subn(r'\(int16_t\)\s*outSample\[(LEFTCHANNEL|RIGHTCHANNEL)\]',r'elmaSaturateAudioPcm(outSample[\1],m_f_internalDAC)',text)
+    if count!=6:raise RuntimeError('Unexpected EQ conversion count')
+    for channel in ('LEFTCHANNEL','RIGHTCHANNEL'):
+        pattern=r'\(\(sample\['+channel+r'\]\s*& 0xff\) -128\) << 8'
+        text,count=re.subn(pattern,'((sample['+channel+'] & 0xff) -128) * 256',text)
+        if count!=1:raise RuntimeError('Unexpected 8-bit PCM upconversion')
+    old='return (v[LEFTCHANNEL] << 16) | (v[RIGHTCHANNEL] & 0xffff);'
+    if text.count(old)!=1:raise RuntimeError('Unexpected signed PCM packing')
+    text=text.replace(old,'return (uint32_t(uint16_t(v[LEFTCHANNEL])) << 16) | uint16_t(v[RIGHTCHANNEL]);',1)
+    start=text.index('bool Audio::playChunk()');end=text.index('\nvoid Audio::loop()',start)
+    chunk=text[start:end]
+    # Resume the second byte of a mono 8-bit word if its DMA write fails.
+    old='''                sample[LEFTCHANNEL]  = x;
+                sample[RIGHTCHANNEL] = x;
+                while(1) {
+                    if(playSample(sample)) break;
+                } // Can't send?
+                sample[LEFTCHANNEL]  = y;
+                sample[RIGHTCHANNEL] = y;
+                while(1) {
+                    if(playSample(sample)) break;
+                } // Can't send?'''
+    new='''#if APP_SUNTON_PANEL == 3
+                if(!m_elmaPcm8HalfPending){
+                    sample[LEFTCHANNEL]=sample[RIGHTCHANNEL]=x;
+                    if(!playSample(sample))return false;
+                    m_elmaPcm8HalfPending=true;
+                }
+                sample[LEFTCHANNEL]=sample[RIGHTCHANNEL]=y;
+                if(!playSample(sample))return false;
+                m_elmaPcm8HalfPending=false;
+#else
+'''+old+'\n#endif'
+    if chunk.count(old)!=1:raise RuntimeError('Unexpected 8-bit mono writer')
+    chunk=chunk.replace(old,new,1)
+    stereo=chunk.index('        if(getChannels() == 2)')
+    old='''                while(1) {
+                    if(playSample(sample)) break;
+                } // Can't send?'''
+    position=chunk.index(old,stereo)
+    chunk=chunk[:position]+'''#if APP_SUNTON_PANEL == 3
+                if(!playSample(sample))return false;
+#else
+'''+old+'\n#endif'+chunk[position+len(old):]
+    # 16-bit stereo previously discarded failed samples and reset its offset.
+    position=chunk.index('    if(getBitsPerSample() == 16)')
+    prefix,tail=chunk[:position],chunk[position:]
+    old='''        if(getChannels() == 2) {
+            m_curSample = 0;'''
+    new='''        if(getChannels() == 2) {
+#if APP_SUNTON_PANEL != 3
+            m_curSample = 0;
+#endif'''
+    if tail.count(old)!=1:raise RuntimeError('Unexpected stereo frame offset')
+    tail=tail.replace(old,new,1)
+    old='                playSample(sample);'
+    if tail.count(old)!=1:raise RuntimeError('Unexpected stereo sample writer')
+    tail=tail.replace(old,'''#if APP_SUNTON_PANEL == 3
+                if(!playSample(sample))return false;
+#else
+                playSample(sample);
+#endif''',1)
+    text=text[:start]+prefix+tail+text[end:]
+    text=text.replace('void Audio::setDefaults() {','''void Audio::setDefaults() {
+#if APP_SUNTON_PANEL == 3
+    m_elmaPcm8HalfPending=false;
+#endif''',1)
+
+    # A failed frame must not pass through volume/EQ/DSP a second time.
+    a=text.index('bool Audio::playSample(int16_t sample[2]) {');b=text.index('\nvoid Audio::setTone(',a)
+    sample=text[a:b]
+    sample=sample.replace('bool Audio::playSample(int16_t sample[2]) {','''bool Audio::playSample(int16_t sample[2]) {
+#if APP_SUNTON_PANEL == 3
+    uint32_t s32=m_elmaPendingPcm;
+    if(!m_elmaI2sPending){
+#endif''',1)
+    sample=sample.replace('    uint32_t s32 = Gain(sample); // vosample2lume;','''#if APP_SUNTON_PANEL == 3
+    s32=Gain(sample);
+#else
+    uint32_t s32=Gain(sample);
+#endif''',1)
+    sample=sample.replace('    m_i2s_bytesWritten = 0;','''#if APP_SUNTON_PANEL == 3
+    m_elmaPendingPcm=s32;
+    }
+#endif
+    m_i2s_bytesWritten = 0;''',1)
+    sample=sample.replace('        return false;','''#if APP_SUNTON_PANEL == 3
+        m_elmaI2sPending=true;
+#endif
+        return false;''')
+    # The final successful return, not the optional external-DSP early return.
+    sample=sample.replace('    return true;\n}', '''#if APP_SUNTON_PANEL == 3
+    m_elmaI2sPending=false;
+#endif
+    return true;
+}''',1)
+    text=text[:a]+sample+text[b:]
+    old='''    while(m_validSamples) {
+        playChunk();
+    }'''
+    new='''#if APP_SUNTON_PANEL == 3
+    uint8_t writeFailures=0;
+    while(m_validSamples){
+        if(playChunk())writeFailures=0;
+        else if(++writeFailures>=3){
+            m_validSamples=0;m_curSample=0;m_f_running=false;
+            m_elmaI2sPending=false;m_elmaPcm8HalfPending=false;
+            if(audio_info)audio_info("I2S output stalled after retries");
+            break;
+        }else vTaskDelay(1);
+    }
+#else
+'''+old+'\n#endif'
+    if text.count(old)!=2:raise RuntimeError('Unexpected decoded/DMA cleanup drains')
+    text=text.replace(old,new)
+    text=text.replace('    m_elmaPcm8HalfPending=false;\n#endif','    m_elmaPcm8HalfPending=false;m_elmaI2sPending=false;\n#endif',1)
+    text='// ELMA_PCM_INTEGRITY\n'+text
+    header=source.with_name('Audio.h');h=header.read_text(encoding='utf8')
+    marker='    int16_t         m_curSample = 0;'
+    if h.count(marker)!=1:raise RuntimeError('Unexpected Audio frame state')
+    h=h.replace(marker,marker+'\n#if APP_SUNTON_PANEL == 3\n    bool m_elmaPcm8HalfPending=false,m_elmaI2sPending=false;\n    uint32_t m_elmaPendingPcm=0;\n#endif',1)
+    header.write_text(h,encoding='utf8');source.write_text(text,encoding='utf8')
+    print('[audio] Saturation-safe EQ, defined PCM packing and resumable DMA writes')
+
+# Cleanup emits zero frames, never a stale partially written decoded block.
+for source in audio_sources:
+    text=source.read_text(encoding='utf8')
+    marker='// ELMA_DMA_DRAIN_CURSOR'
+    if marker not in text:
+        needle='    m_validSamples = m_i2s_config.dma_buf_len * m_i2s_config.dma_buf_count;'
+        if text.count(needle)!=1:raise RuntimeError('Unexpected DMA drain size')
+        text=text.replace(needle,marker+'\n#if APP_SUNTON_PANEL == 3\n    m_curSample=0;m_elmaI2sPending=false;m_elmaPcm8HalfPending=false;\n#endif\n'+needle,1)
+        source.write_text(text,encoding='utf8')

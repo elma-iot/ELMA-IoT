@@ -1,3 +1,4 @@
+#include "sunton_cpu.h"
 #include "robot_service.h"
 #include "spk_media.h"
 #include "motion_capture.h"
@@ -17,6 +18,8 @@
 #include "rs485_service.h"
 #include "generated_project_defaults.h"
 #include "device_log.h"
+#include "sunton_dac.h"
+#include "sunton_audio_owner.h"
 #include "web_access.h"
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
@@ -913,12 +916,25 @@ bool parseStorageFileReference(const String& raw, StorageTarget& target, String&
 
 void applyCpuFrequencyPolicy() {
 #if APP_SUNTON_PANEL == 3
-    // On this classic ESP32, manual 240->160/80 MHz PLL changes can stall
-    // the Wi-Fi task after LCD/audio demand disappears. Keep the radio and
-    // internal-DAC timing stable, including when the LCD is fully disabled.
-    if(ESP.getCpuFreqMHz()!=240U)setCpuFrequencyMhz(240U);
-    activeCpuFrequencyMhz=ESP.getCpuFreqMHz();
-    return;
+    {
+    const uint32_t now=millis();
+    const String playback=audioPlayer?audioPlayer->currentState():String("idle");
+    const auto metrics=getSystemMetricsSnapshot();
+    bool load=metrics.cpuLoadAvailable && metrics.cpuLoadPercent>=45;
+    for(uint8_t i=0;i<metrics.cpuLoadCoreCount;++i)load=load||metrics.cpuLoadCorePercent[i]>=65;
+    static uint8_t highLoadSamples=0;
+    highLoadSamples=load?min<uint8_t>(highLoadSamples+1,3):0;
+    const bool busy=playback=="buffering" || playback=="playing" ||
+        (displayManager && (displayManager->presentationState()&3)!=0) || suntonWebBusy() ||
+        (otaManager && otaManager->isBusy()) || storageWriteBlocked(StorageTarget::Sd) || highLoadSamples>=3;
+    static uint32_t busyAt=0;
+    if(busy)busyAt=now;
+    const uint32_t target=busy || now-busyAt<10000 || now<30000?160:80;
+    if(ESP.getCpuFreqMHz()!=target && suntonSetCpu(target)){
+        DebugLog.printf("[power] cpu=%u MHz reason=%s\n",unsigned(ESP.getCpuFreqMHz()),busy?"active":"idle");
+    }
+    activeCpuFrequencyMhz=ESP.getCpuFreqMHz();return;
+    }
 #endif
     const unsigned long now = millis();
     const uint32_t measuredFrequencyMhz = ESP.getCpuFreqMHz();
@@ -3324,6 +3340,31 @@ void serviceCloneProvisioningSerial() {
                 JsonDocument response;plotSerialNext(uint32_t(after),uint32_t(boot),response);
                 String packet="@ELMA_PLOTS ";serializeJson(response,packet);Serial.println(packet);
             }
+#if APP_SUNTON_PANEL == 3
+        } else if (command == "ELMA_DAC_FEEDBACK" || command == "ELMA_DAC_RAW" || command == "ELMA_DAC_TPDF" || command == "ELMA_DAC_ROUND") {
+            SuntonAudioLock owner;
+            elmaDacMode()=command=="ELMA_DAC_FEEDBACK"?SuntonDacMode::Feedback:command=="ELMA_DAC_TPDF"?SuntonDacMode::Tpdf:command=="ELMA_DAC_ROUND"?SuntonDacMode::Round:SuntonDacMode::Raw;
+            elmaDacQuality().reset();
+            DebugLog.printf("[audio-test] native DAC mode=%u (0=raw 1=round 2=TPDF 3=feedback)\n",unsigned(elmaDacMode()));
+        } else if(command=="ELMA_LCD_PRESENTATION" && displayManager) {
+            displayManager->requestLcdPresentation();
+        } else if(command=="ELMA_WEB_PRESENTATION" && displayManager) {
+            displayManager->requestWebPresentation();
+#ifndef APP_DISABLE_WEB_UI
+        } else if(command=="ELMA_POWER_IDLE_TEST" && webServer) {
+            if(audioPlayer && audioPlayer->currentState()=="idle" && displayManager->webPresentationReady() && !otaManager->isBusy() && !storageWriteBlocked(StorageTarget::Sd))webServer->pauseHttpForClockTest();
+            else DebugLog.println("[power-test] Stop playback, switch to web controls and finish transfers first");
+#endif
+        } else if(command=="ELMA_AUDIO_DIAGNOSTICS" && audioPlayer) {
+            const auto d=audioPlayer->diagnostics();
+            DebugLog.printf("[audio-diagnostics] rate=%u clock=%u running=%u pcm_bits=%u channels=%u input=%u/%u min_input=%u empty_input_obs=%u max_service_us=%u max_gap_us=%u pre_peak=%u filter_clips=%u nonfinite=%u write_errors=%u short_writes=%u frames=%u mode=%u\n",d.activeSampleRateHz,d.outputClockHz,d.clockRunning,d.bitsPerSample,d.channelCount,d.inputBytes,d.inputCapacity,d.minInputBytes,d.emptyInputObservations,d.maxServiceUs,d.maxServiceGapUs,d.preGainPeak,d.filterClips,d.nonFinite,d.driverErrors,d.shortWrites,d.framesWritten,d.dacMode);
+        } else if(command=="ELMA_AUDIO_DIAGNOSTICS_RESET") {
+            SuntonAudioLock owner;elmaDacCounters()=SuntonDacCounters{};
+            DebugLog.println("[audio-diagnostics] counters reset");
+        } else if(command=="ELMA_AUDIO_TIMING_ON" || command=="ELMA_AUDIO_TIMING_OFF") {
+            elmaAudioTimingLog()=command.endsWith("_ON");
+
+#endif
         } else if (command == "ELMA_WIFI_LEGACY_TEST" || command == "ELMA_WIFI_NORMAL_TEST") {
             // Volatile USB compatibility test, never changes saved credentials.
             const uint8_t protocols=command=="ELMA_WIFI_LEGACY_TEST" ? WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G : WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N;
@@ -3913,6 +3954,15 @@ void processDeferredActions() {
         return;
     }
 
+    // A queued Stop must release decoder buffers before a pending LCD enable
+    // allocates its UI, rather than waiting behind that allocation.
+    if (deferredActions->stopPending) {
+        deferredActions->stopPending = false;
+        clearPreviewResumeState();
+        audioPlayer->stop();
+        mqttManager->publishState();
+    }
+
     if (deferredActions->settingsApplyPending) {
         flushPendingSettingsNow();
     }
@@ -3927,13 +3977,6 @@ void processDeferredActions() {
             mqttManager->requestDisconnect(error);
         }
         deferredActions->mqttConnectionChangePending = false;
-    }
-
-    if (deferredActions->stopPending) {
-        clearPreviewResumeState();
-        audioPlayer->stop();
-        deferredActions->stopPending = false;
-        mqttManager->publishState();
     }
 
     if (deferredActions->volumePending) {
@@ -4061,6 +4104,7 @@ void processDeferredActions() {
 
 void setup() {
 #if APP_SUNTON_PANEL == 3
+    suntonSetCpu(160);
     digitalWrite(26,LOW);pinMode(26,OUTPUT);
     for(uint8_t pin:{uint8_t(4),uint8_t(16),uint8_t(17)}){digitalWrite(pin,HIGH);pinMode(pin,OUTPUT);}
 #endif
@@ -4318,6 +4362,9 @@ void setup() {
     },[](const String& action,JsonVariantConst args,String& error){
         return webServer->panelCommand(action,args,error);
     });
+#endif
+#if APP_SUNTON_PANEL == 3
+    webServer->setPresentationHandlers([](){return displayManager->presentationState();},[](){displayManager->requestWebPresentation();});
 #endif
     webServer->setSettingsReader([](const WebServerManager::SettingsVisitor& visit){
         SettingsApplyGuard guard(pdMS_TO_TICKS(20));
@@ -4953,7 +5000,7 @@ void loop() {
         sampleSystemMetrics();
         appState->setFreeHeap(getSystemMetricsSnapshot().freeHeapBytes);
 #if APP_SUNTON_PANEL == 3 && !defined(APP_DISABLE_WEB_UI)
-        if(!settings->oled.enabled && webServer)webServer->releasePanelCaches();
+        if(displayManager && displayManager->webPresentationReady() && webServer)webServer->releasePanelCaches();
 #endif
         mqttManager->publishChipTemperature();
         if(logicLedOwned && String(logicDevice.mode())=="stopped") {

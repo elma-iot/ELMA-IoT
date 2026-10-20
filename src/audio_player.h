@@ -17,6 +17,10 @@ class AudioPlayer {
         uint8_t libraryVolume = 0;
         bool stereoEnabled = false;
         bool diagnosticTestMode = false;
+        uint32_t outputClockHz=0,inputBytes=0,inputCapacity=0,minInputBytes=0;
+        uint32_t emptyInputObservations=0,maxServiceUs=0,maxServiceGapUs=0,preGainPeak=0;
+        uint32_t filterClips=0,nonFinite=0,driverErrors=0,shortWrites=0,framesWritten=0;
+        uint8_t dacMode=0;bool clockRunning=false;
     };
 
     void begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t initialVolumePercent, bool outputEnabled, AppState& appState);

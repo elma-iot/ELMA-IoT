@@ -1,3 +1,4 @@
+#include "sunton_cpu.h"
 #include "robot_service.h"
 #include "motion_capture.h"
 #include "camera_service.h"
@@ -1076,9 +1077,11 @@ void WebServerManager::begin(
     // before middleware. Middleware protects future API handlers by default.
     server_.addMiddleware([this](AsyncWebServerRequest* request,ArMiddlewareNext next){
 #if APP_SUNTON_PANEL == 3
+        suntonWebBoost();
+        if(gatePresentation(request))return;
         // Reserve the remaining heap for a small retry response rather than
         // constructing a large JSON payload or starting another asset stream.
-        if(request->url()!="/api/stop" && request->url()!="/api/volume" &&
+        if(request->url()!="/api/stop" && request->url()!="/api/volume" && request->url()!="/api/security" && !request->url().startsWith("/api/presentation") &&
            (heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<16384 ||
             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<4096)){
             // Let the response lifecycle close the socket after receiving
@@ -1092,6 +1095,9 @@ void WebServerManager::begin(
 #if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO) && !defined(APP_DISABLE_WEB_UI)
     MotionCapture::routes(server_,[this](AsyncWebServerRequest* request){return !redirectCaptivePortalIfNeeded(request)&&ensureAuthorized(request);});
 #endif
+#if APP_SUNTON_PANEL == 3
+    registerPresentationRoutes();
+#endif
     registerSecurityRoutes();
     registerApiRoutes();
     registerWebRoutes();
@@ -1101,6 +1107,12 @@ void WebServerManager::begin(
 }
 
 bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
+#if APP_SUNTON_PANEL == 3
+    suntonWebBoost();
+    // Upload/body callbacks run before server middleware. Gate them before
+    // parsing settings or opening files while LCD widgets own the memory.
+    if(request->url().startsWith("/api/") && gatePresentation(request))return false;
+#endif
 #if APP_SUNTON_PANEL
     if(request->url().startsWith("/api/storage") && storageTargetFromRequest(request)==StorageTarget::Flash){
         request->send(404,"text/plain","Internal file browsing is unavailable on this board; use SD storage.");return false;
@@ -1125,12 +1137,19 @@ bool WebServerManager::rejectIfWebUiLocked(AsyncWebServerRequest* request) {
     const String path=request->url();
     // Static assets must load the lock screen; only sanitized status and the
     // security protocol remain accessible through the API while locked.
-    if(!path.startsWith("/api/") || path=="/api/security" || (path=="/api/status"&&request->method()==HTTP_GET))return false;
+    if(!path.startsWith("/api/") || path=="/api/security" || ((path=="/api/status" || path=="/api/presentation")&&request->method()==HTTP_GET))return false;
     if(!security_.locked())return false;
     JsonDocument doc;doc["error"]="Interface locked";doc["locked"]=true;sendJson(request,doc,423);return true;
 }
 void WebServerManager::securityTick(){
     security_.tick();
+#if APP_SUNTON_PANEL == 3
+    if(clockTestResumeAt_ && int32_t(millis()-clockTestResumeAt_)>=0){
+        clockTestResumeAt_=0;server_.begin();
+        listenerStartPending_=server_.state()!=LISTEN;listenerRetryAt_=millis();
+        DebugLog.println("[power-test] HTTP resumed after quiet interval");
+    }
+#endif
     static uint32_t lastWebAccessTick=0;
     if(settingsGetter_ && millis()-lastWebAccessTick>=1000){lastWebAccessTick=millis();
         if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){WebAccess::tick(settings,otaManager_ && otaManager_->isBusy());});
@@ -1142,6 +1161,14 @@ void WebServerManager::securityTick(){
 }
 void WebServerManager::setWebUiLocked(bool locked){security_.externalLock(locked);}
 bool WebServerManager::webUiLocked() const {return security_.locked();}
+#if APP_SUNTON_PANEL == 3
+void WebServerManager::pauseHttpForClockTest(){
+    // USB-only, bounded and volatile. Wi-Fi, touch and Logics stay running.
+    // Existing responses may finish; browser polling cannot renew the lease.
+    server_.end();listenerStartPending_=false;clockTestResumeAt_=millis()+30000;
+    DebugLog.println("[power-test] HTTP paused for 30 seconds to measure idle clock; auto-resume armed");
+}
+#endif
 
 bool WebServerManager::redirectCaptivePortalIfNeeded(AsyncWebServerRequest* request) {
     if(settingsGetter_){
@@ -1165,7 +1192,7 @@ void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocume
     // allocations must return a retryable response, never reset the device.
     char* data = nullptr;
 #if APP_SUNTON_PANEL == 3
-    const bool smallPlaybackControl=length<512 && (request->url()=="/api/stop" || request->url()=="/api/volume");
+    const bool smallPlaybackControl=length<512 && (request->url()=="/api/stop" || request->url()=="/api/volume" || request->url()=="/api/security" || request->url().startsWith("/api/presentation"));
     const size_t jsonReserve=smallPlaybackControl?4096:16384;
     const size_t jsonContiguousReserve=smallPlaybackControl?1024:4096;
 #else

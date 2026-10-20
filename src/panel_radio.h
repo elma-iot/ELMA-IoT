@@ -72,6 +72,14 @@ inline bool request(JsonVariantConst args,String& error){
  if(!job){xSemaphoreTake(mutex(),portMAX_DELAY);busy()=false;xSemaphoreGive(mutex());error="Radio memory unavailable";return false;}
  if(xTaskCreatePinnedToCore(worker,"panelRadio",6144,job,1,nullptr,0)!=pdPASS){delete job;xSemaphoreTake(mutex(),portMAX_DELAY);busy()=false;xSemaphoreGive(mutex());error="Radio worker unavailable";return false;}return true;
 }
-inline void snapshot(JsonObject root){if(!mutex())return;xSemaphoreTake(mutex(),portMAX_DELAY);String text=result();bool pending=busy();xSemaphoreGive(mutex());JsonDocument doc(panelJsonAllocator());deserializeJson(doc,text);root.set(doc.as<JsonObjectConst>());root["busy"]=pending;}
+inline void snapshot(JsonObject root){
+ if(!mutex())return;
+ JsonDocument doc(panelJsonAllocator());
+ xSemaphoreTake(mutex(),portMAX_DELAY);
+ // Parse the stable cache under its lock, avoiding a second large String.
+ deserializeJson(doc,result());const bool pending=busy();
+ xSemaphoreGive(mutex());
+ root.set(doc.as<JsonObjectConst>());root["busy"]=pending;
+}
 }
 #endif

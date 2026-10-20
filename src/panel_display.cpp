@@ -7,7 +7,9 @@
 #endif
 
 bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
+#if APP_SUNTON_PANEL != 3
     if (!getBuffer()) return false;
+#endif
 #if APP_SUNTON_PANEL
     board_.reset(new SuntonPanel());
     if(!board_->start(touchEnabled)){board_.reset();return false;}

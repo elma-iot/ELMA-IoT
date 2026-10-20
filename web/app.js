@@ -13108,6 +13108,11 @@ async function request(path, options = {}) {
   if (isApiPath(path)) {
     markDeviceReachability(true);
   }
+  if (response.headers.get("X-ELMA-Presentation") === "lcd") {
+    const back=globalThis.location?.pathname||"/";
+    globalThis.location?.replace?.(`/presentation?return=${encodeURIComponent(back)}`);
+    throw new Error("LCD controls active; opening the synchronized status view.");
+  }
   // Mutations wait cooperatively without holding an AsyncTCP callback or
   // discarding a user's active transfer. Every retry renews foreground priority.
   if (response.status === 423 && String(path).startsWith("/api/storage/delete")) {

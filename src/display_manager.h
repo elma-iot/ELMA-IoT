@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <atomic>
 #if !APP_DISABLE_DISPLAY
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -43,10 +44,20 @@ class DisplayManager {
     void loop(const AppStateSnapshot& state);
 #if APP_SUNTON_PANEL == 3
     void quietForDiagnostics(bool dark);
+    uint8_t presentationState()const{return presentation_.load(std::memory_order_acquire);}
+    bool webPresentationReady()const{return (presentationState()&3)==0;}
+    void requestWebPresentation(){webPresentationRequested_.store(true);}
+    void requestLcdPresentation(){lcdPresentationRequested_.store(true);}
 #endif
 
   private:
+    bool panelBootAnimationPending_=true;
 #if APP_SUNTON_PANEL == 3
+    std::atomic<uint8_t> presentation_{0}; // low bits: 0 web, 1 LCD, 2 LCD pending; bit 2 enabled.
+    std::atomic<bool> webPresentationRequested_{false},lcdPresentationRequested_{false};
+    bool restorePresentationPending_=false,lcdWakeRequested_=false;
+    uint32_t presentationRestoreAt_=0,presentationWaitAt_=0;
+    void restorePanelPresentation();
     uint32_t diagnosticQuietUntil_=0;
     bool screenOff_=false,wakeTouchPending_=false;
     void setScreenOff(bool off);

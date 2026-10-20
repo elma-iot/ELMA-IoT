@@ -3,6 +3,7 @@
 
 #include <Wire.h>
 #include "shared_i2c.h"
+#include "storage_backend.h"
 #include "device_log.h"
 #if APP_HAS_ONBOARD_PANEL
 #include "rotary_hmi.h"
@@ -41,13 +42,20 @@ int16_t DisplayManager::bottomDividerY(int16_t displayHeight) const {
 }
 
 void DisplayManager::begin(const OledSettings& settings) {
+    panelBootAnimationPending_=settings.enabled;
     applySettings(settings);
 }
 
 void DisplayManager::applySettings(const OledSettings& settings) {
     SharedI2c::Guard bus; if(!bus)return;
 #if APP_SUNTON_PANEL == 3
-    setScreenOff(false);wakeTouchPending_=false;
+    // Changing brightness/timers while the web owns the UI must not allocate LCD widgets.
+    if(screenOff_ && panel_ && settings.enabled && settings_.enabled){
+        settings_=settings;panel_->setRotation(rotationIndex());return;
+    }
+    restorePresentationPending_=false;lcdWakeRequested_=false;
+    screenOff_=false;wakeTouchPending_=false;
+    presentation_.store(settings.enabled?5:0,std::memory_order_release);
 #endif
 #if APP_HAS_ONBOARD_PANEL
     const bool keepPanel=panel_&&settings.enabled&&settings.displayType=="panel"&&settings.touchEnabled==settings_.touchEnabled;
@@ -74,6 +82,9 @@ void DisplayManager::applySettings(const OledSettings& settings) {
     scrollOffset_ = 0;
     lastActivityAt_ = millis();
     if (!settings_.enabled || !isOledMode()) {
+#if APP_SUNTON_PANEL == 3
+        lv_mem_buf_free_all();presentation_.store(0,std::memory_order_release);
+#endif
         return;
     }
 
@@ -93,9 +104,13 @@ void DisplayManager::applySettings(const OledSettings& settings) {
             if(!RoundHmi::begin(*panel_,rotationIndex(),settings_.circularMenu)){panel_->ensureTextBuffer();DebugLog.println("[display] Circular menu initialization failed");}
 #else
             dashboard_.reset(new PanelDashboard(*panel_));
-            if(!dashboard_->begin(rotationIndex())) { dashboard_.reset(); panel_->ensureTextBuffer(); DebugLog.println("[display] LVGL allocation failed; using text interface"); }
+            if(!dashboard_->begin(rotationIndex(),panelBootAnimationPending_)) { dashboard_.reset(); panel_->ensureTextBuffer(); DebugLog.println("[display] LVGL allocation failed; using text interface"); }
+            else panelBootAnimationPending_=false;
 #endif
         }
+#if APP_SUNTON_PANEL == 3
+        presentation_.store(panel_?5:4,std::memory_order_release);
+#endif
         lastSignature_ = "";
         lastCenterText_ = "";
         return;
@@ -323,10 +338,40 @@ void DisplayManager::drawWrappedLine(Adafruit_GFX& display, const String& text, 
 
 #if APP_SUNTON_PANEL == 3
 void DisplayManager::setScreenOff(bool off) {
-    if(screenOff_==off)return;
-    screenOff_=off;
-    if(panel_){panel_->sleep(off);panel_->brightness(off?0:settings_.brightness);}
-    DebugLog.printf("[display] screen=%s\n",off?"sleep":"awake");
+    if(screenOff_==off && !restorePresentationPending_)return;
+    if(off){
+        restorePresentationPending_=false;lcdWakeRequested_=false;
+        // Keep the panel's small I2C touch driver alive, not its LVGL tree/pixels.
+        dashboard_.reset();
+        if(panel_){panel_->releaseTextBuffer();panel_->sleep(true);panel_->brightness(0);}
+        lv_mem_buf_free_all();screenOff_=true;
+        presentation_.store(settings_.enabled?4:0,std::memory_order_release);
+        DebugLog.printf("[presentation] web ready; LCD widgets released heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
+    }else{
+        screenOff_=false;restorePresentationPending_=true;
+        presentationRestoreAt_=millis()+350;presentationWaitAt_=millis();
+        presentation_.store(6,std::memory_order_release); // Gate heavy HTTP before allocation.
+        DebugLog.println("[presentation] LCD requested; draining web responses");
+    }
+}
+void DisplayManager::restorePanelPresentation(){
+    if(!panel_||!settings_.enabled){restorePresentationPending_=false;presentation_.store(0);return;}
+    if(int32_t(millis()-presentationRestoreAt_)<0)return;
+    const size_t available=heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+    if(available<32768 || heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<8192){
+        if(millis()-presentationWaitAt_>5000){setScreenOff(true);DebugLog.println("[presentation] LCD deferred: memory busy; audio continues");}
+        return;
+    }
+    panel_->sleep(false);panel_->setRotation(rotationIndex());panel_->brightness(settings_.brightness);
+    if(settings_.interfaceMode=="lvgl"){
+        dashboard_.reset(new(std::nothrow) PanelDashboard(*panel_));
+        if(!dashboard_||!dashboard_->begin(rotationIndex(),false)){
+            dashboard_.reset();setScreenOff(true);return;
+        }
+    }else if(!panel_->ensureTextBuffer()){setScreenOff(true);return;}
+    restorePresentationPending_=false;lastActivityAt_=millis();dimmed_=false;
+    presentation_.store(5,std::memory_order_release);
+    DebugLog.printf("[presentation] LCD ready; full web paused heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
 }
 void DisplayManager::quietForDiagnostics(bool dark) {
     diagnosticQuietUntil_=millis()+30000;
@@ -344,11 +389,19 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
 #endif
     SharedI2c::Guard bus(0); if(!bus)return;
 #if APP_SUNTON_PANEL == 3
-    if(panel_ && (screenOff_||wakeTouchPending_)){
+    if(webPresentationRequested_.exchange(false))setScreenOff(true);
+    if(lcdPresentationRequested_.exchange(false))lcdWakeRequested_=true;
+    if(restorePresentationPending_){restorePanelPresentation();return;}
+    if(panel_ && (screenOff_||wakeTouchPending_||lcdWakeRequested_)){
         if(millis()-lastTouchAt_<30)return;
         lastTouchAt_=millis();int16_t x,y;const bool touched=panel_->readRawTouch(x,y);
-        if(screenOff_ && touched){markActivity();wakeTouchPending_=true;}
+        if(screenOff_ && touched){lcdWakeRequested_=true;wakeTouchPending_=true;}
         else if(wakeTouchPending_ && !touched)wakeTouchPending_=false;
+        // Do not interrupt an OTA or foreground SD transfer to rebuild widgets.
+        if(lcdWakeRequested_ && !wakeTouchPending_ && !state.ota.busy &&
+           !storageWriteBlocked(StorageTarget::Sd) && !storageForegroundPending(StorageTarget::Sd)){
+            lcdWakeRequested_=false;markActivity();
+        }
         return; // A wake gesture must not activate the covered control.
     }
     if(panel_ && settings_.screenTimeoutSeconds && millis()-lastActivityAt_>=settings_.screenTimeoutSeconds*1000UL){

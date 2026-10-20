@@ -13,7 +13,13 @@
 // official board profile owns controller commands, mode pins, reset and PWM.
 class PanelDisplay : public GFXcanvas1 {
 public:
-    PanelDisplay() : GFXcanvas1(kPanelWidth, kPanelHeight) {}
+    PanelDisplay() : GFXcanvas1(kPanelWidth, kPanelHeight,
+#if APP_SUNTON_PANEL == 3
+        false // LVGL/boot artwork draws directly; allocate text pixels on demand.
+#else
+        true
+#endif
+    ) {}
     bool begin(bool touchEnabled, uint8_t rotation, uint8_t brightness);
     void flush();
     bool readRawTouch(int16_t &x, int16_t &y);
@@ -28,7 +34,7 @@ public:
     }
     bool readTouch(int16_t &x, int16_t &y);
     void releaseTextBuffer(){if(buffer&&buffer_owned)free(buffer);buffer=nullptr;buffer_owned=true;}
-    bool ensureTextBuffer(){if(!buffer)buffer=static_cast<uint8_t*>(calloc((kPanelWidth+7)/8*kPanelHeight,1));return buffer!=nullptr;}
+    bool ensureTextBuffer(){if(!buffer){buffer=static_cast<uint8_t*>(calloc((kPanelWidth+7)/8*kPanelHeight,1));buffer_owned=true;}return buffer!=nullptr;}
     uint32_t spiClock() const {
 #if APP_SUNTON_PANEL
         return board_?board_->spiClock():0;

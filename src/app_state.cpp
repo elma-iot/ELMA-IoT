@@ -268,3 +268,11 @@ void AppState::toJson(JsonObject root) const {
     system["freeHeap"] = copy.system.freeHeap;
     system["lastError"] = copy.system.lastError;
 }
+
+bool AppState::appendPlaybackSummary(JsonObject root) const {
+    if(!ensureMutex() || xSemaphoreTake(mutex_,pdMS_TO_TICKS(10))!=pdTRUE)return false;
+    root["state"]=state_.playback.state;root["title"]=state_.playback.title;
+    root["volume"]=state_.playback.volumePercent;
+    root["position"]=state_.playback.positionSeconds;root["duration"]=state_.playback.durationSeconds;
+    xSemaphoreGive(mutex_);return true;
+}

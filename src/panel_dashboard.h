@@ -16,7 +16,7 @@ public:
  using Snapshot=std::function<void(const String&,JsonObject)>;
  using Command=std::function<bool(const String&,JsonVariantConst,String&)>;
  explicit PanelDashboard(PanelDisplay& panel):panel_(panel),state_(panelJsonAllocator()){}
- ~PanelDashboard();bool begin(uint8_t rotation);
+ ~PanelDashboard();bool begin(uint8_t rotation,bool bootAnimation=true);
  void loop(const AppStateSnapshot&,const Snapshot&,const Command&,const String&);
  bool touched(){bool v=touched_;touched_=false;return v;}
 private:

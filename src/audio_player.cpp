@@ -1,3 +1,4 @@
+#include "sunton_cpu.h"
 #ifndef APP_DISABLE_AUDIO
 #include "device_log.h"
 #include "audio_player.h"
@@ -78,6 +79,9 @@ bool isRedirectStatus(int status) {
 }
 
 void requestAudioPerformanceClock() {
+#if APP_SUNTON_PANEL == 3
+    suntonSetCpu(160);return;
+#endif
     const uint32_t currentMhz = ESP.getCpuFreqMHz();
     if (currentMhz >= 240U) return;
     if (setCpuFrequencyMhz(240U)) {
@@ -312,6 +316,15 @@ void clearOverlay(AudioPlayer::Impl* impl) {
 }
 
 void reconstructAudioOutput(Audio& audio, uint8_t bclkPin, uint8_t wsPin) {
+#if APP_SUNTON_PANEL == 3
+    if(bclkPin==255 && wsPin==254){
+        // Audio::~Audio -> setDefaults -> playI2Sremains drains DMA. A stopped
+        // clock makes that drain retry forever. Keep the grounded output mute
+        // while cleanup runs, and stop the replacement clock only afterwards.
+        elmaGateSuntonDac(false);
+        i2s_start(kSpeakerI2s);
+    }
+#endif
     audio.~Audio();
 #if defined(CONFIG_IDF_TARGET_ESP32)
     new (&audio) Audio(bclkPin == 255 && wsPin == 254, I2S_DAC_CHANNEL_LEFT_EN);
@@ -493,6 +506,13 @@ bool loadWavOverlay(StorageTarget target, const String& path, AudioPlayer::Impl:
 }  // namespace
 
 void audio_info(const char* info) {
+#if APP_SUNTON_PANEL == 3
+    if(info && g_impl && !g_impl->stopRequested && !strcmp(info,"I2S output stalled after retries")){
+        g_impl->state="error";g_impl->retryPending=false;
+        if(g_impl->appState)g_impl->appState->setLastError(info);
+        g_impl->publish();
+    }
+#endif
     if (info != nullptr) {
         DebugLog.printf("[audio] %s\n", info);
     }
@@ -563,7 +583,11 @@ void audio_process_i2s(uint32_t* sample, bool* continueI2S) {
         }
     }
 #if APP_SUNTON_PANEL == 3
-    if(sample&&g_impl&&g_impl->usesInternalDac())*sample=elmaScaleDacPcm(*sample,g_impl->dacGainPercent);
+    if(sample&&g_impl&&g_impl->usesInternalDac()){
+        const uint32_t peak=max(abs(int16_t(*sample>>16)),abs(int16_t(*sample)));
+        elmaDacCounters().preGainPeak=max(elmaDacCounters().preGainPeak,peak);
+        *sample=elmaScaleDacPcm(*sample,g_impl->dacGainPercent);
+    }
 #endif
     if(sample&&g_impl){++g_impl->pcmFrames;g_impl->pcmPeak=max(g_impl->pcmPeak,uint32_t(max(abs(int16_t(*sample>>16)),abs(int16_t(*sample)))));}
     if(sample&&g_impl)LedAudio::playback().push(int16_t(*sample>>16),int16_t(*sample),g_impl->activeSampleRateHz);
@@ -668,7 +692,16 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
         const auto worker=[](void* context){
             suntonAudioTask=xTaskGetCurrentTaskHandle();
             auto* player=static_cast<AudioPlayer*>(context);
-            for(;;){player->loop();vTaskDelay(pdMS_TO_TICKS(1));}
+            for(;;){
+                player->loop();
+                uint32_t waitMs=20;
+                {SuntonAudioLock owner;
+                    if(player->impl_ && (player->impl_->state=="playing" || player->impl_->state=="buffering"))waitMs=1;
+                }
+                // Polling every tick while stopped wastes wakeups and aliases
+                // the tick-based CPU estimator into reporting a busy core.
+                vTaskDelay(pdMS_TO_TICKS(waitMs));
+            }
         };
         if(xTaskCreatePinnedToCore(worker,"lcdAudio",6144,this,3,&suntonAudioTask,1)!=pdPASS)
             DebugLog.println("[audio] Dedicated task unavailable; retaining cooperative service");
@@ -700,7 +733,11 @@ void AudioPlayer::loop() {
     if (impl_->mediaHeld || !impl_->outputDriverReady) return;
     if (impl_->state == "playing" && impl_->lastServiceUs) {
         impl_->maximumServiceGapUs = max(impl_->maximumServiceGapUs, uint32_t(micros()-impl_->lastServiceUs));
-        if (millis()-impl_->lastTimingReport >= 10000) {
+        if (millis()-impl_->lastTimingReport >= 10000
+#if APP_SUNTON_PANEL == 3
+            && elmaAudioTimingLog()
+#endif
+        ) {
             DebugLog.printf("[audio] service max_gap_us=%u input_bytes=%u rate=%u\n", impl_->maximumServiceGapUs, unsigned(impl_->audio.inBufferFilled()), unsigned(impl_->activeSampleRateHz));
             DebugLog.printf("[audio] output pcm_frames=%u pcm_peak=%u library_volume=%u\n",impl_->pcmFrames,impl_->pcmPeak,impl_->hardwareAudioVolume);
 #if APP_SUNTON_PANEL == 3
@@ -726,7 +763,19 @@ void AudioPlayer::loop() {
             if (!started){stop();if (impl_->appState)impl_->appState->setLastError("Offline speech playback failed");return;}
         }
     }
+#if APP_SUNTON_PANEL == 3
+    const uint32_t serviceStarted=micros();
+    if(impl_->state=="playing"){
+        auto& stats=elmaDacCounters();const uint32_t filled=impl_->audio.inBufferFilled();
+        stats.minInputBytes=min(stats.minInputBytes,filled);
+        if(!filled)++stats.emptyInputObservations;
+        stats.maxServiceGapUs=max(stats.maxServiceGapUs,impl_->maximumServiceGapUs);
+    }
+#endif
     impl_->audio.loop();
+#if APP_SUNTON_PANEL == 3
+    elmaDacCounters().maxServiceUs=max(elmaDacCounters().maxServiceUs,uint32_t(micros()-serviceStarted));
+#endif
     if(impl_->bclkPin==255 && impl_->wsPin==254)elmaGateSuntonDac(impl_->audio.isRunning() &&
 #if APP_SUNTON_PANEL == 3
         impl_->dacGainPercent>0
@@ -1283,6 +1332,13 @@ AudioPlayer::DiagnosticsSnapshot AudioPlayer::diagnostics() const {
     snapshot.libraryVolume = impl_->hardwareAudioVolume;
     snapshot.stereoEnabled = impl_->channelCount >= 2;
     snapshot.diagnosticTestMode = impl_->diagnosticTestMode;
+#if APP_SUNTON_PANEL == 3
+    snapshot.outputClockHz=uint32_t(i2s_get_clk(kSpeakerI2s));snapshot.clockRunning=!impl_->dacClockStopped;
+    snapshot.inputBytes=impl_->audio.inBufferFilled();snapshot.inputCapacity=snapshot.inputBytes+impl_->audio.inBufferFree();
+    const auto& c=elmaDacCounters();snapshot.minInputBytes=c.minInputBytes==UINT32_MAX?0:c.minInputBytes;
+    snapshot.emptyInputObservations=c.emptyInputObservations;snapshot.maxServiceUs=c.maxServiceUs;snapshot.maxServiceGapUs=c.maxServiceGapUs;snapshot.preGainPeak=c.preGainPeak;
+    snapshot.filterClips=c.filterClips;snapshot.nonFinite=c.nonFinite;snapshot.driverErrors=c.driverErrors;snapshot.shortWrites=c.shortWrites;snapshot.framesWritten=c.framesWritten;snapshot.dacMode=uint8_t(elmaDacMode());
+#endif
     return snapshot;
 }
 

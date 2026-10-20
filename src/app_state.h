@@ -110,6 +110,7 @@ class AppState {
     void setFreeHeap(uint32_t freeHeap);
     AppStateSnapshot snapshot() const;
     void toJson(JsonObject root) const;
+    bool appendPlaybackSummary(JsonObject root) const;
 
   private:
         bool ensureMutex() const;

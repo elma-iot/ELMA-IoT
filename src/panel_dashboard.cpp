@@ -29,7 +29,7 @@ String valueText(JsonVariantConst v){if(v.is<const char*>())return v.as<String>(
 String itemAt(const String& options,int index){int start=0;while(index-->0){int next=options.indexOf('\n',start);if(next<0)return "";start=next+1;}int end=options.indexOf('\n',start);return options.substring(start,end<0?options.length():end);}
 }
 PanelDashboard::~PanelDashboard(){if(input_)lv_indev_delete(input_);if(display_)lv_disp_remove(display_);if(pixels_)heap_caps_free(pixels_);}
-bool PanelDashboard::begin(uint8_t rotation){
+bool PanelDashboard::begin(uint8_t rotation,bool bootAnimation){
 #if APP_SUNTON_PANEL == 3
  DebugLog.printf("[display-memory] begin heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
 #endif
@@ -64,7 +64,7 @@ bool PanelDashboard::begin(uint8_t rotation){
   lv_label_set_text(s->volumeLabel_,("Volume: "+String(value)+"%").c_str());
   if(lv_event_get_code(e)==LV_EVENT_RELEASED){JsonDocument args;args["value"]=value;s->queue("volume",args);}
  },LV_EVENT_ALL,this);
- tick_=millis();syncMenu();page("gpio");animatePanelBootLogo(display_);
+ tick_=millis();syncMenu();page("gpio");if(bootAnimation)animatePanelBootLogo(display_);
 #if APP_SUNTON_PANEL == 3
  DebugLog.printf("[display-memory] ready heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
 #endif

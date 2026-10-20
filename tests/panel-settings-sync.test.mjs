@@ -5,6 +5,15 @@ import {createConfigurationSettingsPersistenceModule} from '../web/modules/confi
 import {ONBOARD_BOARDS} from '../web/modules/onboard-boards.js';
 
 globalThis.document={activeElement:null};
+for(const value of ['180','0'])test(`screen timeout ${value} is sent as an integer, including zero to disable`,()=>{
+  const module=createConfigurationSettingsPersistenceModule({
+    state:{settings:{}},elements:{settingsForm:{elements:[{name:'oled.screenTimeoutSeconds',type:'number',value}]}},
+    defaultEsp32S3AudioPins:{dout:1,ws:2,bclk:3},defaultSdGpioPins:{cs:4,sck:5,mosi:6,miso:7},effectSelectConfig:[],
+    normalizeDecimalField:()=>{},parseDecimalFieldValue:()=>0,currentBatteryCalibrationMultiplier:()=>1,
+    choosePreferredOledPins:()=>({sda:21,scl:22}),
+  });
+  assert.equal(module.collectForm().oled.screenTimeoutSeconds,Number(value));
+});
 test('bounded initial settings retries recover a busy board without retrying writes',async()=>{
   let reads=0;const waits=[];
   const module=createConfigurationSettingsPersistenceModule({

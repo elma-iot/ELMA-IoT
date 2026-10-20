@@ -41,6 +41,12 @@ class WebServerManager {
     using StatusAppender = std::function<void(JsonObject)>;
     void setLedStatusAppender(StatusAppender appender) { ledStatusAppender_=appender; }
 
+#if APP_SUNTON_PANEL == 3
+    void setPresentationHandlers(std::function<uint8_t()> state,SimpleHandler web){presentationState_=state;presentationWeb_=web;}
+#ifndef APP_DISABLE_WEB_UI
+    void pauseHttpForClockTest();
+#endif
+#endif
     WebServerManager();
     void begin(
         AppState& appState,
@@ -73,6 +79,15 @@ class WebServerManager {
 #endif
 
   private:
+#if APP_SUNTON_PANEL == 3
+    std::function<uint8_t()> presentationState_;SimpleHandler presentationWeb_;
+#ifndef APP_DISABLE_WEB_UI
+    uint32_t clockTestResumeAt_=0;
+    void registerPresentationRoutes();
+    bool gatePresentation(AsyncWebServerRequest* request);
+    void servePresentationPage(AsyncWebServerRequest* request);
+#endif
+#endif
 #if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
     void panelSnapshotWithSettings(const String& page,JsonObject root,const SettingsBundle& settings);
     String panelStoragePath_="/", panelStorageListing_, panelStoragePage_;

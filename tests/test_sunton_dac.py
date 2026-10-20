@@ -65,6 +65,7 @@ inline void dac_output_voltage(int channel,uint8_t level){
 int main(){
  const uint32_t pcm=(uint32_t(uint16_t(30000))<<16)|uint16_t(-20000);
  for(int gain=0;gain<=100;++gain){uint32_t scaled=elmaScaleDacPcm(pcm,gain);assert(int16_t(scaled>>16)==30000*gain/100);assert(int16_t(scaled)==-20000*gain/100);}
+ assert(elmaScaleDacPcm(pcm,255)==pcm);
  assert(elmaScaleDacPcm(pcm,0)==0);assert(elmaScaleDacPcm(pcm,100)==pcm);
  assert(elmaDacSampleRate(44100,true)==44100);
  assert(elmaDacSampleRate(48000,false)==48000);

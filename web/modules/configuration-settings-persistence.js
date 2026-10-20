@@ -327,6 +327,7 @@ export function createConfigurationSettingsPersistenceModule({
     payload.oled.sclPin = Number(selectedOledPin(elements.oledSclPin,payload.oled.sclPin,preferredOledPins.scl));
     payload.oled.resetPin = Number(selectedOledPin(elements.oledResetPin,payload.oled.resetPin,-1));
     payload.oled.dimTimeoutSeconds = Number(payload.oled.dimTimeoutSeconds || 0);
+    payload.oled.screenTimeoutSeconds = Number(payload.oled.screenTimeoutSeconds ?? state.settings?.oled?.screenTimeoutSeconds ?? 0);
     payload.oled.wapeTriggerPin = Number(elements.wapeTriggerPin?.value || payload.oled.wapeTriggerPin || 0);
     payload.oled.displayType = String(elements.displayType?.value || payload.oled.displayType || "oled");
     payload.oled.wapeTriggerEvent = String(elements.wapeTriggerEvent?.value || payload.oled.wapeTriggerEvent || "play_start");

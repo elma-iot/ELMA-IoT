@@ -11,6 +11,7 @@
 
 // Scale signed PCM before the DAC bias is added; never attenuate the bias.
 inline uint32_t elmaScaleDacPcm(uint32_t sample,uint8_t percent) {
+    if(percent>100)percent=100;
     const int32_t left=int16_t(sample>>16),right=int16_t(sample);
     return (uint32_t(uint16_t(left*percent/100))<<16)|uint16_t(right*percent/100);
 }
@@ -28,12 +29,30 @@ inline int elmaAudioDmaLength(int frames,bool internal){
     (void)internal;return frames;
 }
 inline int elmaWriteAudioSample(i2s_port_t port,uint32_t sample,bool internal,size_t* written,int timeout){
+#if APP_SUNTON_PANEL == 3
+    const bool quantized=internal && elmaDacMode()!=SuntonDacMode::Raw;
+    SuntonDacQuality previous;
+    if(quantized)previous=elmaDacQuality();
+#endif
     if(internal){
-        // Bias each signed channel independently, without inter-channel carry.
+#if APP_SUNTON_PANEL == 3
+        if(elmaDacMode()!=SuntonDacMode::Raw)sample=elmaDacQuality().convert(sample,elmaDacMode());
+        else
+#endif
+        // Independent bias also serves as the unchanged USB comparison mode.
         sample=(uint32_t(uint16_t(uint16_t(sample>>16)^0x8000U))<<16)
               |uint16_t(uint16_t(sample)^0x8000U);
     }
-    return i2s_write(port,&sample,sizeof(sample),written,timeout);
+    const int result=i2s_write(port,&sample,sizeof(sample),written,timeout);
+#if APP_SUNTON_PANEL == 3
+    if(internal){
+        if(quantized && (result!=ESP_OK || *written!=sizeof(sample)))elmaDacQuality()=previous;
+        if(result!=ESP_OK)++elmaDacCounters().driverErrors;
+        if(*written!=sizeof(sample))++elmaDacCounters().shortWrites;
+        if(result==ESP_OK && *written==sizeof(sample))++elmaDacCounters().framesWritten;
+    }
+#endif
+    return result;
 }
 
 // Signed PCM zero is 0x8000 after conversion to the ESP32's unsigned DAC.
