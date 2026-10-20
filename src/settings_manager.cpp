@@ -5,6 +5,9 @@
 #include "can_contract.h"
 #include <driver/gpio.h>
 #include "settings_manager.h"
+#if APP_SUNTON_PANEL == 3
+#include "sunton_peripheral_policy.h"
+#endif
 #include "settings_flash_record.h"
 #include "storage_backend.h"
 #include "storage_memory.h"
@@ -718,6 +721,9 @@ SettingsBundle SettingsManager::defaults() const {
     settings.oled.sclPin = DefaultConfig::OLED_SCL_PIN;
     settings.oled.resetPin = DefaultConfig::OLED_RESET_PIN;
     settings.oled.dimTimeoutSeconds = DefaultConfig::OLED_DIM_TIMEOUT_SECONDS;
+#if APP_SUNTON_PANEL == 3
+    settings.oled.screenTimeoutSeconds=180;
+#endif
     settings.oled.wapeTriggerPin = 0;
     settings.oled.wapeTriggerEvent = "play_start";
 
@@ -808,6 +814,16 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     JsonDocument profiles,bindings;
     deserializeJson(profiles,settings.ui.peripheralProfileSelections);
     deserializeJson(bindings,settings.ui.peripheralHelperBindings);
+#if APP_SUNTON_PANEL == 3
+    // Keep the last selection, but leave the no-PSRAM LCD board stopped at boot.
+    settings.audio.lastPlayback.resumeAfterBoot=false;
+    settings.device.statusLedPin=4;settings.device.statusLedGreenPin=16;settings.device.statusLedBluePin=17;
+    settings.device.statusLedType="rgb";
+    for(const auto& group : {std::pair<const char*,const char*>{"audioProfiles","audio"},{"audioInProfiles","audioIn"},{"displayProfiles","display"},{"sensors","sensor"},{"inputs","input"},{"controls","control"},{"expansions","expansion"},{"storage","storage"},{"communication","communication"},{"power","power"}}){
+        auto choices=profiles[group.first].as<JsonArray>();unsigned index=0;
+        for(JsonVariant choice:choices){if(!suntonPeripheralSupported(group.second,choice|"none")){choice.set("none");bindings.remove(String(group.second)+":"+String(index));}++index;}
+    }
+#endif
 #if defined(APP_SPK_BOARD)
     settings.audio.bclkPin=10;settings.audio.wsPin=45;settings.audio.doutPin=9;
     settings.sd.csPin=2;settings.sd.sckPin=11;settings.sd.mosiPin=3;settings.sd.misoPin=12;
@@ -819,7 +835,10 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     settings.audio.bclkPin=255;settings.audio.wsPin=254;settings.audio.doutPin=26;
     settings.sd.csPin=5;settings.sd.sckPin=18;settings.sd.mosiPin=23;settings.sd.misoPin=19;
     profiles["audioProfiles"][0]="sunton-speaker";profiles["audioProfile"]="sunton-speaker";
-    settings.oled.enabled=true;settings.oled.displayType="panel";
+#if APP_SUNTON_PANEL != 3
+    settings.oled.enabled=true;
+#endif
+    settings.oled.displayType="panel";
     settings.oled.width=kPanelWidth;settings.oled.height=kPanelHeight;
     profiles["displayProfiles"][0]="viewe-onboard-lcd";profiles["displayProfile"]="viewe-onboard-lcd";
     JsonArray sensors=profiles["sensors"].is<JsonArray>() ? profiles["sensors"].as<JsonArray>() : profiles["sensors"].to<JsonArray>();
@@ -1070,6 +1089,7 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
         settings.oled.rotation = 0;
     }
     settings.oled.dimTimeoutSeconds = clampValue<uint16_t>(settings.oled.dimTimeoutSeconds, static_cast<uint16_t>(0), static_cast<uint16_t>(3600));
+    settings.oled.screenTimeoutSeconds=min<uint16_t>(settings.oled.screenTimeoutSeconds,3600);
     if (!panel && (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
         (settings.oled.resetPin >= 0 && !safeOutputPin(settings.oled.resetPin)) ||
         oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd, settings.ui))) {
@@ -1198,6 +1218,7 @@ SettingsBundle SettingsManager::load() {
     settings.oled.sclPin = readUInt("oled_scl", settings.oled.sclPin);
     settings.oled.resetPin = readInt("oled_rst", settings.oled.resetPin);
     settings.oled.dimTimeoutSeconds = readUInt("oled_dim", settings.oled.dimTimeoutSeconds);
+    settings.oled.screenTimeoutSeconds=readUInt("oled_off",settings.oled.screenTimeoutSeconds);
     settings.oled.wapeTriggerPin = readUInt("oled_wape_pin", settings.oled.wapeTriggerPin);
     settings.oled.wapeTriggerEvent = readString("oled_wape_evt", settings.oled.wapeTriggerEvent);
 
@@ -1275,7 +1296,7 @@ bool SettingsManager::loadFlashSettings(SettingsBundle& settings) {
         if (!(slot ? valid1 : valid0)) continue;
         File file = LittleFS.open(SettingsFlash::paths[slot], "r");
         if (!file || !file.seek(sizeof(SettingsFlash::Header))) continue;
-        JsonDocument doc(storageJsonAllocator());
+        JsonDocument doc(settingsFlashJsonAllocator());
         if (deserializeJson(doc, file) || doc["schema"] != 1 || !doc["settings"].is<JsonObject>()) continue;
         const std::unique_ptr<SettingsBundle> candidate(new (std::nothrow) SettingsBundle(defaults()));
         String error;
@@ -1298,13 +1319,13 @@ bool SettingsManager::saveFlashSettings(const SettingsBundle& settings) {
     if (!sanitized) return false;
     sanitizeInPlace(*sanitized);
     sanitized->usingSavedSettings = true;
-    JsonDocument doc(storageJsonAllocator());
+    JsonDocument doc(settingsFlashJsonAllocator());
     doc["schema"] = 1;
     toJson(*sanitized, doc["settings"].to<JsonObject>());
     doc["compiledLanguage"] = APP_COMPILED_LANGUAGE_CODE;
     doc["compiledTheme"] = APP_COMPILED_THEME_CODE;
     const size_t length = measureJson(doc);
-    if (doc.overflowed() || !length || length > SettingsFlash::maxBytes) return false;
+    if (doc.overflowed() || !length || length > SettingsFlash::maxBytes) {DebugLog.println("[settings] Insufficient transaction memory; previous configuration retained");return false;}
     SettingsFlash::Header headers[2];
     bool valid[2] = {
         SettingsFlash::inspect(LittleFS, SettingsFlash::paths[0], headers[0]),
@@ -1496,6 +1517,8 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         changed |= storeUInt("oled_w", sanitized.oled.width, baseline.oled.width);
         changed |= storeUInt("oled_h", sanitized.oled.height, baseline.oled.height);
         changed |= storeUInt("oled_rot", sanitized.oled.rotation, baseline.oled.rotation);
+        changed |= storeUInt("oled_dim",sanitized.oled.dimTimeoutSeconds,baseline.oled.dimTimeoutSeconds);
+        changed |= storeUInt("oled_off",sanitized.oled.screenTimeoutSeconds,baseline.oled.screenTimeoutSeconds);
         changed |= storeUInt("oled_sda", sanitized.oled.sdaPin, baseline.oled.sdaPin);
         changed |= storeUInt("oled_scl", sanitized.oled.sclPin, baseline.oled.sclPin);
         changed |= storeInt("oled_rst", sanitized.oled.resetPin, baseline.oled.resetPin);
@@ -1721,6 +1744,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     oled["sclPin"] = settings.oled.sclPin;
     oled["resetPin"] = settings.oled.resetPin;
     oled["dimTimeoutSeconds"] = settings.oled.dimTimeoutSeconds;
+    oled["screenTimeoutSeconds"]=settings.oled.screenTimeoutSeconds;
     oled["wapeTriggerPin"] = settings.oled.wapeTriggerPin;
     oled["wapeTriggerEvent"] = settings.oled.wapeTriggerEvent;
 
@@ -1953,6 +1977,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         if (oled["sclPin"].is<uint8_t>()) settings.oled.sclPin = oled["sclPin"].as<uint8_t>();
         if (oled["resetPin"].is<int8_t>()) settings.oled.resetPin = oled["resetPin"].as<int8_t>();
         if (oled["dimTimeoutSeconds"].is<uint16_t>()) settings.oled.dimTimeoutSeconds = oled["dimTimeoutSeconds"].as<uint16_t>();
+        if(oled["screenTimeoutSeconds"].is<uint16_t>())settings.oled.screenTimeoutSeconds=oled["screenTimeoutSeconds"].as<uint16_t>();
         if (oled["wapeTriggerPin"].is<uint8_t>()) settings.oled.wapeTriggerPin = oled["wapeTriggerPin"].as<uint8_t>();
         copyString(oled, "wapeTriggerEvent", settings.oled.wapeTriggerEvent);
     }

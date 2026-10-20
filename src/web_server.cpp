@@ -218,7 +218,11 @@ StorageTarget storageTargetFromRequest(AsyncWebServerRequest* request) {
     if (request->hasParam("target")) {
         return parseStorageTarget(request->getParam("target")->value());
     }
+#if APP_SUNTON_PANEL
+    return StorageTarget::Sd;
+#else
     return StorageTarget::Flash;
+#endif
 }
 
 String normalizeStoragePath(const String& rawPath, bool allowRoot = false) {
@@ -991,7 +995,14 @@ void appendStorageDirectoryJson(StorageTarget target, const String& directoryPat
 }  // namespace
 
 WebServerManager::WebServerManager() : server_(80) {}
-void WebServerManager::releaseStorageUploadLease(){if(storageUploadLeased_){endStorageWrite(storageUploadTarget_);storageUploadLeased_=false;}}
+void WebServerManager::releaseStorageUploadLease(){
+    if(storageUploadLeased_){endStorageWrite(storageUploadTarget_);storageUploadLeased_=false;}
+#if APP_SUNTON_PANEL == 3
+    // Foreground transfers own this buffer; do not keep it after completion,
+    // cancellation or an error while music and the LCD need internal SRAM.
+    if(storageTransferBuffer_){heap_caps_free(storageTransferBuffer_);storageTransferBuffer_=nullptr;storageTransferBufferCapacity_=0;}
+#endif
+}
 
 bool WebServerManager::ensureStorageTransferBuffer(size_t minimumSize) {
     if (minimumSize == 0) {
@@ -1064,6 +1075,17 @@ void WebServerManager::begin(
     // The route-level checks also cover streaming upload callbacks, which run
     // before middleware. Middleware protects future API handlers by default.
     server_.addMiddleware([this](AsyncWebServerRequest* request,ArMiddlewareNext next){
+#if APP_SUNTON_PANEL == 3
+        // Reserve the remaining heap for a small retry response rather than
+        // constructing a large JSON payload or starting another asset stream.
+        if(request->url()!="/api/stop" && request->url()!="/api/volume" &&
+           (heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<16384 ||
+            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<4096)){
+            // Let the response lifecycle close the socket after receiving
+            // finishes; closing inside onData can invalidate AsyncTCP's PCB.
+            request->send(503,"text/plain","Memory busy; retry shortly.");return;
+        }
+#endif
         if(rejectIfWebUiLocked(request))return;
         next();
     });
@@ -1079,16 +1101,22 @@ void WebServerManager::begin(
 }
 
 bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
+#if APP_SUNTON_PANEL
+    if(request->url().startsWith("/api/storage") && storageTargetFromRequest(request)==StorageTarget::Flash){
+        request->send(404,"text/plain","Internal file browsing is unavailable on this board; use SD storage.");return false;
+    }
+#endif
     if (rejectIfWebUiLocked(request)) {
         return false;
     }
-    const SettingsBundle settings = settingsGetter_();
-    if (!settings.webAuth.enabled) {
-        return true;
-    }
-    if (request->authenticate(settings.webAuth.username.c_str(), settings.webAuth.password.c_str())) {
-        return true;
-    }
+    bool ready=false,allowed=false;
+    auto authenticate=[&](const SettingsBundle& settings){
+        ready=true;
+        allowed=!settings.webAuth.enabled || request->authenticate(settings.webAuth.username.c_str(),settings.webAuth.password.c_str());
+    };
+    if(settingsReader_)settingsReader_(authenticate);else authenticate(settingsGetter_());
+    if(!ready){request->send(503,"text/plain","Configuration busy; retry shortly");return false;}
+    if(allowed)return true;
     request->requestAuthentication();
     return false;
 }
@@ -1104,7 +1132,9 @@ bool WebServerManager::rejectIfWebUiLocked(AsyncWebServerRequest* request) {
 void WebServerManager::securityTick(){
     security_.tick();
     static uint32_t lastWebAccessTick=0;
-    if(settingsGetter_ && millis()-lastWebAccessTick>=1000){lastWebAccessTick=millis();WebAccess::tick(settingsGetter_(),otaManager_ && otaManager_->isBusy());}
+    if(settingsGetter_ && millis()-lastWebAccessTick>=1000){lastWebAccessTick=millis();
+        if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){WebAccess::tick(settings,otaManager_ && otaManager_->isBusy());});
+        else WebAccess::tick(settingsGetter_(),otaManager_ && otaManager_->isBusy());}
     if(listenerStartPending_&&millis()-listenerRetryAt_>=5000&&ESP.getFreeHeap()>24000){
         listenerRetryAt_=millis();server_.begin();listenerStartPending_=server_.state()!=LISTEN;
         if(!listenerStartPending_)DebugLog.println("[web] listener recovered");
@@ -1114,7 +1144,13 @@ void WebServerManager::setWebUiLocked(bool locked){security_.externalLock(locked
 bool WebServerManager::webUiLocked() const {return security_.locked();}
 
 bool WebServerManager::redirectCaptivePortalIfNeeded(AsyncWebServerRequest* request) {
-    if(settingsGetter_){String host=request->host();int port=host.indexOf(':');if(port>=0)host=host.substring(0,port);host.toLowerCase();if(host==WebAccess::hostname(settingsGetter_())+".local")return false;}
+    if(settingsGetter_){
+        String host=request->host();int port=host.indexOf(':');if(port>=0)host=host.substring(0,port);host.toLowerCase();
+        String hostname;
+        if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){hostname=WebAccess::hostname(settings)+".local";});
+        else hostname=WebAccess::hostname(settingsGetter_())+".local";
+        if(host==hostname)return false;
+    }
     String captiveHost=request->host();int portSeparator=captiveHost.indexOf(':');if(portSeparator>=0)captiveHost=captiveHost.substring(0,portSeparator);
     if (wifiManager_ != nullptr && wifiManager_->shouldRedirectCaptivePortal(captiveHost)) {
         request->redirect("http://192.168.4.1/");
@@ -1128,8 +1164,16 @@ void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocume
     // Keep room for TCP and the response object's send buffer. Failed JSON
     // allocations must return a retryable response, never reset the device.
     char* data = nullptr;
-    if (!doc.overflowed() && ESP.getFreeHeap() > length + 12000 &&
-        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > length + 1) {
+#if APP_SUNTON_PANEL == 3
+    const bool smallPlaybackControl=length<512 && (request->url()=="/api/stop" || request->url()=="/api/volume");
+    const size_t jsonReserve=smallPlaybackControl?4096:16384;
+    const size_t jsonContiguousReserve=smallPlaybackControl?1024:4096;
+#else
+    constexpr size_t jsonReserve=12000;
+    constexpr size_t jsonContiguousReserve=0;
+#endif
+    if (!doc.overflowed() && heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT) > length + jsonReserve &&
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > length + 1 + jsonContiguousReserve) {
         data = static_cast<char*>(malloc(length + 1));
     }
     if (data == nullptr) {
@@ -1180,6 +1224,7 @@ void WebServerManager::registerApiRoutes() {
     beginCameraService();
     registerCameraRoutes(server_,[this](AsyncWebServerRequest* request){return !redirectCaptivePortalIfNeeded(request)&&ensureAuthorized(request);});
 #endif
+#if !APP_SUNTON_PANEL
     server_.on("/api/logs", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;
         JsonDocument doc;
@@ -1192,6 +1237,7 @@ void WebServerManager::registerApiRoutes() {
         }
         sendJson(request, doc);
     });
+#endif
     server_.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
@@ -1208,10 +1254,15 @@ void WebServerManager::registerApiRoutes() {
 #ifndef APP_LEGACY_OTA_FIT
         appState_->toJson(root);
         wifiManager_->appendTxPowerStatus(root["network"].as<JsonObject>());
+#if APP_SUNTON_PANEL == 3
+        appendSystemMetricsJson(root,!(request->hasParam("detail")&&request->getParam("detail")->value()=="compact"));
+#else
         appendSystemMetricsJson(root);
+#endif
         root["system"]["webUiLocked"] = security_.locked();
 #else
-        root["system"]["deviceName"] = settingsGetter_().device.friendlyName;
+        if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){root["system"]["deviceName"]=settings.device.friendlyName;});
+        else root["system"]["deviceName"] = settingsGetter_().device.friendlyName;
 #endif
         root["sdFormat"]["prompt"]=sdFormatPromptNeeded();
         root["sdFormat"]["state"]=static_cast<int>(sdFormatState());
@@ -1253,7 +1304,8 @@ void WebServerManager::registerApiRoutes() {
         firmware["audioEnabled"] = true;
     #endif
 #ifndef APP_LEGACY_OTA_FIT
-        firmware["buttonEventTopic"] = settingsGetter_().mqtt.baseTopic + "/event/button_action";
+        if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){firmware["buttonEventTopic"]=settings.mqtt.baseTopic+"/event/button_action";});
+        else firmware["buttonEventTopic"] = settingsGetter_().mqtt.baseTopic + "/event/button_action";
         otaManager_->appendStatusJson(doc["otaManager"].to<JsonObject>());
         if (motorStatusAppender_) {
             motorStatusAppender_(doc["motor"].to<JsonObject>());
@@ -1268,8 +1320,15 @@ void WebServerManager::registerApiRoutes() {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) {
             return;
         }
+#if APP_SUNTON_PANEL == 3
+        JsonDocument doc(settingsJsonAllocator());
+#else
         JsonDocument doc;
-        settingsManager_->toJson(settingsGetter_(), doc.to<JsonObject>());
+#endif
+        bool ready=false;
+        if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){settingsManager_->toJson(settings,doc.to<JsonObject>());ready=true;});
+        else {settingsManager_->toJson(settingsGetter_(),doc.to<JsonObject>());ready=true;}
+        if(!ready){request->send(503,"application/json","{\"error\":\"Configuration busy; retry\"}");return;}
         sendJson(request, doc);
     });
 #endif
@@ -2411,7 +2470,10 @@ void WebServerManager::registerApiRoutes() {
 
 bool WebServerManager::serveStorageWebAsset(AsyncWebServerRequest* request,const String& url,bool fallback) {
     if(request->method()!=HTTP_GET && request->method()!=HTTP_HEAD)return false;
-    if(!settingsGetter_().ui.customWebInterface)return false;
+    bool customWeb=false;
+    if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){customWeb=settings.ui.customWebInterface;});
+    else customWeb=settingsGetter_().ui.customWebInterface;
+    if(!customWeb)return false;
     if(!storageMounted(StorageTarget::Sd))return false;
     std::string normalized;if(!StaticAssetPolicy::webPath(url.c_str(),normalized))return false;
     if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return true;

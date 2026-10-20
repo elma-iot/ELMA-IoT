@@ -33,6 +33,15 @@ export function createDisplayTab({
 }) {
   function renderPeripheralDisplayControls() {
     state.peripheralDisplayProfiles = normalizedPeripheralDisplayProfiles();
+    const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
+    if(board?.externalPins){
+      state.peripheralDisplayProfiles=[board.displayProfile];
+      const select=elements.peripheralDisplayProfile;
+      if(select){select.replaceChildren(new Option(board.builtinLabels.display,board.displayProfile,true,true));select.disabled=true;}
+      if(elements.peripheralDisplayAddButton){elements.peripheralDisplayAddButton.hidden=true;elements.peripheralDisplayAddButton.style.display='none';}
+      if(elements.peripheralDisplayList)elements.peripheralDisplayList.replaceChildren();
+      return;
+    }
     updatePrimaryPeripheralIndexLabel(elements.peripheralDisplayPrimaryIndexLabel, "Display", state.peripheralDisplayProfiles.length);
     if (elements.peripheralDisplayAddButton) {
       const total = state.peripheralDisplayProfiles.length;
@@ -78,11 +87,16 @@ export function createDisplayTab({
     const panelSelected=displayType==='panel';
     const panelControls=document.getElementById('panelControls');if(panelControls)panelControls.hidden=!panelSelected;
     const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
+    if(board?.externalPins&&elements.displayType){
+      elements.displayType.value='panel';elements.displayType.disabled=true;
+      const label=elements.displayType.closest('label');if(label)label.hidden=true;
+    }
+    const screenTimeout=document.getElementById('panelScreenTimeoutLabel');if(screenTimeout)screenTimeout.hidden=!panelSelected||!board?.externalPins;
     const roundControls=document.getElementById('roundSystemControls');if(roundControls)roundControls.hidden=!panelSelected||!board?.roundHmi;
     let roundOptions={};try{roundOptions=JSON.parse(state.settings?.oled?.circularMenu||'{}');}catch{}
     const dashboard=document.getElementById('roundSystemDashboard');if(dashboard)dashboard.checked=roundOptions.systemDashboard!==false;
     const timeout=document.getElementById('roundSystemTimeout');if(timeout&&document.activeElement!==timeout)timeout.value=roundOptions.systemTimeoutSeconds||60;
-    const wiringHelp=document.getElementById('displayWiringHelp');if(wiringHelp)wiringHelp.hidden=!!board?.roundHmi;
+    const wiringHelp=document.getElementById('displayWiringHelp');if(wiringHelp)wiringHelp.hidden=panelSelected;
     if(panelControls&&board){
       const touch=namedField('oled.touchEnabled');const text=touch?.parentElement?.lastChild;
       if(text?.nodeType===3)text.textContent=' '+(board.roundHmi?'Optional CST826 touchscreen (MD80ET only)':(board.touchName||'CHSC6540')+' touchscreen');
@@ -91,6 +105,8 @@ export function createDisplayTab({
     }
 
     for(const key of ['driver','i2cAddress','width','height','sdaPin','sclPin','resetPin']){const field=namedField('oled.'+key);if(field)field.disabled=panelSelected;}
+    for(const key of ['driver','i2cAddress']){const field=namedField('oled.'+key);const label=field?.closest('label');if(label){label.hidden=panelSelected;label.style.display=panelSelected?'none':'';}}
+    const panelOption=elements.displayType?.querySelector('option[value="panel"]');if(panelOption)panelOption.textContent=board?.externalPins?'Sunton onboard LCD':'VIEWE onboard LCD';
     if(elements.oledPreviewCard)elements.oledPreviewCard.hidden=panelSelected;
     const oledEnabledField = namedField("oled.enabled");
     if (elements.oledModeSection) {

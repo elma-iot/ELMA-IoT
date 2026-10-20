@@ -583,6 +583,10 @@ bool remountStorageBackend(StorageTarget target, const SettingsBundle& settings)
     return mountSdStorage(effectiveSdSettings(settings.sd));
 }
 
+bool storageReadLeaseHealthy(StorageTarget target) {
+    return target==StorageTarget::Sd ? sdFilesystemHealthy() : flashMounted;
+}
+
 void pollStorageBackends() {
     // Retry task allocation without falling back to synchronous card probing.
     static uint32_t lastAttempt=0;

@@ -74,10 +74,10 @@
 <text x="253.0" y="108.0" font-family="Arial,Helvetica,sans-serif" font-size="10" text-anchor="middle" fill="#FAF2DD" font-weight="bold" transform="rotate(90 253.0 108.0)" >V-</text>
 <text x="174.0" y="48.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="middle" fill="#FAF2DD" font-weight="bold" transform="rotate(180 174.0 48.0)" >USB1</text>
 <rect x="577.0" y="44.0" width="116.0" height="42.0" rx="4.0" fill="#efebe2" stroke="#c9c4ba" stroke-width="1" />
-<rect data-pin="GND" x="599.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
-<rect data-pin="3" x="615.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
-<rect data-pin="1" x="631.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
-<rect data-pin="5V" x="647.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
+<rect x="599.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
+<rect x="615.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
+<rect x="631.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
+<rect x="647.0" y="40.0" width="10.0" height="8.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
 <rect x="604.0" y="86.0" width="4.0" height="18.0" rx="0.0" fill="#ddb33e" stroke="none" stroke-width="1" />
 <rect x="620.0" y="86.0" width="4.0" height="18.0" rx="0.0" fill="#ddb33e" stroke="none" stroke-width="1" />
 <rect x="636.0" y="86.0" width="4.0" height="18.0" rx="0.0" fill="#ddb33e" stroke="none" stroke-width="1" />
@@ -213,13 +213,9 @@
 <rect x="64.0" y="1135.0" width="10.0" height="8.0" rx="0.0" fill="#FAF2DD" stroke="none" stroke-width="1" />
 <text x="40.0" y="1190.0" font-family="Arial,Helvetica,sans-serif" font-size="12" text-anchor="middle" fill="#FAF2DD" font-weight="bold" transform="rotate(180 40.0 1190.0)" >CN1</text>
 <text x="88.0" y="1080.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1080.0)" >GND</text>
-<text x="88.0" y="1100.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1100.0)" >IO21</text>
-<text x="88.0" y="1120.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1120.0)" >3.3V</text>
-<text x="88.0" y="1140.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1140.0)" ></text>
-<text x="92.0" y="1106.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 92.0 1106.0)" >GND</text>
-<text x="92.0" y="1127.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 92.0 1127.0)" >IO21</text>
-<text x="92.0" y="1148.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 92.0 1148.0)" >3.3V</text>
-<text x="79.0" y="1084.0" font-family="Arial,Helvetica,sans-serif" font-size="12" text-anchor="middle" fill="#FAF2DD" font-weight="bold" transform="rotate(180 79.0 1084.0)" >CN1</text>
+<text x="88.0" y="1100.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1100.0)" >IO22</text>
+<text x="88.0" y="1120.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1120.0)" >IO21</text>
+<text x="88.0" y="1140.0" font-family="Arial,Helvetica,sans-serif" font-size="11" text-anchor="start" fill="#FAF2DD" font-weight="bold" transform="rotate(180 88.0 1140.0)" >3.3V</text>
 <rect x="16.0" y="1319.0" width="48.0" height="116.0" rx="3.0" fill="#efebe2" stroke="#c9c4ba" stroke-width="1" />
 <rect x="12.0" y="1339.0" width="8.0" height="10.0" rx="1.0" fill="#151515" stroke="none" stroke-width="1" />
 <rect x="64.0" y="1340.0" width="10.0" height="8.0" rx="0.0" fill="#FAF2DD" stroke="none" stroke-width="1" />
@@ -591,11 +587,12 @@
 <circle cx="66.0" cy="1419.0" r="3.2" fill="#FAF2DD" stroke="none" stroke-width="1" id="p3_gpio21" opacity="0.7"/>
 <circle cx="836.0" cy="901.0" r="3.2" fill="#FAF2DD" stroke="none" stroke-width="1" id="p4_spk1" opacity="0.7"/>
 <circle cx="836.0" cy="919.0" r="3.2" fill="#FAF2DD" stroke="none" stroke-width="1" id="p4_spk2" opacity="0.7"/>
-<circle data-pin="GND" cx="16" cy="1344" r="2" fill="#efcf69"/>
-<circle data-pin="35" cx="16" cy="1364" r="2" fill="#efcf69"/>
-<circle data-pin="22" cx="16" cy="1384" r="2" fill="#efcf69"/>
-<circle data-pin="21" cx="16" cy="1404" r="2" fill="#efcf69"/>
-<circle data-pin="GND" cx="16" cy="1079" r="2" fill="#efcf69"/>
-<circle data-pin="21" cx="16" cy="1099" r="2" fill="#efcf69"/>
-<circle data-pin="3V3" cx="16" cy="1119" r="2" fill="#efcf69"/>
+<circle data-pin="GND" cx="16" cy="1344" r="2" fill="#efcf69"><title>GND</title></circle>
+<circle data-pin="35" cx="16" cy="1364" r="2" fill="#efcf69"><title>35</title></circle>
+<circle data-pin="22" cx="16" cy="1384" r="2" fill="#efcf69"><title>22</title></circle>
+<circle data-pin="21" cx="16" cy="1404" r="2" fill="#efcf69"><title>21</title></circle>
+<circle data-pin="GND" cx="16" cy="1079" r="2" fill="#efcf69"><title>GND</title></circle>
+<circle data-pin="22" cx="16" cy="1099" r="2" fill="#efcf69"><title>22</title></circle>
+<circle data-pin="21" cx="16" cy="1119" r="2" fill="#efcf69"><title>21</title></circle>
+<circle data-pin="3V3" cx="16" cy="1139" r="2" fill="#efcf69"><title>3V3</title></circle>
 </svg>

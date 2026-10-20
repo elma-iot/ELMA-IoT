@@ -5,13 +5,24 @@ import {createConfigurationSettingsPersistenceModule} from '../web/modules/confi
 import {ONBOARD_BOARDS} from '../web/modules/onboard-boards.js';
 
 globalThis.document={activeElement:null};
+test('bounded initial settings retries recover a busy board without retrying writes',async()=>{
+  let reads=0;const waits=[];
+  const module=createConfigurationSettingsPersistenceModule({
+    state:{settingsDirty:true},settingsReadRetries:()=>3,
+    request:async path=>{assert.equal(path,'/api/settings');if(++reads<3)throw Object.assign(new Error('Device offline'),{isDeviceOffline:true});return {};},
+    delay:async ms=>waits.push(ms),normalizeUiSettings:value=>value||{},
+  });
+  await module.loadSettings();
+  assert.equal(reads,3);assert.deepEqual(waits,[400,800]);
+});
 test('touchscreen navigation follows the web tab order for supported LCD hardware',()=>{
   const web=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
   const panel=readFileSync(new URL('../src/panel_dashboard.cpp',import.meta.url),'utf8');
   for(const board of Object.values(ONBOARD_BOARDS).filter(board=>board.displayProfile)) {
     assert.ok(!board.cameraPins && !board.microphone, 'LCD camera/microphone hardware needs corresponding panel pages');
   }
-  const webKeys=[...web.matchAll(/<button[^>]*role="tab"[^>]*data-tab="([^"]+)"/g)].map(m=>m[1]).filter(key=>!['camera','microphones'].includes(key));
+  // MiniExco uses a separate board profile without an onboard LCD.
+  const webKeys=[...web.matchAll(/<button[^>]*role="tab"[^>]*data-tab="([^"]+)"/g)].map(m=>m[1]).filter(key=>!['camera','microphones','robot'].includes(key));
   const table=panel.split('const Tab tabList[]={')[1].split('};')[0];
   const panelKeys=[...table.matchAll(/\{"([^"]+)",/g)].map(m=>m[1]);
   assert.deepEqual(panelKeys,webKeys);

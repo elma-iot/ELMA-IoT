@@ -54,7 +54,7 @@ export function createConfigurationSettingsSnapshotModule({
       snapshot.oled.enabled = true;
       snapshot.oled.displayType = "wape";
     } else if (displayProfile === "viewe-onboard-lcd" || snapshot.oled.displayType === "panel") {
-      snapshot.oled.enabled=true;snapshot.oled.displayType="panel";snapshot.oled.width=Number(state.settings?.oled?.width)||Number(snapshot.oled.width)||240;snapshot.oled.height=Number(state.settings?.oled?.height)||Number(snapshot.oled.height)||320;
+      snapshot.oled.enabled=board?.externalPins?snapshot.oled.enabled!==false:true;snapshot.oled.displayType="panel";snapshot.oled.width=Number(state.settings?.oled?.width)||Number(snapshot.oled.width)||240;snapshot.oled.height=Number(state.settings?.oled?.height)||Number(snapshot.oled.height)||320;
     } else if (displayProfile === "i2c-oled") {
       snapshot.oled.enabled = true;
       snapshot.oled.displayType = "oled";
@@ -105,6 +105,10 @@ export function createConfigurationSettingsSnapshotModule({
       },
     });
     const board=ONBOARD_BOARDS[snapshot.ui.gpioBoardSelection];
+    if(board?.externalPins){
+      snapshot.device ||= {};
+      Object.assign(snapshot.device,{statusLedPin:4,statusLedGreenPin:16,statusLedBluePin:17,statusLedType:'rgb',statusLedActiveLow:true});
+    }
     // Preserve fixed onboard wiring even after editing the profile in the browser.
     for(const [group,profiles] of [['audio',audioProfiles],['audioIn',audioInProfiles],['storage',normalizedPeripheralStorageProfiles()]]){
       const fixed=board?.bindings?.[group+':'+profiles[0]];

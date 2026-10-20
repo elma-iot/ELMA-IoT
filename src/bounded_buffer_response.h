@@ -47,8 +47,12 @@ public:
             if (!count || (!headers && count < std::min(size_t(1460), remaining))) return total;
             // Only immortal flash assets may be borrowed by TCP. JSON and
             // headers must be copied so disconnect/timeout cleanup is safe.
-            const size_t written = request->client()->write(source, count,
+            // write() returns zero if tcp_output fails even after tcp_write
+            // queued the bytes. Track add() instead, otherwise a temporary
+            // transmit shortage duplicates headers/body and corrupts gzip.
+            const size_t written = request->client()->add(source, count,
                 !headers && immutableFlash_ ? 0 : ASYNC_WRITE_FLAG_COPY);
+            if(written)request->client()->send();
             _writtenLength += written;
             if (headers) headerOffset_ += written;
             else _sentLength += written;

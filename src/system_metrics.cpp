@@ -236,8 +236,16 @@ SystemMetricsSnapshot getSystemMetricsSnapshot() {
     return metricsSnapshot;
 }
 
-void appendSystemMetricsJson(JsonObject root) {
+void appendSystemMetricsJson(JsonObject root,bool detailed) {
     const SystemMetricsSnapshot snapshot = getSystemMetricsSnapshot();
+    if(!detailed){
+        auto hardware=root["hardware"].to<JsonObject>();
+        hardware["chipModel"]=snapshot.hardware.chipModel;hardware["boardProfile"]=snapshot.hardware.boardProfile;
+        auto system=root["system"].as<JsonObject>();if(system.isNull())system=root["system"].to<JsonObject>();
+        system["freeHeap"]=snapshot.freeHeapBytes;
+        system["sd"]["available"]=snapshot.sd.available;system["sd"]["mounted"]=snapshot.sd.mounted;
+        return; // Logics still samples the complete metrics independently.
+    }
 
     JsonObject hardware = root["hardware"].to<JsonObject>();
     hardware["chipModel"] = snapshot.hardware.chipModel;

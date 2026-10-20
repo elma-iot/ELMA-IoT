@@ -46,6 +46,9 @@ void DisplayManager::begin(const OledSettings& settings) {
 
 void DisplayManager::applySettings(const OledSettings& settings) {
     SharedI2c::Guard bus; if(!bus)return;
+#if APP_SUNTON_PANEL == 3
+    setScreenOff(false);wakeTouchPending_=false;
+#endif
 #if APP_HAS_ONBOARD_PANEL
     const bool keepPanel=panel_&&settings.enabled&&settings.displayType=="panel"&&settings.touchEnabled==settings_.touchEnabled;
 #endif
@@ -62,7 +65,10 @@ void DisplayManager::applySettings(const OledSettings& settings) {
 #if APP_HAS_ONBOARD_PANEL
     RoundHmi::end();
     dashboard_.reset();
-    if(!keepPanel)panel_.reset();
+    if(!keepPanel){
+        if(panel_)panel_->brightness(0);
+        panel_.reset();
+    }
 #endif
     dimmed_ = false;
     scrollOffset_ = 0;
@@ -148,6 +154,9 @@ void DisplayManager::showTemporaryCenterText(const String& message, unsigned lon
 
 void DisplayManager::markActivity() {
     lastActivityAt_ = millis();
+#if APP_SUNTON_PANEL == 3
+    setScreenOff(false);
+#endif
     setDimmed(false);
 }
 
@@ -219,8 +228,17 @@ void DisplayManager::setDimmed(bool dimmed) {
         return;
     }
     dimmed_ = dimmed;
+#if APP_SUNTON_PANEL == 3
+    DebugLog.printf("[display] dim=%u backlight_pct=%u\n",unsigned(dimmed),unsigned(dimmed?settings_.brightness/2:settings_.brightness));
+#endif
 #if APP_HAS_ONBOARD_PANEL
-    if (panel_) panel_->brightness(dimmed ? 0 : settings_.brightness);
+    if (panel_) panel_->brightness(dimmed ?
+#if APP_SUNTON_PANEL == 3
+        settings_.brightness/2
+#else
+        0
+#endif
+        : settings_.brightness);
 #endif
     if (ssd1306_) {
         ssd1306_->dim(dimmed);
@@ -303,8 +321,40 @@ void DisplayManager::drawWrappedLine(Adafruit_GFX& display, const String& text, 
     display.print(window);
 }
 
+#if APP_SUNTON_PANEL == 3
+void DisplayManager::setScreenOff(bool off) {
+    if(screenOff_==off)return;
+    screenOff_=off;
+    if(panel_){panel_->sleep(off);panel_->brightness(off?0:settings_.brightness);}
+    DebugLog.printf("[display] screen=%s\n",off?"sleep":"awake");
+}
+void DisplayManager::quietForDiagnostics(bool dark) {
+    diagnosticQuietUntil_=millis()+30000;
+    if(panel_&&dark)panel_->brightness(0);
+    DebugLog.printf("[display-test] Paused LCD updates for 30 seconds; backlight=%s\n",dark?"off":"unchanged");
+}
+#endif
 void DisplayManager::loop(const AppStateSnapshot& state) {
+#if APP_SUNTON_PANEL == 3
+    if(diagnosticQuietUntil_){
+        if(int32_t(diagnosticQuietUntil_-millis())>0)return;
+        diagnosticQuietUntil_=0;markActivity();if(panel_)panel_->brightness(settings_.brightness);
+        DebugLog.println("[display-test] LCD updates resumed");
+    }
+#endif
     SharedI2c::Guard bus(0); if(!bus)return;
+#if APP_SUNTON_PANEL == 3
+    if(panel_ && (screenOff_||wakeTouchPending_)){
+        if(millis()-lastTouchAt_<30)return;
+        lastTouchAt_=millis();int16_t x,y;const bool touched=panel_->readRawTouch(x,y);
+        if(screenOff_ && touched){markActivity();wakeTouchPending_=true;}
+        else if(wakeTouchPending_ && !touched)wakeTouchPending_=false;
+        return; // A wake gesture must not activate the covered control.
+    }
+    if(panel_ && settings_.screenTimeoutSeconds && millis()-lastActivityAt_>=settings_.screenTimeoutSeconds*1000UL){
+        setScreenOff(true);return;
+    }
+#endif
 #if APP_HAS_ONBOARD_PANEL
     if(RoundHmi::available()) {
         RoundHmi::systemState(state,panelSnapshot_,panelCommand_);
@@ -336,9 +386,11 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     }
     lastDrawAt_ = now;
 
+#if APP_SUNTON_PANEL != 3
     if (state.playback.state == "playing" || state.network.wifiConnected || state.network.apMode) {
         lastActivityAt_ = now;
     }
+#endif
     const bool shouldDim = settings_.dimTimeoutSeconds > 0 && (now - lastActivityAt_) > (settings_.dimTimeoutSeconds * 1000UL);
     setDimmed(shouldDim);
 

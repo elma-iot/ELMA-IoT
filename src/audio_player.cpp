@@ -1,6 +1,13 @@
 #ifndef APP_DISABLE_AUDIO
 #include "device_log.h"
 #include "audio_player.h"
+#include "sunton_audio_owner.h"
+#include "sunton_dac.h"
+#if APP_SUNTON_PANEL == 3
+#include <soc/rtc_io_reg.h>
+#include <soc/sens_reg.h>
+#include <soc/gpio_struct.h>
+#endif
 
 #include <Audio.h>
 #include <HTTPClient.h>
@@ -27,9 +34,22 @@ constexpr i2s_port_t kSpeakerI2s=I2S_NUM_0;
 #endif
 namespace {
 AudioPlayer::Impl* g_impl = nullptr;
+#if APP_SUNTON_PANEL
+constexpr int kRamMusicDmaCount=4;
+#else
+constexpr int kRamMusicDmaCount=8;
+#endif
 
+#if APP_SUNTON_PANEL == 3
+constexpr unsigned long kSwitchFadeOutMs = 300UL;
+#else
 constexpr unsigned long kSwitchFadeOutMs = 70UL;
+#endif
+#if APP_SUNTON_PANEL == 3
+constexpr unsigned long kStartFadeInMs = 450UL;
+#else
 constexpr unsigned long kStartFadeInMs = 90UL;
+#endif
 constexpr unsigned long kSwitchQuietTimeMs = 18UL;
 constexpr unsigned long kStreamWarmupMinimumMs = 350UL;
 constexpr unsigned long kStreamWarmupMaximumMs = 3500UL;
@@ -183,11 +203,14 @@ class AudioPlayer::Impl {
     uint8_t volume = DefaultConfig::DEFAULT_VOLUME_PERCENT;
     uint8_t defaultVolume = DefaultConfig::DEFAULT_VOLUME_PERCENT;
     uint8_t hardwareAudioVolume = 0;
+    uint8_t dacGainPercent = 0;
+    uint32_t pcmFrames=0,pcmPeak=0;
     uint32_t requestedSampleRateHz = kPreferredDiagnosticSampleRateHz;
     uint32_t activeSampleRateHz = 0;
     uint8_t bitsPerSample = 16;
     uint8_t channelCount = DefaultConfig::AUDIO_FORCE_MONO ? 1 : 2;
     bool diagnosticTestMode = false;
+    bool dacClockStopped = false;
     bool mediaHeld = false,mediaResume = false,mediaLeasePaused = false, outputDriverReady = true;
     bool mediaRequested = false, storageForegroundHeld = false;
     uint32_t mediaSavedRate = 0;
@@ -198,6 +221,7 @@ class AudioPlayer::Impl {
     String connectionUrl;
     String source = "none";
     bool storageLeaseActive = false;
+    uint32_t lastStoragePresenceCheckMs=0;
     StorageTarget storageTarget = StorageTarget::Flash;
     bool retryPending = false;
     uint8_t retryCount = 0;
@@ -227,16 +251,41 @@ class AudioPlayer::Impl {
         publish();
     }
 
+#if APP_SUNTON_PANEL == 3
+    bool usesInternalDac()const{return bclkPin==255 && wsPin==254;}
+    void setDacGainPercent(uint8_t percent) {
+        dacGainPercent=min(uint8_t(100),percent);
+        hardwareAudioVolume=dacGainPercent?DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME:0;
+        audio.setVolume(hardwareAudioVolume);
+        elmaGateSuntonDac(dacGainPercent && audio.isRunning() && (state=="playing" || state=="buffering"));
+    }
+#endif
     void setHardwareAudioVolume(uint8_t audioVolume) {
+#if APP_SUNTON_PANEL == 3
+        if(usesInternalDac()){setDacGainPercent(constrain(int(audioVolume)*100/DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME,0,100));return;}
+#endif
         hardwareAudioVolume = constrain(audioVolume, static_cast<uint8_t>(0), DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME);
         audio.setVolume(hardwareAudioVolume);
+        if(bclkPin==255 && wsPin==254)
+            elmaGateSuntonDac(hardwareAudioVolume>0 && (state=="playing" || state=="buffering"));
     }
 
     void applyHardwareVolumePercent(uint8_t volumePercent) {
+#if APP_SUNTON_PANEL == 3
+        if(usesInternalDac()){setDacGainPercent(volumePercent);return;}
+#endif
         setHardwareAudioVolume(percentToLibraryVolume(volumePercent));
     }
 
     void fadeToPercent(uint8_t targetVolumePercent, unsigned long durationMs, bool serviceAudio = false) {
+#if APP_SUNTON_PANEL == 3
+        if(usesInternalDac()) {
+            const int target=min(int(targetVolumePercent),100),steps=abs(target-int(dacGainPercent));
+            const unsigned long stepMs=steps?max(1UL,durationMs/steps):0;
+            while(dacGainPercent!=target){setDacGainPercent(dacGainPercent+(target>dacGainPercent?1:-1));if(serviceAudio&&audio.isRunning())audio.loop();delay(stepMs);}
+            return;
+        }
+#endif
         const int targetAudioVolume = map(targetVolumePercent, 0, 100, 0, DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME);
         if (hardwareAudioVolume == targetAudioVolume) {
             return;
@@ -282,11 +331,13 @@ void recreateAudioEngine(AudioPlayer::Impl* impl) {
 #endif
     reconstructAudioOutput(impl->audio, impl->bclkPin, impl->wsPin);
     impl->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
-    impl->audio.setI2SCommFMT_LSB(false);
+    // Changing the external I2S format uninstalls/reinstalls the driver and
+    // disconnects the internal DAC. Its constructor already chose the format.
+    if(impl->bclkPin!=255 || impl->wsPin!=254)impl->audio.setI2SCommFMT_LSB(false);
     if (impl->outputEnabled && impl->bclkPin!=255) {
         impl->audio.setPinout(impl->bclkPin, impl->wsPin, impl->doutPin);
     }
-    impl->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO);
+    impl->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO || (impl->bclkPin==255 && impl->wsPin==254));
     impl->audio.setConnectionTimeout(8000, 8000);
     impl->audio.setTone(impl->defaultLowDb, impl->defaultPresenceDb, impl->defaultHighDb);
     impl->applyHardwareVolumePercent(impl->volume);
@@ -511,6 +562,10 @@ void audio_process_i2s(uint32_t* sample, bool* continueI2S) {
             g_impl->overlay.phaseQ16 += g_impl->overlay.stepQ16;
         }
     }
+#if APP_SUNTON_PANEL == 3
+    if(sample&&g_impl&&g_impl->usesInternalDac())*sample=elmaScaleDacPcm(*sample,g_impl->dacGainPercent);
+#endif
+    if(sample&&g_impl){++g_impl->pcmFrames;g_impl->pcmPeak=max(g_impl->pcmPeak,uint32_t(max(abs(int16_t(*sample>>16)),abs(int16_t(*sample)))));}
     if(sample&&g_impl)LedAudio::playback().push(int16_t(*sample>>16),int16_t(*sample),g_impl->activeSampleRateHz);
     if (continueI2S != nullptr) {
         *continueI2S = true;
@@ -558,6 +613,7 @@ void audio_eof_speech(const char* info) {
 }
 
 void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t initialVolumePercent, bool outputEnabled, AppState& appState) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         impl_ = allocatePreferPsram<Impl>();
     }
@@ -579,7 +635,7 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
 #endif
     reconstructAudioOutput(impl_->audio, bclkPin, wsPin);
     impl_->audio.setBufsize(DefaultConfig::AUDIO_BUFFER_SIZE_RAM, DefaultConfig::AUDIO_BUFFER_SIZE_PSRAM);
-    impl_->audio.setI2SCommFMT_LSB(false);
+    if(bclkPin!=255 || wsPin!=254)impl_->audio.setI2SCommFMT_LSB(false);
     if (outputEnabled && bclkPin!=255) {
         impl_->audio.setPinout(bclkPin, wsPin, doutPin);
     }
@@ -588,7 +644,7 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
 #endif
     impl_->requestedSampleRateHz = kPreferredDiagnosticSampleRateHz;
     impl_->diagnosticTestMode = DefaultConfig::AUDIO_DIAGNOSTIC_TEST;
-    impl_->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO);
+    impl_->audio.forceMono(DefaultConfig::AUDIO_FORCE_MONO || (bclkPin==255 && wsPin==254));
     impl_->channelCount = DefaultConfig::AUDIO_FORCE_MONO ? 1 : 2;
     impl_->audio.setConnectionTimeout(8000, 8000);
     impl_->defaultVolume = constrain(initialVolumePercent, static_cast<uint8_t>(0), static_cast<uint8_t>(100));
@@ -607,11 +663,38 @@ void AudioPlayer::begin(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin, uint8_t
         DebugLog.println("[audio] output disabled");
     }
     impl_->publish();
+#if APP_SUNTON_PANEL == 3
+    if(!suntonAudioTask && suntonAudioMutex()) {
+        const auto worker=[](void* context){
+            suntonAudioTask=xTaskGetCurrentTaskHandle();
+            auto* player=static_cast<AudioPlayer*>(context);
+            for(;;){player->loop();vTaskDelay(pdMS_TO_TICKS(1));}
+        };
+        if(xTaskCreatePinnedToCore(worker,"lcdAudio",6144,this,3,&suntonAudioTask,1)!=pdPASS)
+            DebugLog.println("[audio] Dedicated task unavailable; retaining cooperative service");
+        else DebugLog.println("[audio] Dedicated decoder owner started on core 1, priority 3");
+    }
+#endif
 }
 
 void AudioPlayer::loop() {
+#if APP_SUNTON_PANEL == 3
+    if(suntonAudioTask && xTaskGetCurrentTaskHandle()!=suntonAudioTask)return;
+#endif
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return;
+    }
+    if(impl_->storageLeaseActive && impl_->storageTarget==StorageTarget::Sd &&
+       millis()-impl_->lastStoragePresenceCheckMs>=2000) {
+        impl_->lastStoragePresenceCheckMs=millis();
+        // The main audio owner probes between decoder calls, including pause.
+        // The maintenance worker cannot unmount while this lease is held.
+        if(!storageReadLeaseHealthy(StorageTarget::Sd)) {
+            stop();
+            if(impl_->appState)impl_->appState->setLastError("SD card removed or unreadable; playback stopped");
+            return;
+        }
     }
     holdForMedia(impl_->mediaRequested);
     if (impl_->mediaHeld || !impl_->outputDriverReady) return;
@@ -619,6 +702,11 @@ void AudioPlayer::loop() {
         impl_->maximumServiceGapUs = max(impl_->maximumServiceGapUs, uint32_t(micros()-impl_->lastServiceUs));
         if (millis()-impl_->lastTimingReport >= 10000) {
             DebugLog.printf("[audio] service max_gap_us=%u input_bytes=%u rate=%u\n", impl_->maximumServiceGapUs, unsigned(impl_->audio.inBufferFilled()), unsigned(impl_->activeSampleRateHz));
+            DebugLog.printf("[audio] output pcm_frames=%u pcm_peak=%u library_volume=%u\n",impl_->pcmFrames,impl_->pcmPeak,impl_->hardwareAudioVolume);
+#if APP_SUNTON_PANEL == 3
+            DebugLog.printf("[audio] DAC audible=%u gain_percent=%u pad=%08x ctrl=%08x gpio26_func=%u out=%u enable=%u\n",elmaDacAudible,impl_->dacGainPercent,REG_READ(RTC_IO_PAD_DAC2_REG),REG_READ(SENS_SAR_DAC_CTRL1_REG),GPIO.func_out_sel_cfg[26].func_sel,(GPIO.out>>26)&1,(GPIO.enable>>26)&1);
+#endif
+            impl_->pcmFrames=0;impl_->pcmPeak=0;
             impl_->maximumServiceGapUs=0;impl_->lastTimingReport=millis();
         }
     } else impl_->maximumServiceGapUs=0;
@@ -639,6 +727,25 @@ void AudioPlayer::loop() {
         }
     }
     impl_->audio.loop();
+    if(impl_->bclkPin==255 && impl_->wsPin==254)elmaGateSuntonDac(impl_->audio.isRunning() &&
+#if APP_SUNTON_PANEL == 3
+        impl_->dacGainPercent>0
+#else
+        impl_->hardwareAudioVolume>0
+#endif
+        && !impl_->mediaHeld);
+#if APP_SUNTON_PANEL == 3
+    if(impl_->bclkPin==255 && impl_->wsPin==254 && !impl_->audio.isRunning() && !impl_->dacClockStopped){i2s_stop(kSpeakerI2s);impl_->dacClockStopped=true;}
+#endif
+    if(impl_->storageLeaseActive && !impl_->audio.isRunning() &&
+       (impl_->state=="playing" || impl_->state=="buffering")) {
+        // Includes physical card removal/read errors; paused playback keeps its
+        // lease until resumed or stopped. Do not reopen files on a lost card.
+        releaseStorageLease(impl_);
+        impl_->state="idle";
+        if(impl_->appState)impl_->appState->setLastError("Local audio stopped: file ended or SD card unavailable");
+        impl_->publish();
+    }
     if (impl_->streamWarmupPending) {
         const unsigned long elapsed = millis() - impl_->streamWarmupStartedAt;
         const size_t buffered = impl_->audio.inBufferFilled();
@@ -660,7 +767,7 @@ void AudioPlayer::loop() {
     }
     const uint32_t decodedRate=impl_->audio.getSampleRate();
     const uint32_t clock=static_cast<uint32_t>(decodedRate*impl_->playbackSpeed);
-    if (impl_->audio.isRunning() && clock && clock!=impl_->clockRate) {if(i2s_set_sample_rates(kSpeakerI2s,clock)==ESP_OK){impl_->clockRate=clock;impl_->activeSampleRateHz=clock;}else if(impl_->appState)impl_->appState->setLastError("Unsupported audio playback clock");}
+    if (impl_->audio.isRunning() && clock && clock!=impl_->clockRate) {if(i2s_set_sample_rates(kSpeakerI2s,elmaDacSampleRate(clock,impl_->usesInternalDac()))==ESP_OK){impl_->clockRate=clock;impl_->activeSampleRateHz=clock;}else if(impl_->appState)impl_->appState->setLastError("Unsupported audio playback clock");}
     if (!impl_->audio.isRunning() && !impl_->speechRendering && !impl_->speechPath.isEmpty()) {fs::FS* fs=getStorageFs(impl_->speechTarget);if(fs){beginStorageWrite(impl_->speechTarget);fs->remove(impl_->speechPath);endStorageWrite(impl_->speechTarget);}impl_->speechPath="";}
     if (impl_->durationProbePending && impl_->storageLeaseActive && impl_->audio.getAudioCurrentTime() > 0) {
         impl_->cachedDurationSeconds = impl_->audio.getAudioFileDuration();
@@ -682,6 +789,7 @@ void AudioPlayer::loop() {
 }
 
 bool AudioPlayer::play(const String& url, const String& title, const String& mediaType, const String& source) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr || impl_->mediaHeld || !impl_->outputEnabled || url.isEmpty()) {
         return false;
     }
@@ -698,7 +806,7 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     const String normalizedTitle = PlaybackText::normalizeTitle(title, normalizedUrl);
 
     if (impl_->audio.isRunning() || impl_->state == "playing" || impl_->state == "buffering") {
-        impl_->fadeToPercent(0, kSwitchFadeOutMs);
+        impl_->fadeToPercent(0, kSwitchFadeOutMs, true);
         impl_->audio.stopSong();
         delay(kSwitchQuietTimeMs);
     }
@@ -727,6 +835,9 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
     impl_->publish();
     impl_->applyHardwareVolumePercent(0);
 
+#if APP_SUNTON_PANEL == 3
+    if(impl_->bclkPin==255 && impl_->wsPin==254){i2s_start(kSpeakerI2s);impl_->dacClockStopped=false;}
+#endif
     bool connected = impl_->audio.connecttohost(connectionUrl.c_str());
     if (!connected) {
         recreateAudioEngine(impl_);
@@ -753,6 +864,7 @@ bool AudioPlayer::play(const String& url, const String& title, const String& med
 }
 
 bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, const String& title, const String& mediaType, const String& source) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr || !impl_->outputEnabled || path.isEmpty()) {
         return false;
     }
@@ -775,7 +887,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
     const bool switchingSdTrack = impl_->storageLeaseActive && impl_->storageTarget == StorageTarget::Sd && target == StorageTarget::Sd;
 
     if (impl_->audio.isRunning() || impl_->state == "playing" || impl_->state == "buffering") {
-        impl_->fadeToPercent(0, kSwitchFadeOutMs);
+        impl_->fadeToPercent(0, kSwitchFadeOutMs, true);
         impl_->audio.stopSong();
         delay(kSwitchQuietTimeMs);
         if (switchingSdTrack) {
@@ -804,6 +916,9 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
     impl_->publish();
     impl_->applyHardwareVolumePercent(0);
 
+#if APP_SUNTON_PANEL == 3
+    if(impl_->bclkPin==255 && impl_->wsPin==254){i2s_start(kSpeakerI2s);impl_->dacClockStopped=false;}
+#endif
     bool connected = impl_->audio.connecttoFS(*fs, path.c_str());
     if (!connected) {
         delay(120);
@@ -838,7 +953,7 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
     impl_->activeSampleRateHz = impl_->audio.getSampleRate();
     impl_->bitsPerSample = impl_->audio.getBitsPerSample();
     impl_->channelCount = impl_->audio.getChannels();
-    impl_->applyHardwareVolumePercent(impl_->volume);
+    impl_->applyHardwareVolumePercent(0);
     DebugLog.printf("[audio] connecttoFS ok target=%s path=%s\n", storageTargetId(target), path.c_str());
     DebugLog.printf("[audio] local playback started rate=%lu bits=%u channels=%u lib_volume=%u\n",
                   static_cast<unsigned long>(impl_->activeSampleRateHz),
@@ -846,10 +961,12 @@ bool AudioPlayer::playStorageFile(StorageTarget target, const String& path, cons
                   static_cast<unsigned>(impl_->channelCount),
                   static_cast<unsigned>(impl_->hardwareAudioVolume));
     impl_->markPlaying();
+    impl_->fadeToPercent(impl_->volume, kStartFadeInMs, true);
     return true;
 }
 
 bool AudioPlayer::playStorageOverlay(StorageTarget target, const String& path, uint8_t duckPercent, uint8_t overlayPercent) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr || impl_->mediaHeld || !impl_->outputEnabled || path.isEmpty() || !impl_->audio.isRunning() ||
         !(impl_->state == "playing" || impl_->state == "buffering")) {
         return false;
@@ -874,24 +991,41 @@ bool AudioPlayer::playStorageOverlay(StorageTarget target, const String& path, u
 }
 
 void AudioPlayer::stop() {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return;
     }
     impl_->mediaResume=false;impl_->mediaLeasePaused=false;
+#if APP_SUNTON_PANEL == 3
+    const bool releaseStoppedDecoder=impl_->audio.isRunning()||!impl_->url.isEmpty();
+#endif
 
     if (impl_->speechRendering) {impl_->speechFile.close();endStorageWrite(impl_->speechTarget);impl_->speechRendering=false;}
     impl_->stopRequested = true;
     impl_->retryPending = false;
     impl_->streamWarmupPending = false;
     if (impl_->audio.isRunning() || impl_->state == "playing" || impl_->state == "buffering") {
-        impl_->fadeToPercent(0, kSwitchFadeOutMs);
+        impl_->fadeToPercent(0, kSwitchFadeOutMs, true);
         delay(kSwitchQuietTimeMs);
     }
     impl_->completedPlaybackSource = impl_->source;
     impl_->playbackCompletionPending = true;
     impl_->audio.stopSong();
+#if APP_SUNTON_PANEL == 3
+    if(impl_->bclkPin==255 && impl_->wsPin==254){elmaGateSuntonDac(false);i2s_stop(kSpeakerI2s);impl_->dacClockStopped=true;}
+#endif
     clearOverlay(impl_);
     releaseStorageLease(impl_);
+#if APP_SUNTON_PANEL == 3
+    // stopSong retains decoder/network allocations. Rebuild the idle engine
+    // only after playback has stopped and the SD read lease is released.
+    if(releaseStoppedDecoder){
+        const uint8_t savedVolume=impl_->volume;impl_->volume=0;
+        recreateAudioEngine(impl_);impl_->volume=savedVolume;
+        if(impl_->usesInternalDac()){elmaGateSuntonDac(false);i2s_stop(kSpeakerI2s);impl_->dacClockStopped=true;}
+    }
+#endif
+
     if (!impl_->speechPath.isEmpty()) {fs::FS* fs=getStorageFs(impl_->speechTarget);if(fs){beginStorageWrite(impl_->speechTarget);fs->remove(impl_->speechPath);endStorageWrite(impl_->speechTarget);}impl_->speechPath="";}
     impl_->playbackSpeed=1;if (impl_->pitchShift) impl_->pitchShift->reset(1);impl_->clockRate=0;impl_->sourceOverride=false;impl_->volume=impl_->defaultVolume;impl_->audio.setTone(impl_->defaultLowDb,impl_->defaultPresenceDb,impl_->defaultHighDb);
     DebugLog.println("[audio] playback stopped");
@@ -905,6 +1039,7 @@ void AudioPlayer::stop() {
 }
 
 void AudioPlayer::releaseResourcesForUpdate() {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) return;
     stop();
     // stopSong only silences I2S; it retains the decoder, input buffer and
@@ -913,6 +1048,7 @@ void AudioPlayer::releaseResourcesForUpdate() {
 }
 
 bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t doutPin) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return false;
     }
@@ -928,7 +1064,7 @@ bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t 
     impl_->stopRequested = false;
 
     if (resumePlayback) {
-        impl_->fadeToPercent(0, kSwitchFadeOutMs);
+        impl_->fadeToPercent(0, kSwitchFadeOutMs, true);
         impl_->audio.stopSong();
         delay(kSwitchQuietTimeMs);
     }
@@ -962,6 +1098,7 @@ bool AudioPlayer::reconfigureOutputPins(uint8_t bclkPin, uint8_t wsPin, uint8_t 
 }
 
 bool AudioPlayer::disableOutput() {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return false;
     }
@@ -971,7 +1108,7 @@ bool AudioPlayer::disableOutput() {
     impl_->stopRequested = true;
 
     if (impl_->audio.isRunning() || impl_->state == "playing" || impl_->state == "buffering") {
-        impl_->fadeToPercent(0, kSwitchFadeOutMs);
+        impl_->fadeToPercent(0, kSwitchFadeOutMs, true);
         impl_->audio.stopSong();
         delay(kSwitchQuietTimeMs);
     }
@@ -1000,6 +1137,7 @@ bool AudioPlayer::disableOutput() {
 }
 
 void AudioPlayer::setVolumePercent(uint8_t volumePercent) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return;
     }
@@ -1015,16 +1153,22 @@ void AudioPlayer::setVolumePercent(uint8_t volumePercent) {
 }
 
 void AudioPlayer::setDirectLibraryVolume(uint8_t libraryVolume) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return;
     }
     impl_->setHardwareAudioVolume(libraryVolume);
+#if APP_SUNTON_PANEL == 3
+    if(impl_->usesInternalDac())impl_->volume=impl_->dacGainPercent;
+    else
+#endif
     impl_->volume = static_cast<uint8_t>(constrain(map(impl_->hardwareAudioVolume, 0, DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME, 0, 100), 0L, 100L));
     DebugLog.printf("[audio] direct lib_volume=%u mapped_percent=%u\n", impl_->hardwareAudioVolume, impl_->volume);
     impl_->publish();
 }
 
 void AudioPlayer::setEqualizer(const String& preset, int8_t lowDb, int8_t presenceDb, int8_t highDb) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr) {
         return;
     }
@@ -1035,34 +1179,42 @@ void AudioPlayer::setEqualizer(const String& preset, int8_t lowDb, int8_t presen
 }
 
 uint8_t AudioPlayer::volumePercent() const {
+    SuntonAudioLock ownerLock;
     return impl_ == nullptr ? 0 : impl_->volume;
 }
 
 uint8_t AudioPlayer::libraryVolume() const {
+    SuntonAudioLock ownerLock;
     return impl_ == nullptr ? 0 : impl_->hardwareAudioVolume;
 }
 
 String AudioPlayer::currentTitle() const {
+    SuntonAudioLock ownerLock;
     return impl_ == nullptr ? String() : impl_->title;
 }
 
 String AudioPlayer::currentUrl() const {
+    SuntonAudioLock ownerLock;
     return impl_ == nullptr ? String() : impl_->url;
 }
 
 String AudioPlayer::currentState() const {
+    SuntonAudioLock ownerLock;
     return impl_ == nullptr ? String("idle") : impl_->state;
 }
 
 uint32_t AudioPlayer::currentPositionSeconds() const {
+    SuntonAudioLock ownerLock;
     return impl_ != nullptr && impl_->storageLeaseActive ? impl_->audio.getAudioCurrentTime() : 0;
 }
 
 uint32_t AudioPlayer::durationSeconds() const {
+    SuntonAudioLock ownerLock;
     return impl_ != nullptr && impl_->storageLeaseActive ? impl_->cachedDurationSeconds : 0;
 }
 
 bool AudioPlayer::seekStorageFile(uint32_t positionSeconds) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr || !impl_->storageLeaseActive ||
         !(impl_->state == "playing" || impl_->state == "buffering")) {
         return false;
@@ -1092,10 +1244,12 @@ bool AudioPlayer::seekStorageFile(uint32_t positionSeconds) {
 }
 
 bool AudioPlayer::overlayActive() const {
+    SuntonAudioLock ownerLock;
     return impl_ != nullptr && impl_->overlay.active;
 }
 
 bool AudioPlayer::consumeOverlayFinished() {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr || !impl_->overlay.finished) {
         return false;
     }
@@ -1105,6 +1259,7 @@ bool AudioPlayer::consumeOverlayFinished() {
 }
 
 bool AudioPlayer::consumePlaybackCompletion(String& source) {
+    SuntonAudioLock ownerLock;
     if (impl_ == nullptr || !impl_->playbackCompletionPending) {
         return false;
     }
@@ -1115,6 +1270,7 @@ bool AudioPlayer::consumePlaybackCompletion(String& source) {
 }
 
 AudioPlayer::DiagnosticsSnapshot AudioPlayer::diagnostics() const {
+    SuntonAudioLock ownerLock;
     DiagnosticsSnapshot snapshot;
     if (impl_ == nullptr) {
         return snapshot;
@@ -1167,6 +1323,7 @@ bool AudioPlayer::validateSource(JsonVariantConst source, String& error) {
     error="";return true;
 }
 bool AudioPlayer::playSource(JsonVariantConst source, String& error) {
+    SuntonAudioLock ownerLock;
     if(impl_&&impl_->mediaHeld){error="Audio is reserved for communication or capture";return false;}
     if(!impl_ || !impl_->outputEnabled) {error="Audio output is disabled";return false;}
     if(!validateSource(source,error)) return false;
@@ -1221,9 +1378,9 @@ bool configureMediaOutput(AudioPlayer::Impl* impl,bool media,uint32_t rate){
  config.mode=i2s_mode_t(I2S_MODE_MASTER|I2S_MODE_TX);config.sample_rate=rate;config.bits_per_sample=I2S_BITS_PER_SAMPLE_16BIT;
  config.channel_format=I2S_CHANNEL_FMT_RIGHT_LEFT;config.communication_format=I2S_COMM_FORMAT_STAND_I2S;config.intr_alloc_flags=ESP_INTR_FLAG_LEVEL1;
  #if defined(APP_SPK_BOARD)
- config.dma_buf_count=media?3:16;config.dma_buf_len=media?128:512;
+  config.dma_buf_count=media?3:(psramFound()?16:kRamMusicDmaCount);config.dma_buf_len=media?128:(psramFound()?512:256);
 #else
- config.dma_buf_count=media?3:16;config.dma_buf_len=media?128:512;
+  config.dma_buf_count=media?3:(psramFound()?16:kRamMusicDmaCount);config.dma_buf_len=media?128:(psramFound()?512:256);
 #endif
  config.tx_desc_auto_clear=true;config.fixed_mclk=I2S_PIN_NO_CHANGE;
  if(i2s_driver_install(kSpeakerI2s,&config,0,nullptr)!=ESP_OK)return false;
@@ -1233,6 +1390,7 @@ bool configureMediaOutput(AudioPlayer::Impl* impl,bool media,uint32_t rate){
 }
 }
 void AudioPlayer::holdForMedia(bool hold) {
+    SuntonAudioLock ownerLock;
  if(!impl_)return;
  impl_->mediaRequested=hold;
 #if !APP_DISABLE_SD
@@ -1252,8 +1410,10 @@ void AudioPlayer::holdForMedia(bool hold) {
   if(impl_->mediaLeasePaused){StorageTarget target;String path;bool sourceExists=storageMounted(impl_->storageTarget) && (!parseAudioFileReference(impl_->url,target,path) || storageExists(target,path));if(sourceExists)acquireStorageLease(impl_,impl_->storageTarget);else{impl_->audio.stopSong();impl_->mediaResume=false;}impl_->mediaLeasePaused=false;}
   if(impl_->mediaResume){impl_->audio.pauseResume();impl_->state=impl_->streamWarmupPending?"buffering":"playing";impl_->fadeToPercent(impl_->volume,90,true);}else{impl_->state="idle";impl_->applyHardwareVolumePercent(impl_->volume);}impl_->mediaResume=false;impl_->publish();}
 }
-bool AudioPlayer::mediaHeld() const {return impl_ && impl_->mediaHeld;}
+bool AudioPlayer::mediaHeld() const {
+    SuntonAudioLock ownerLock;return impl_ && impl_->mediaHeld;}
 bool AudioPlayer::writeMediaPcm(const int16_t* samples,size_t count,uint32_t rate) {
+    SuntonAudioLock ownerLock;
  if(!impl_||!impl_->outputEnabled||!impl_->mediaHeld||!impl_->outputDriverReady||rate<8000||rate>48000)return false;
  if(impl_->clockRate!=rate){if(i2s_set_sample_rates(kSpeakerI2s,rate)!=ESP_OK)return false;impl_->clockRate=rate;}
  int16_t stereo[512];for(size_t at=0;at<count;at+=256){size_t n=std::min(size_t(256),count-at);for(size_t i=0;i<n;i++)stereo[i*2]=stereo[i*2+1]=int32_t(samples[at+i])*impl_->volume/100;
@@ -1261,6 +1421,7 @@ bool AudioPlayer::writeMediaPcm(const int16_t* samples,size_t count,uint32_t rat
  }return true;
 }
 bool AudioPlayer::captureCue(const String& reference,uint8_t level) {
+    SuntonAudioLock ownerLock;
  if(!impl_||!impl_->outputEnabled)return false;
  bool alreadyHeld=impl_->mediaHeld;holdForMedia(true);uint8_t saved=impl_->volume;impl_->volume=constrain(level,uint8_t(15),uint8_t(100));bool played=false;
  StorageTarget target;String path;

@@ -4,6 +4,20 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#if APP_SUNTON_PANEL
+// Serial diagnostics remain available, without a retained log or SD/NVS work.
+class DeviceLogger : public Print {
+public:
+    void begin() {}
+    void service(bool = false) {}
+    bool snapshot(JsonObject, const String&) { return false; }
+    size_t write(uint8_t byte) override { return Serial.write(byte); }
+    size_t write(const uint8_t* data,size_t size) override { return Serial.write(data,size); }
+    using Print::write;
+    void capture(const char*,size_t) {}
+    size_t readTail(char*,size_t,uint64_t& sequence) { sequence=0;return 0; }
+};
+#else
 class DeviceLogger : public Print {
 public:
     static constexpr size_t InternalBootBytes = 2048;
@@ -41,5 +55,6 @@ private:
     String tail(size_t limit, uint64_t* end = nullptr, uint64_t after = 0);
     String currentBoot(uint64_t* end = nullptr);
 };
+#endif
 
 extern DeviceLogger DebugLog;

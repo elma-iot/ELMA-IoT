@@ -7,7 +7,7 @@
 void drawPanelBootLogo(PanelDisplay& panel) {
     // Decode one row from the flash-resident indexed artwork. No full RGB buffer.
     uint8_t row[kPanelWidth*2];
-    const int scale=APP_ROTARY_HMI?2:1,size=128*scale;
+    const int scale=kPanelBootLogoScale,size=kPanelBootLogoSize;
     const int left=(kPanelWidth-size)/2,top=(kPanelHeight-size)/2;
     for(int y=0;y<kPanelHeight;++y){
         for(int x=0;x<kPanelWidth;++x){

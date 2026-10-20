@@ -19,6 +19,13 @@ public:
     bool readRawTouch(int16_t &x, int16_t &y);
     bool drawColor(int x,int y,int width,int height,uint8_t* colors);
     void brightness(uint8_t percent);
+    void sleep(bool sleeping) {
+#if APP_SUNTON_PANEL == 3
+        if(board_){if(sleeping)board_->sleep();else board_->wakeup();}
+#else
+        (void)sleeping;
+#endif
+    }
     bool readTouch(int16_t &x, int16_t &y);
     void releaseTextBuffer(){if(buffer&&buffer_owned)free(buffer);buffer=nullptr;buffer_owned=true;}
     bool ensureTextBuffer(){if(!buffer)buffer=static_cast<uint8_t*>(calloc((kPanelWidth+7)/8*kPanelHeight,1));return buffer!=nullptr;}

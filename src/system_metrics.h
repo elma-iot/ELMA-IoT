@@ -45,4 +45,4 @@ void beginSystemMetrics();
 void sampleCpuLoadMetrics();
 void sampleSystemMetrics();
 SystemMetricsSnapshot getSystemMetricsSnapshot();
-void appendSystemMetricsJson(JsonObject root);
+void appendSystemMetricsJson(JsonObject root,bool detailed=true);

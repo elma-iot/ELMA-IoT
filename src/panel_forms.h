@@ -2,8 +2,10 @@
 // page, caption, path, control type, choices, minimum, maximum
 struct PanelFormField {const char* page;const char* caption;const char* path;const char* kind;const char* options;double minimum;double maximum;};
 static const PanelFormField panelFormFields[]={
+#if APP_SUNTON_PANEL != 3
  {"gpio","Status LED GPIO","device/statusLedPin","number","",-1,48},
  {"gpio","Status LED type","device/statusLedType","select","regular\nneopixel\nrgb",0,0},
+#endif
  {"wifi","Network name (SSID)","wifi/ssid","text","",0,0},
  {"wifi","Wi-Fi password","wifi/password","secret","",0,0},
  {"wifi","Access point name","wifi/apSsid","text","",0,0},
@@ -35,11 +37,16 @@ static const PanelFormField panelFormFields[]={
  {"device","Touch-hold factory reset","device/touchHoldFactoryResetEnabled","switch","",0,0},
  {"oled","Backlight (%)","oled/brightness","slider","",0,100},
  {"oled","Rotation","oled/rotation","select","0\n90\n180\n270",0,0},
- {"oled","Dim timeout (seconds)","oled/dimTimeoutSeconds","number","",0,86400},
+ {"oled","Dim timeout (s, 0=never)","oled/dimTimeoutSeconds","number","",0,3600},
+#if APP_SUNTON_PANEL == 3
+ {"oled","Screen off (s, 0=never)","oled/screenTimeoutSeconds","number","",0,3600},
+#endif
  {"oled","Touchscreen enabled","oled/touchEnabled","switch","",0,0},
  {"oled","Interface","oled/interfaceMode","select","lvgl\ntext",0,0},
  {"playback","Remember last played","audio/rememberLastPlayed","switch","",0,0},
+#if APP_SUNTON_PANEL != 3
  {"playback","Resume after boot","audio/lastPlayback/resumeAfterBoot","switch","",0,0},
+#endif
  {"playback","Equalizer","audio/equalizerPreset","select","custom\nflat\nclear\nrock\nbass\nclassical\nvoice\njazz\npodcast\nnight",0,0},
  {"playback","Low (dB)","audio/equalizerLowDb","number","",-40,6},
  {"playback","Presence (dB)","audio/equalizerPresenceDb","number","",-40,6},

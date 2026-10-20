@@ -25,6 +25,9 @@
 #include <esp_ota_ops.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#if APP_HAS_ONBOARD_PANEL && defined(ESP32)
+#include <rom/ets_sys.h>
+#endif
 #include <memory>
 #include <freertos/semphr.h>
 
@@ -74,7 +77,13 @@ void initializeStatusLed() {
         pinMode(activeStatusLedPin, OUTPUT);
         pinMode(activeStatusLedGreenPin, OUTPUT);
         pinMode(activeStatusLedBluePin, OUTPUT);
+#if APP_SUNTON_PANEL == 3
+        // Common-anode RGB: high is off. Keep its PWM timers separate from LCD.
+        const uint8_t pins[]={activeStatusLedPin,activeStatusLedGreenPin,activeStatusLedBluePin};
+        for(uint8_t i=0;i<3;++i){digitalWrite(pins[i],HIGH);ledcSetup(12+i,25000,8);ledcAttachPin(pins[i],12+i);ledcWrite(12+i,255);}
+#else
         analogWrite(activeStatusLedPin, 0);analogWrite(activeStatusLedGreenPin, 0);analogWrite(activeStatusLedBluePin, 0);
+#endif
     } else {
         pinMode(activeStatusLedPin, OUTPUT);
         digitalWrite(activeStatusLedPin, LOW);
@@ -97,7 +106,11 @@ void writeStatusLedColor(uint8_t red, uint8_t green, uint8_t blue) {
         statusLedPixel.setPixelColor(0, statusLedPixel.Color(red, green, blue));
         statusLedPixel.show();
     } else if (activeStatusLedIsRgb) {
+#if APP_SUNTON_PANEL == 3
+        ledcWrite(12,255-red);ledcWrite(13,255-green);ledcWrite(14,255-blue);
+#else
         analogWrite(activeStatusLedPin, red);analogWrite(activeStatusLedGreenPin, green);analogWrite(activeStatusLedBluePin, blue);
+#endif
     } else {
         digitalWrite(activeStatusLedPin, (red != 0 || green != 0 || blue != 0) ? HIGH : LOW);
     }
@@ -145,6 +158,10 @@ bool apStatusLedBluePhase(unsigned long now) {
 bool logicLedOwned=false;
 void updateStatusLedForNetwork(bool wifiConnected, bool apMode, unsigned long now = millis()) {
     if(logicLedOwned)return;
+#if APP_SUNTON_PANEL == 3
+    // This board's RGB is reserved for user Logics, not network activity.
+    writeStatusLedColor(0,0,0);return;
+#endif
     if (wifiConnected) {
         writeStatusLedColor(0, 0, kStatusLedBrightness);
         return;
@@ -781,6 +798,9 @@ void syncPendingLastPlaybackSettings() {
 }
 
 void setSavedPlaybackResumeAfterBoot(bool resumeAfterBoot) {
+#if APP_SUNTON_PANEL == 3
+    resumeAfterBoot=false;
+#endif
     if (settings == nullptr || settingsManager == nullptr || !settings->audio.rememberLastPlayed) {
         return;
     }
@@ -797,6 +817,9 @@ void setSavedPlaybackResumeAfterBoot(bool resumeAfterBoot) {
 }
 
 void persistResumablePlaybackSelection(const String& url, const String& label, const String& type, const String& source, bool resumeAfterBoot = true) {
+#if APP_SUNTON_PANEL == 3
+    resumeAfterBoot=false;
+#endif
     if (settings == nullptr || settingsManager == nullptr || !settings->audio.rememberLastPlayed || !isResumablePlaybackSelection(url, type, source)) {
         return;
     }
@@ -3113,22 +3136,12 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
         return false;
     }
 
-    std::unique_ptr<SettingsBundle> persistedStorage(new(std::nothrow) SettingsBundle(settingsManager->load()));
-    if(!persistedStorage){error="Not enough memory to reload settings";return false;}
-    auto& persisted=*persistedStorage;
-    if (hasPostedMotorRuntimeConfig && persisted.ui.motorRuntimeConfig != updated.ui.motorRuntimeConfig) {
-        persisted.ui.motorRuntimeConfig = updated.ui.motorRuntimeConfig;
-        persisted.usingSavedSettings = true;
-        if (!settingsManager->save(persisted)) {
-            error = "Motor configuration could not be saved; internal NVS storage is full or unavailable";
-            return false;
-        }
-        persisted = settingsManager->load();
-    }
-
-    *settings = persisted;
+    // updateFromJson already sanitizes; save verifies the on-flash record.
+    // Reloading here retains the POST JSON plus multiple full bundles and can
+    // fail allocation, silently falling back to older NVS settings.
+    *settings = updated;
     appState->setDevice(settings->device.deviceName, settings->device.friendlyName, true, settings->device.clockUtcOffsetMinutes);
-    deferredActions->pendingSettings = persisted;
+    deferredActions->pendingSettings = updated;
     deferredActions->settingsApplyWifiPowerOnly = powerOnly &&
         (!deferredActions->settingsApplyPending || deferredActions->settingsApplyWifiPowerOnly);
     deferredActions->settingsApplyDisplayOnly = object.size()==1 && object["oled"].is<JsonObjectConst>() &&
@@ -3312,7 +3325,15 @@ void serviceCloneProvisioningSerial() {
                     wifiManager->apSsid().c_str(), WiFi.softAPIP().toString().c_str());
             }
             Serial.flush();
+
+#if APP_SUNTON_PANEL == 3
+        } else if(command=="ELMA_DISPLAY_PAUSE" || command=="ELMA_DISPLAY_DARK") {
+            if(displayManager)displayManager->quietForDiagnostics(command=="ELMA_DISPLAY_DARK");
+#endif
         } else if (command == "ELMA_DIAGNOSTICS") {
+#if APP_SUNTON_PANEL
+            if(TaskHandle_t task=xTaskGetHandle("async_tcp"))DebugLog.printf("[health-network] async_stack_min=%u\n",unsigned(uxTaskGetStackHighWaterMark(task)));
+#endif
 #if APP_ROTARY_HMI
             JsonDocument hmiState;
             RoundHmi::snapshot(hmiState.to<JsonObject>());
@@ -3323,9 +3344,10 @@ void serviceCloneProvisioningSerial() {
                 millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
                 static_cast<int>(WiFi.status()), WiFi.RSSI(), mqttManager != nullptr && mqttManager->isConnected(), unsigned(uxTaskGetStackHighWaterMark(nullptr)));
-            DebugLog.printf("[health-memory] flash=%u psram=%u psram_free=%u flash_fs_mounted=%d\n",
+            DebugLog.printf("[health-memory] flash=%u psram=%u psram_free=%u flash_fs_mounted=%d heap8=%u min_heap8=%u\n",
                 ESP.getFlashChipSize(), ESP.getPsramSize(), ESP.getFreePsram(),
-                storageMounted(StorageTarget::Flash));
+                storageMounted(StorageTarget::Flash),
+                heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
         }
     }
 }
@@ -4001,6 +4023,10 @@ void processDeferredActions() {
 }  // namespace
 
 void setup() {
+#if APP_SUNTON_PANEL == 3
+    digitalWrite(26,LOW);pinMode(26,OUTPUT);
+    for(uint8_t pin:{uint8_t(4),uint8_t(16),uint8_t(17)}){digitalWrite(pin,HIGH);pinMode(pin,OUTPUT);}
+#endif
 #if defined(APP_SPK_BOARD)
     // Ordinary CPU buffers belong in PSRAM; SDK DMA and task stacks use explicit internal caps.
     if(psramFound())heap_caps_malloc_extmem_enable(0);
@@ -4012,6 +4038,17 @@ void setup() {
     Serial.begin(115200);
 #endif
     DebugLog.begin();
+#if APP_HAS_ONBOARD_PANEL && defined(ESP32)
+    // Allocation failures must remain observable even when C++ new aborts.
+    heap_caps_register_failed_alloc_callback([](size_t bytes,uint32_t caps,const char* function){
+        if((caps&MALLOC_CAP_SPIRAM) && !psramFound())return;
+        static uint32_t lastReport=0;const uint32_t now=millis();if(now-lastReport<5000)return;lastReport=now;
+        ets_printf("[memory] allocation failed bytes=%u caps=0x%x function=%s free=%u largest=%u\n",
+            static_cast<unsigned>(bytes),static_cast<unsigned>(caps),function,
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)),
+            static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)));
+    });
+#endif
     beginSystemMetrics();
     beginLogicSleep();
     activeCpuFrequencyMhz = ESP.getCpuFreqMHz();
@@ -4245,6 +4282,10 @@ void setup() {
         return webServer->panelCommand(action,args,error);
     });
 #endif
+    webServer->setSettingsReader([](const WebServerManager::SettingsVisitor& visit){
+        SettingsApplyGuard guard(pdMS_TO_TICKS(20));
+        if(guard && settings)visit(*settings);
+    });
     webServer->setAudioSourceHandler(queueAudioSource);
     webServer->begin(
         *appState,
@@ -4621,7 +4662,15 @@ void serviceRuntimeAudioAutomation(const AppStateSnapshot& snapshot) {
 
     // Resuming radio and starting a TLS release check together exhausts the
     // non-PSRAM ESP32 heap before the MP3 decoder can allocate its buffers.
+    constexpr size_t minimumBootUpdateHeap=
+#if APP_SUNTON_PANEL == 3
+        114688;
+#else
+        65536;
+#endif
     if (runtimeAudio.bootUpdateCheckQueued && wifiManager != nullptr && wifiManager->isConnected() && otaManager != nullptr && !snapshot.ota.busy &&
+        (psramFound() || (heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)>=minimumBootUpdateHeap &&
+                         heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)>=32768)) &&
         !runtimeAudio.resumeSavedPlaybackPending && (deferredActions == nullptr || !deferredActions->playPending) &&
         snapshot.playback.state != "playing" && snapshot.playback.state != "buffering") {
         runtimeAudio.bootUpdateCheckQueued = false;
@@ -4866,6 +4915,9 @@ void loop() {
         lastHeapUpdateAt = millis();
         sampleSystemMetrics();
         appState->setFreeHeap(getSystemMetricsSnapshot().freeHeapBytes);
+#if APP_SUNTON_PANEL == 3 && !defined(APP_DISABLE_WEB_UI)
+        if(!settings->oled.enabled && webServer)webServer->releasePanelCaches();
+#endif
         mqttManager->publishChipTemperature();
         if(logicLedOwned && String(logicDevice.mode())=="stopped") {
             writeStatusLed(false);logicLedOwned=false;

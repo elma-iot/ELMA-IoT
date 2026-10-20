@@ -51,6 +51,8 @@ bool storageBusy(StorageTarget target);
 bool storageWriteBlocked(StorageTarget target);
 fs::FS* getStorageFs(StorageTarget target);
 bool storageMounted(StorageTarget target);
+// Caller must hold a read lease; probes the card without unmounting live files.
+bool storageReadLeaseHealthy(StorageTarget target);
 bool storageConfigured(StorageTarget target);
 bool storageExists(StorageTarget target, const String& path);
 File storageOpen(StorageTarget target, const String& path, const char* mode = "r");

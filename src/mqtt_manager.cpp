@@ -458,7 +458,7 @@ void MqttManager::loop() {
             discoveryCursor_ = 0;
             stateCursor_ = 0;
         }
-        const bool memoryAvailable = ESP.getFreeHeap() >= 40000 &&
+        const bool memoryAvailable = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) >= 40000 &&
             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) >= 8192;
         if (memoryAvailable && discoveryPublishPending_ && settings_.mqtt.discoveryEnabled &&
             pendingPublishes_ < 4 && millis() - lastDiscoveryStepAt_ >= 100UL &&
@@ -945,7 +945,7 @@ uint16_t MqttManager::publishPacket(const char* topic, uint8_t qos, bool retaine
     const size_t bytes = strlen(topic) + length + 64;
     // The library allocates a vector and dereferences topic without checking
     // allocation failure. Reserve heap for audio/TLS and bound QoS1 backlog.
-    if (ESP.getFreeHeap() < 24000 + bytes * 2 ||
+    if (heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 24000 + bytes * 2 ||
         heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < max(size_t(4096), bytes * 2)) return defer();
     uint8_t count = pendingPublishes_.load();
     do {

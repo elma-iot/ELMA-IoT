@@ -19,6 +19,9 @@
 class WebServerManager {
   public:
     using SettingsGetter = std::function<SettingsBundle(void)>;
+    using SettingsVisitor = std::function<void(const SettingsBundle&)>;
+    using SettingsReader = std::function<void(const SettingsVisitor&)>;
+    void setSettingsReader(SettingsReader reader) { settingsReader_=reader; }
     using SettingsSaver = std::function<bool(JsonVariantConst, String&)>;
     using PlayHandler = std::function<bool(const String&, const String&, const String&, String&)>;
     using AudioSourceHandler = std::function<bool(JsonVariantConst, String&)>;
@@ -65,16 +68,19 @@ class WebServerManager {
     bool webUiLocked() const;
 #if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
     void panelSnapshot(const String& page,JsonObject root);
+    void releasePanelCaches();
     bool panelCommand(const String& action,JsonVariantConst args,String& error);
 #endif
 
   private:
 #if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
+    void panelSnapshotWithSettings(const String& page,JsonObject root,const SettingsBundle& settings);
     String panelStoragePath_="/", panelStorageListing_, panelStoragePage_;
     int panelStorageOffset_=0;
     bool panelStorageDirty_=true, panelStorageMounted_=false;
     void* panelBrowseJob_=nullptr;
 #endif
+    SettingsReader settingsReader_;
     StatusAppender ledStatusAppender_;
     LogicsGetter logicsGetter_;
     LogicsHandler logicsHandler_;

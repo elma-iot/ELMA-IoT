@@ -34,9 +34,23 @@ bool selected(JsonVariantConst values,const char* fragment=nullptr){
  for(JsonVariantConst v:values.as<JsonArrayConst>())if(selected(v,fragment))return true;return false;
 }
 }
+void WebServerManager::releasePanelCaches(){
+ panelStorageListing_=String();panelStoragePage_=String();panelStorageDirty_=true;
+ PanelRadio::releaseIdleCache();
+ if(panelBrowseJob_){auto* job=static_cast<PanelBrowseJob*>(panelBrowseJob_);portENTER_CRITICAL(&browseMux);bool done=job->done;portEXIT_CRITICAL(&browseMux);if(done){delete job;panelBrowseJob_=nullptr;}}
+}
 void WebServerManager::panelSnapshot(const String& requestedPage,JsonObject root){
+ // Borrow the current configuration under its owner lock; copying every String
+ // each refresh creates an avoidable allocation peak on boards without PSRAM.
+ if(settingsReader_)settingsReader_([&](const SettingsBundle& settings){panelSnapshotWithSettings(requestedPage,root,settings);});
+}
+void WebServerManager::panelSnapshotWithSettings(const String& requestedPage,JsonObject root,const SettingsBundle& settings){
  const bool round=requestedPage.startsWith("round/");
  const String page=round?requestedPage.substring(6):requestedPage;
+#if APP_SUNTON_PANEL == 3
+ if(page!="playback")PanelRadio::releaseIdleCache();
+ if(!page.startsWith("storage-")){panelStorageListing_=String();panelStoragePage_=String();panelStorageDirty_=true;}
+#endif
  if(panelBrowseJob_&&!page.startsWith("storage-")){auto* job=static_cast<PanelBrowseJob*>(panelBrowseJob_);portENTER_CRITICAL(&browseMux);bool done=job->done;portEXIT_CRITICAL(&browseMux);if(done){delete job;panelBrowseJob_=nullptr;panelStorageDirty_=true;}}
 
  if(page=="info"){root["build"]=__DATE__ " " __TIME__;root["mac"]=WiFi.macAddress();}
@@ -44,11 +58,18 @@ void WebServerManager::panelSnapshot(const String& requestedPage,JsonObject root
  if(security_.locked()&&!round)return;
  root["sdNeedsFormat"]=sdFormatPromptNeeded();
  if(page=="firmware")otaManager_->appendStatusJson(root["ota"].to<JsonObject>());
- std::unique_ptr<SettingsBundle> snapshot(new(std::nothrow) SettingsBundle(settingsGetter_()));if(!snapshot)return;const auto& settings=*snapshot;auto config=root["settings"].to<JsonObject>();
+ auto config=root["settings"].to<JsonObject>();
  const char* section=page=="wifi"?"wifi":page=="mqtt"?"mqtt":page=="device"||page=="gpio"?"device":page=="oled"?"oled":page=="battery"?"battery":page=="effects"?"effects":page=="playback"||page.startsWith("storage-")?"audio":page=="firmware"?"ota":nullptr;
+#if APP_SUNTON_PANEL == 3
+ if(page=="gpio")section=nullptr;
+#endif
  if(section)settingsManager_->toJson(settings,config,section,false);
  if(round&&page=="security")settingsManager_->toJson(settings,config,"oled",false);
- if(page=="gpio"||page=="wled"||page=="motor")settingsManager_->toJson(settings,config,"ui",false);
+ bool includeUi=page=="gpio"||page=="wled"||page=="motor";
+#if APP_SUNTON_PANEL == 3
+ if(page=="gpio")includeUi=false;
+#endif
+ if(includeUi)settingsManager_->toJson(settings,config,"ui",false);
  // Passwords stay on the unlocked local panel; other pages never carry them.
  if(page!="mqtt")config["mqtt"].remove("password");config["webAuth"].remove("password");
  JsonDocument profileDoc(panelJsonAllocator());JsonVariantConst profiles=config["ui"]["peripheralProfiles"];
@@ -78,7 +99,9 @@ void WebServerManager::panelSnapshot(const String& requestedPage,JsonObject root
  }caps["plots"]=hasPlots;
  if(page=="wled"&&ledStatusAppender_)ledStatusAppender_(root);
  if(page=="motor"&&motorStatusAppender_)motorStatusAppender_(root);
- if(page=="hardware"||page=="info"||page=="gpio")appendSystemMetricsJson(root);
+ if(page=="hardware"||page=="info")appendSystemMetricsJson(root);
+ // The wiring page needs the board name, not a second copy of all metrics.
+ if(page=="gpio")root["hardware"]["boardProfile"]=settings.ui.gpioBoardSelection;
  if(page=="firmware")otaManager_->appendStatusJson(root);
  if(page=="logs"){JsonDocument log(panelJsonAllocator());DebugLog.snapshot(log.to<JsonObject>(),"");String text=log["text"]|"";root["logText"]=text.substring(text.length()>3000?text.length()-3000:0);}
  if(page=="plots"){JsonDocument samples(panelJsonAllocator());plotSamplesSince(0,0,samples);root["plots"].set(samples);}

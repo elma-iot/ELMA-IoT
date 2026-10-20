@@ -2,6 +2,7 @@ import { normalizeWifiPower, renderWifiPowerValues } from "./wifi-power-controls
 import {voltageDividerSettings} from './voltage-divider.js';
 import { restoreLegacyPeripheralProfiles } from "./legacy-peripheral-profiles.js";
 import { applyMqttDefaults } from "./mqtt-defaults.js";
+import {ONBOARD_BOARDS} from './onboard-boards.js';
 
 export function createConfigurationSettingsPersistenceModule({
   state,
@@ -11,6 +12,7 @@ export function createConfigurationSettingsPersistenceModule({
   effectSelectConfig,
   settingsAutosaveDelayMs,
   request,
+  settingsReadRetries = () => 1,
   delay,
   handleError,
   setMessage,
@@ -399,7 +401,9 @@ export function createConfigurationSettingsPersistenceModule({
       try {
         await request("/api/settings", {
           method: "POST",
-          body: JSON.stringify(submittedSettings),
+          body: JSON.stringify(ONBOARD_BOARDS[submittedSettings.ui?.gpioBoardSelection]?.externalPins
+            ? Object.fromEntries(Object.entries(submittedSettings).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(previousSettings?.[key])))
+            : submittedSettings),
         });
 
         state.settings = submittedSettings;
@@ -454,7 +458,16 @@ export function createConfigurationSettingsPersistenceModule({
   }
 
   async function loadSettings(incoming = null) {
-    const loadedSettings = incoming || await request("/api/settings");
+    let loadedSettings = incoming;
+    const attempts = Math.max(1, Math.min(3, settingsReadRetries()));
+    for (let attempt = 0; !loadedSettings && attempt < attempts; attempt += 1) {
+      try { loadedSettings = await request("/api/settings"); }
+      catch (error) {
+        const transient = error?.isDeviceOffline || error instanceof SyntaxError || /memory busy|configuration busy|failed to fetch|network|load failed|HTTP 50[234]/i.test(error?.message || "");
+        if (!transient || attempt + 1 === attempts) throw error;
+        await delay(400 * (attempt + 1));
+      }
+    }
     const fingerprint = JSON.stringify(loadedSettings);
     loadedSettings.audio ||= {};
     loadedSettings.sd ||= {};

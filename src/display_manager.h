@@ -41,8 +41,16 @@ class DisplayManager {
     void markActivity();
     void powerOff();
     void loop(const AppStateSnapshot& state);
+#if APP_SUNTON_PANEL == 3
+    void quietForDiagnostics(bool dark);
+#endif
 
   private:
+#if APP_SUNTON_PANEL == 3
+    uint32_t diagnosticQuietUntil_=0;
+    bool screenOff_=false,wakeTouchPending_=false;
+    void setScreenOff(bool off);
+#endif
 #if !APP_DISABLE_DISPLAY
     OledSettings settings_;
     std::unique_ptr<Adafruit_SSD1306> ssd1306_;

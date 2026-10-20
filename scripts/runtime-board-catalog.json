@@ -4886,7 +4886,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-3248s035c.svg",
-      "alt": "ESP32-48S035 / ESP32-3248S035C В· 3.5-inch capacitive"
+      "alt": "ESP32-3248S035C - 3.5-inch capacitive touch"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4899,9 +4899,7 @@
     "gpio": [
       35,
       22,
-      21,
-      1,
-      3
+      21
     ],
     "capabilities": {
       "false:output": [
@@ -4919,14 +4917,10 @@
         22
       ],
       "true:output": [
-        1,
-        3,
         21,
         22
       ],
       "true:input": [
-        1,
-        3,
         21,
         22,
         35
@@ -4936,8 +4930,6 @@
       ],
       "true:touch": [],
       "true:pull-input": [
-        1,
-        3,
         21,
         22
       ]

@@ -1,9 +1,9 @@
 """Exercise real response code with partial writes, delayed ACKs and backpressure."""
 import pathlib, shutil, subprocess, tempfile, unittest
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-VCVARS=pathlib.Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvars64.bat')
+from test_json_allocator import VCVARS
 class JsonResponseTests(unittest.TestCase):
- @unittest.skipUnless(VCVARS.is_file(),'MSVC compiler unavailable')
+ @unittest.skipUnless(VCVARS,'MSVC compiler unavailable')
  def test_large_response_and_partial_reads(self):
   with tempfile.TemporaryDirectory() as folder:
    work=pathlib.Path(folder)
@@ -18,11 +18,15 @@ constexpr uint8_t ASYNC_WRITE_FLAG_COPY=1;
 enum { RESPONSE_HEADERS, RESPONSE_CONTENT, RESPONSE_END };
 struct AsyncClient {
  size_t capacity=5744,limit=137,borrowed=0; std::string output;
+ unsigned sendCalls=0;
  size_t space(){return capacity;}
  void setNoDelay(bool){}
- size_t write(const char* data,size_t n,uint8_t flags=1){n=std::min(n,limit);output.append(data,n);if(!flags)borrowed+=n;return n;}
+ size_t add(const char* data,size_t n,uint8_t flags=1){n=std::min(n,limit);output.append(data,n);if(!flags)borrowed+=n;return n;}
+ bool send(){return ++sendCalls%3!=0;}
+ size_t write(const char* data,size_t n,uint8_t flags=1){auto queued=add(data,n,flags);return send()?queued:0;}
 };
-struct AsyncWebServerRequest { AsyncClient tcp; AsyncClient* client(){return &tcp;} uint8_t version(){return 1;} };
+enum {HTTP_GET=1,HTTP_HEAD=2};
+struct AsyncWebServerRequest { AsyncClient tcp; int verb=HTTP_GET;int method(){return verb;} AsyncClient* client(){return &tcp;} uint8_t version(){return 1;} };
 class AsyncWebServerResponse {
 public:
  virtual ~AsyncWebServerResponse()=default;
@@ -68,6 +72,11 @@ int main(){
  char* data=static_cast<char*>(malloc(expected.size()+1));memcpy(data,expected.c_str(),expected.size()+1);
  JsonBufferResponse json(data,expected.size(),200);assert(json._sourceValid());transfer(json,expected);
  BoundedBufferResponse empty("",0,"text/plain");transfer(empty,"");
+ BoundedBufferResponse head(expected.data(),expected.size(),"text/plain",200,true);
+ AsyncWebServerRequest request;request.verb=HTTP_HEAD;head._respond(&request);
+ head._ack(&request,head._writtenLength,0);
+ assert(head._state==RESPONSE_END&&request.tcp.output=="HEADERS\r\n\r\n");
+ assert(head._contentLength==expected.size());
 }
 ''')
    (work/'build.cmd').write_text(f'@call "{VCVARS}" >nul\ncl /nologo /std:c++17 /EHsc /I. main.cpp /Fe:response-test.exe\nif errorlevel 1 exit /b 1\nresponse-test.exe\n')

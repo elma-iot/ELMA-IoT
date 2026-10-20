@@ -7,6 +7,7 @@
 #include <memory>
 
 DeviceLogger DebugLog;
+#if !APP_SUNTON_PANEL
 namespace {
 constexpr const char* LogPath = "/rebootlog.txt";
 vprintf_like_t originalLogPrinter = nullptr;
@@ -224,3 +225,4 @@ bool DeviceLogger::snapshot(JsonObject out, const String& since) {
     xSemaphoreGive(ioMutex_);
     return true;
 }
+#endif

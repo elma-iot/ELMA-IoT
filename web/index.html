@@ -820,6 +820,7 @@
               <label>Dim Timeout (s)
                 <input form="settingsForm" name="oled.dimTimeoutSeconds" type="number" min="0" max="3600">
               </label>
+              <label id="panelScreenTimeoutLabel" hidden>Screen off timeout (s, 0 = never)<input form="settingsForm" name="oled.screenTimeoutSeconds" type="number" min="0" max="3600"><small>Dim uses 50% brightness. Screen off sleeps the LCD until touched.</small></label>
             </div>
             <div class="row gpio-remap-source">
               <label>SDA Pin
@@ -954,6 +955,7 @@
                     <div id="peripheralAudioPrimaryIndexLabel" class="peripheral-profile-index-label" hidden></div>
                     <div class="peripheral-field-composite">
                       <select id="peripheralAudioProfile" aria-label="Audio output peripheral profile">
+                  <option value="sunton-speaker">Onboard speaker amplifier - DAC GPIO26</option>
                   <option value="none">None</option>
                   <option value="max98357a-i2s-amp" selected>MAX98357A I2S Amp</option>
                   <option value="pcm5102-i2s-dac">PCM5102 I2S DAC</option>

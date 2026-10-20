@@ -15,6 +15,7 @@ class SuntonPanel : public lgfx::LGFX_Device {
     lgfx::Light_PWM light_;
     TwoWire touchWire_{1};
     bool touchEnabled_ = false;
+    bool started_ = false;
     uint8_t touchAddress_ = 0;
     bool readbackVerified_ = false;
     uint32_t checkedAt_ = 0;
@@ -76,10 +77,11 @@ public:
         p.memory_width=kPanelWidth;p.memory_height=kPanelHeight;
         p.offset_rotation=0;p.readable=true;p.invert=false;p.rgb_order=false;p.bus_shared=false;panel_.config(p);
         auto l=light_.config();l.pin_bl=APP_SUNTON_PANEL==3?27:21;
-        l.invert=false;l.freq=5000;l.pwm_channel=0;light_.config(l);panel_.setLight(&light_);setPanel(&panel_);
+        l.invert=false;l.freq=APP_SUNTON_PANEL==3?25000:5000;l.pwm_channel=0;light_.config(l);panel_.setLight(&light_);setPanel(&panel_);
     }
     bool start(bool touch) {
         if(!init())return false;
+        started_=true;
         setRotation(0);selectClock();touchEnabled_=touch;
         if(!touch)return true;
 #if APP_SUNTON_PANEL == 1
@@ -102,6 +104,15 @@ public:
         touchEnabled_=touchWire_.endTransmission()==0;
 #endif
         return true;
+    }
+    ~SuntonPanel() {
+#if APP_SUNTON_PANEL == 3
+        touchEnabled_=false;
+        if(started_){waitDMA();setBrightness(0);sleep();releaseBus();}
+        touchWire_.end();
+        ledcDetachPin(27);digitalWrite(27,LOW);pinMode(27,OUTPUT);
+        digitalWrite(25,LOW);pinMode(25,OUTPUT); // Hold the GT911 reset while disabled.
+#endif
     }
     bool point(int16_t& x,int16_t& y) {
         if(!touchEnabled_)return false;

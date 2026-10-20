@@ -17,6 +17,7 @@ export function supportedBoard(board) {
   return ["esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c6", "esp32c2", "esp8266", "esp8285"].includes(boardChipFamily(board));
 }
 export function chipPins(chip, output = false, board = "") {
+  if(board==='esp32-3248s035c')return output?[21,22]:[21,22,35];
   if (board.startsWith("viewe-uedx48480021-md80et")) return []; // Adapter GPIO mapping is unverified.
   let pins = [];
   if (chip === "esp32") pins = [0,1,2,3,4,5,12,13,14,15,16,17,18,19,21,22,23,25,26,27,32,33,34,35,36,39];

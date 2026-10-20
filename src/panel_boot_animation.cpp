@@ -1,5 +1,6 @@
 #if APP_HAS_ONBOARD_PANEL
 #include "panel_boot.h"
+#include "device_log.h"
 #if APP_ROTARY_HMI
 #include "panel_boot_rotary_layers.h"
 #else
@@ -9,11 +10,7 @@ namespace {
 const lv_img_dsc_t* bootLayer(unsigned index){
     static lv_img_dsc_t images[26]{};
     auto& d=images[index];d.header.cf=LV_IMG_CF_INDEXED_2BIT;
-#if APP_ROTARY_HMI
-    d.header.w=256;d.header.h=256;
-#else
-    d.header.w=128;d.header.h=128;
-#endif
+    d.header.w=kPanelBootLogoSize;d.header.h=kPanelBootLogoSize;
     d.data_size=sizeof(elmaBootLayers[index]);d.data=elmaBootLayers[index];return &d;
 }
 int smooth(int t,int begin,int end){if(t<=begin)return 0;if(t>=end)return 255;float x=float(t-begin)/(end-begin);return int(255*x*x*(3-2*x));}
@@ -44,6 +41,10 @@ void animatePanelBootLogo(lv_disp_t* display,bool staticFirst){
         }
         lv_obj_set_style_opa(o,255-smooth(t,2700,3000),0);
     });
-    lv_anim_set_ready_cb(&a,[](lv_anim_t* a){lv_obj_del(static_cast<lv_obj_t*>(a->var));});lv_anim_start(&a);
+    lv_anim_set_ready_cb(&a,[](lv_anim_t* a){lv_obj_del(static_cast<lv_obj_t*>(a->var));
+#if APP_SUNTON_PANEL == 3
+ lv_mem_buf_free_all();DebugLog.printf("[display-memory] boot-complete heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
+#endif
+});lv_anim_start(&a);
 }
 #endif

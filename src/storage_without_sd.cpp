@@ -61,6 +61,7 @@ void endStorageRead(StorageTarget) {}
 bool storageBusy(StorageTarget) { return false; }
 fs::FS* getStorageFs(StorageTarget target) { return target == StorageTarget::Flash && LittleFS.totalBytes() > 0 ? static_cast<fs::FS*>(&LittleFS) : nullptr; }
 bool storageMounted(StorageTarget target) { return getStorageFs(target) != nullptr; }
+bool storageReadLeaseHealthy(StorageTarget target) { return storageMounted(target); }
 bool storageConfigured(StorageTarget target) { return target == StorageTarget::Flash && flashPartition() != nullptr; }
 bool storageExists(StorageTarget target, const String& path) { auto* fs = getStorageFs(target); return fs && fs->exists(path); }
 File storageOpen(StorageTarget target, const String& path, const char* mode) { auto* fs = getStorageFs(target); return fs ? fs->open(path, mode) : File(); }

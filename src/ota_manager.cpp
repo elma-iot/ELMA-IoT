@@ -7,6 +7,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_app_format.h>
 #include <esp_ota_ops.h>
+#include <esp_heap_caps.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/version.h>
 
@@ -450,6 +451,18 @@ void OtaManager::loop() {
             ESP.restart();
         }
     }
+#if APP_SUNTON_PANEL == 3
+    // The TLS worker stack plus handshake buffers must leave room for LCD,
+    // audio and HTTP. Aggregate heap includes IRAM that TLS cannot use.
+    if ((!pendingInstallVersion_.isEmpty() || pendingReleaseRefresh_ || pendingCheck_) &&
+        !busy_ && !releaseRefreshInProgress_ &&
+        (heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<114688 ||
+         heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<65536)) {
+        const char* message="Network firmware check deferred: insufficient internal RAM. Use the USB application to update this board.";
+        if(lastMessage_!=message){lastMessage_=message;syncAppState("deferred",lastMessage_);}
+        return;
+    }
+#endif
     // A selected install must never overlap a GitHub release refresh: both
     // operations allocate TLS/HTTP state and stream data. If a refresh is
     // already running, wait for it to finish. Once it does, the explicit

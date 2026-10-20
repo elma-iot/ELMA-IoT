@@ -1,3 +1,4 @@
+import { fixedOnboardProfile } from "./modules/sunton-capabilities.js";
 import {fileCrc32, retryTransfer, storageChecksum} from './modules/storage-integrity.js';
 import {createRobotTab} from "./modules/robot-tab.js";
 import {createMotionCapture} from './modules/motion-capture.js';
@@ -888,30 +889,9 @@ const GPIO_BOARD_LAYOUTS = {
       {
         "pin": 21,
         "label": "GPIO21"
-      },
-      {
-        "pin": null,
-        "label": "3V3"
       }
     ],
-    "right": [
-      {
-        "pin": 1,
-        "label": "GPIO1"
-      },
-      {
-        "pin": 3,
-        "label": "GPIO3"
-      },
-      {
-        "pin": null,
-        "label": "5V"
-      },
-      {
-        "pin": null,
-        "label": "GND"
-      }
-    ]
+    "right": []
   },
   "esp32-cam": {
     "left": [
@@ -3790,7 +3770,24 @@ const GPIO_BOARD_EXTRA_LAYOUTS = {
     "right": []
   },
   "esp32-3248s035c": {
-    "left": [],
+    "left": [
+      {
+        "pin": null,
+        "label": "GND"
+      },
+      {
+        "pin": 22,
+        "label": "GPIO22"
+      },
+      {
+        "pin": 21,
+        "label": "GPIO21"
+      },
+      {
+        "pin": null,
+        "label": "3V3"
+      }
+    ],
     "right": []
   },
   "esp32-cam": {
@@ -4069,7 +4066,10 @@ const GPIO_BOARD_EXTRA_LAYOUTS = {
       }
     ]
   },
-  "miniexco-v2": {"left": [], "right": []}
+  "miniexco-v2": {
+    "left": [],
+    "right": []
+  }
 };
 const GPIO_BOARD_RESERVED_PINS = {
   "viewe-uedx48480021-md80et": {
@@ -6281,6 +6281,7 @@ configurationBackupModule = createConfigurationBackupModule({
 });
 
 configurationSettingsPersistenceModule = createConfigurationSettingsPersistenceModule({
+  settingsReadRetries: () => ONBOARD_BOARDS[activeGpioBoardProfile()]?.externalPins ? 3 : 1,
   state,
   elements,
   defaultEsp32S3AudioPins: DEFAULT_ESP32S3_AUDIO_PINS,
@@ -6659,7 +6660,9 @@ function namedField(name) {
 function normalizedPeripheralAudioProfiles() {
   const currentProfiles = Array.isArray(state.peripheralAudioProfiles) ? state.peripheralAudioProfiles : [];
   const primaryProfile = String(elements.peripheralAudioProfile?.value || currentProfiles[0] || "none").trim() || "none";
-  const sanitizedProfiles = [primaryProfile, ...currentProfiles.slice(1)]
+  const selectedProfile = fixedOnboardProfile(ONBOARD_BOARDS[activeGpioBoardProfile()],"audio",primaryProfile);
+  if(elements.peripheralAudioProfile && [...elements.peripheralAudioProfile.options].some(option=>option.value===selectedProfile))elements.peripheralAudioProfile.value=selectedProfile;
+  const sanitizedProfiles = [selectedProfile, ...currentProfiles.slice(1)]
     .map((value) => String(value || "none").trim() || "none")
     .slice(0, MAX_PERIPHERAL_AUDIO_OUTPUTS);
   return sanitizedProfiles.length ? sanitizedProfiles : ["none"];
@@ -6677,7 +6680,9 @@ function normalizedPeripheralAudioInProfiles() {
 function normalizedPeripheralDisplayProfiles() {
   const currentProfiles = Array.isArray(state.peripheralDisplayProfiles) ? state.peripheralDisplayProfiles : [];
   const primaryProfile = String(elements.peripheralDisplayProfile?.value || currentProfiles[0] || "none").trim() || "none";
-  const sanitizedProfiles = [primaryProfile, ...currentProfiles.slice(1)]
+  const selectedProfile = fixedOnboardProfile(ONBOARD_BOARDS[activeGpioBoardProfile()],"display",primaryProfile);
+  if(elements.peripheralDisplayProfile && [...elements.peripheralDisplayProfile.options].some(option=>option.value===selectedProfile))elements.peripheralDisplayProfile.value=selectedProfile;
+  const sanitizedProfiles = [selectedProfile, ...currentProfiles.slice(1)]
     .map((value) => String(value || "none").trim() || "none")
     .slice(0, MAX_PERIPHERAL_DISPLAYS);
   return sanitizedProfiles.length ? sanitizedProfiles : ["none"];
@@ -6874,6 +6879,10 @@ function normalizedPeripheralExpansionProfiles() {
 }
 
 function appendPeripheralOptions(select, options, selectedValue) {
+  const groups={audio:PERIPHERAL_AUDIO_PROFILE_OPTIONS,audioIn:PERIPHERAL_AUDIO_IN_PROFILE_OPTIONS,display:PERIPHERAL_DISPLAY_PROFILE_OPTIONS,sensor:PERIPHERAL_SENSOR_PROFILE_OPTIONS,input:PERIPHERAL_INPUT_PROFILE_OPTIONS,storage:PERIPHERAL_STORAGE_PROFILE_OPTIONS,communication:PERIPHERAL_COMMUNICATION_PROFILE_OPTIONS,power:PERIPHERAL_POWER_PROFILE_OPTIONS,control:PERIPHERAL_CONTROL_PROFILE_OPTIONS,expansion:PERIPHERAL_EXPANSION_PROFILE_OPTIONS};
+  const group=Object.keys(groups).find(key=>groups[key]===options);
+  const limited=ONBOARD_BOARDS[activeGpioBoardProfile()]?.allowedProfiles?.[group];
+  if(limited)options=options.filter(option=>limited.includes(option.value));
   const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
   options=options.filter(o=>o.value!=="mcp2551"||["esp32","esp32s2","esp32s3","esp32c3"].includes(boardChipFamily(board))).filter(o=>!['spk-ns4168','spk-dual-mic'].includes(o.value)||ONBOARD_BOARDS[board]?.audioProfile==='spk-ns4168').filter(o=>o.value!=='sunton-speaker'||ONBOARD_BOARDS[board]?.audioProfile==='sunton-speaker').filter(o=>o.value!=='camera-sdmmc'||!!(ONBOARD_BOARDS[board]?.cameraPins&&ONBOARD_BOARDS[board]?.sdmmcPins)).filter(o=>o.value!=='viewe-sdmmc'||!!ONBOARD_BOARDS[board]?.sdmmcPins).filter(o=>o.value!=='viewe-ms1285'||!!ONBOARD_BOARDS[board]?.rs485).filter(o=>!['viewe-onboard-lcd','viewe-rotary-onboard-lcd'].includes(o.value)||ONBOARD_BOARDS[board]?.displayProfile===o.value);
   options=options.filter(o=>o.value!=="ldr"||ONBOARD_BOARDS[board]?.builtinProfiles?.sensor==="ldr");
@@ -7928,7 +7937,7 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
   assignPeripheralDefaults(groupKey,profileValue,index,realDefinitions,helperSignalsForProfile);
   if (isBuiltinPeripheral(groupKey, profileValue, index)) {
     container.hidden = false;
-    container.textContent = 'Built into the board РІР‚вЂќ no external wiring required.';
+    container.textContent = 'Built into the board; no external wiring required.';
     return;
   }
 
@@ -8010,7 +8019,7 @@ function buildPeripheralProfileComposite(groupKey, selectedValue, index, select,
   const composite = document.createElement("div");
   composite.className = "peripheral-field-composite";
   composite.appendChild(select);
-  if (selectedValue !== "none") {
+  if (selectedValue !== "none" && !(ONBOARD_BOARDS[activeGpioBoardProfile()]?.externalPins && isBuiltinPeripheral(groupKey,selectedValue,index))) {
     composite.appendChild(buildPeripheralSelectionBindingGroup(groupKey, selectedValue, index));
   }
   stack.appendChild(composite);
@@ -13005,6 +13014,16 @@ function renderGpioOverview() {
   renderBoardPinWarnings();
 }
 
+function applyConnectorOnlyControls() {
+  const limited=activeGpioBoardProfile()==='esp32-3248s035c';
+  for(const id of ['statusLedPin','statusLedType','statusLedGreenPin','statusLedBluePin','audioBclkPin','audioWsPin','audioDoutPin','sdCsPin','sdSckPin','sdMosiPin','sdMisoPin','oledSdaPin','oledSclPin','oledResetPin']){
+    const field=document.getElementById(id);if(!field)continue;
+    const label=field.closest('label');
+    if(limited){field.dataset.fixedConnectorControl='1';field.disabled=true;if(label){label.hidden=true;label.style.display='none';}}
+    else if(field.dataset.fixedConnectorControl){delete field.dataset.fixedConnectorControl;field.disabled=false;if(label){label.hidden=false;label.style.display='';}}
+  }
+}
+
 function syncGpioMappingControls() {
   populateAudioI2sPinOptions(state.settings);
   populateBatteryAdcPinOptions(state.settings);
@@ -13021,6 +13040,7 @@ function syncGpioMappingControls() {
   renderDeviceResources(state.status || {});
   renderGpioOverview();
   motorTab?.render();
+  applyConnectorOnlyControls();
 }
 
 function applyGpioRoleSelection(pin, selectedRoleKey) {
@@ -13028,10 +13048,12 @@ function applyGpioRoleSelection(pin, selectedRoleKey) {
 }
 
 function renderHardwareSummary(status) {
+  if(ONBOARD_BOARDS[activeGpioBoardProfile()]?.externalPins && !["hardware","info"].includes(activeTabName()))return;
   hardwareTab?.renderHardwareSummary(status);
 }
 
 function renderDeviceResources(status) {
+  if(ONBOARD_BOARDS[activeGpioBoardProfile()]?.externalPins && !["hardware","info"].includes(activeTabName()))return;
   hardwareTab?.renderDeviceResources(status);
 }
 
@@ -13793,7 +13815,7 @@ function parseConfigurationBackup(text) {
 function validateSettingsPayload(submittedSettings) {
   if (submittedSettings.device?.statusLedType === "rgb" && ![-1,255].includes(Number(submittedSettings.device.statusLedPin))) {
     const pins=[submittedSettings.device.statusLedPin,submittedSettings.device.statusLedGreenPin,submittedSettings.device.statusLedBluePin].map(Number);
-    if(pins.some(pin=>!validBoardPins(true).includes(pin))||new Set(pins).size!==3)throw new Error("RGB status LED red, green and blue must use three different valid GPIOs.");
+    if(pins.some((pin,index)=>!(ONBOARD_BOARDS[activeGpioBoardProfile()]?.externalPins && pin===[4,16,17][index])&&!validBoardPins(true).includes(pin))||new Set(pins).size!==3)throw new Error("RGB status LED red, green and blue must use three different valid GPIOs.");
   }
   if (submittedSettings.oled?.enabled !== false && oledPinsConflictInternally(submittedSettings)) {
     throw new Error("OLED SDA, SCL, and RESET must use different GPIOs.");
@@ -14012,7 +14034,8 @@ async function loadStatus() {
 
   state.statusRequestInFlight = true;
   try {
-    const status = await request(`/api/status?ts=${Date.now()}`);
+    const compactStatus=ONBOARD_BOARDS[activeGpioBoardProfile()]?.externalPins && !["hardware","info"].includes(activeTabName());
+    const status = await request(`/api/status?ts=${Date.now()}${compactStatus?"&detail=compact":""}`);
     renderStatus(status);
     cameraTab?.update(status);
     sdFormatDialog.update(status);

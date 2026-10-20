@@ -16,13 +16,23 @@ const Tab tabList[]={
  {"gpio","Configuration",false},{"logics","Logics",false},{"wled","WLED",true},{"motor","Motor",true},
  {"playback","Audio",true},{"effects","Audio Effects",true},{"wifi","Wi-Fi",false},{"mqtt","MQTT",false},
  {"battery","Battery",true},{"device","Device",false},{"oled","DISPLAY",true},{"hardware","Hardware Monitor",false},
- {"storage-internal","Internal Storage",false},{"storage-external","External Storage",true},{"migration","Import Device",true},
- {"firmware","Firmware",false},{"logs","Logs",false},{"plots","Plots",true},{"security","Security",false},{"info","Info",false}};
+#if !APP_SUNTON_PANEL
+ {"storage-internal","Internal Storage",false},
+#endif
+ {"storage-external","External Storage",true},{"migration","Import Device",true},
+ {"firmware","Firmware",false},
+#if !APP_SUNTON_PANEL
+ {"logs","Logs",false},
+#endif
+ {"plots","Plots",true},{"security","Security",false},{"info","Info",false}};
 String valueText(JsonVariantConst v){if(v.is<const char*>())return v.as<String>();String out;serializeJson(v,out);return v.isNull()?String(""):out;}
 String itemAt(const String& options,int index){int start=0;while(index-->0){int next=options.indexOf('\n',start);if(next<0)return "";start=next+1;}int end=options.indexOf('\n',start);return options.substring(start,end<0?options.length():end);}
 }
 PanelDashboard::~PanelDashboard(){if(input_)lv_indev_delete(input_);if(display_)lv_disp_remove(display_);if(pixels_)heap_caps_free(pixels_);}
 bool PanelDashboard::begin(uint8_t rotation){
+#if APP_SUNTON_PANEL == 3
+ DebugLog.printf("[display-memory] begin heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
+#endif
  static bool initialized=false;if(!initialized){lv_init();initialized=true;}
  const size_t rows=psramFound()?20:8;
  pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*rows*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));if(!pixels_)return false;
@@ -54,7 +64,11 @@ bool PanelDashboard::begin(uint8_t rotation){
   lv_label_set_text(s->volumeLabel_,("Volume: "+String(value)+"%").c_str());
   if(lv_event_get_code(e)==LV_EVENT_RELEASED){JsonDocument args;args["value"]=value;s->queue("volume",args);}
  },LV_EVENT_ALL,this);
- tick_=millis();syncMenu();page("gpio");animatePanelBootLogo(display_);return true;
+ tick_=millis();syncMenu();page("gpio");animatePanelBootLogo(display_);
+#if APP_SUNTON_PANEL == 3
+ DebugLog.printf("[display-memory] ready heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
+#endif
+ return true;
 }
 void PanelDashboard::flush(lv_disp_drv_t* d,const lv_area_t* a,lv_color_t* c){auto* s=static_cast<PanelDashboard*>(d->user_data);bool ok=s->panel_.drawColor(a->x1,a->y1,a->x2-a->x1+1,a->y2-a->y1+1,reinterpret_cast<uint8_t*>(c));if(!s->frameReported_){DebugLog.printf("[display] Portrait web tabs ready; LVGL flush %s\n",ok?"completed":"FAILED");s->frameReported_=true;}lv_disp_flush_ready(d);}
 void PanelDashboard::touch(lv_indev_drv_t* d,lv_indev_data_t* data){auto* s=static_cast<PanelDashboard*>(d->user_data);int16_t x,y;if(s->panel_.readRawTouch(x,y)){data->point.x=x;data->point.y=y;data->state=LV_INDEV_STATE_PRESSED;s->touched_=true;}else data->state=LV_INDEV_STATE_RELEASED;}
@@ -193,6 +207,11 @@ void PanelDashboard::syncMenu(){
  if(!found&&!tabs_.empty())page(tabs_[0]);
 }
 void PanelDashboard::wiring(){
+#if APP_SUNTON_PANEL == 3
+ section("External connectors");
+ label("P3: GND / GPIO35 / GPIO22 / GPIO21\nCN1: GND / GPIO22 / GPIO21 / 3V3\nGPIO35: input only, external bias required.\nGPIO21: shared with touch interrupt.\nLCD, speaker, SD and RGB LED use fixed onboard wiring.");
+ return;
+#endif
  section("Board");label(state_["hardware"]["boardProfile"]|"VIEWE");
  auto profiles=state_["settings"]["ui"]["peripheralProfiles"].as<JsonObjectConst>();
  for(JsonPairConst pair:profiles){if(!pair.value().is<JsonArrayConst>())continue;bool any=false;for(JsonVariantConst p:pair.value().as<JsonArrayConst>())if(p!="none"){if(!any){section(pair.key().c_str());any=true;}label(p.as<String>());}}
@@ -228,7 +247,11 @@ void PanelDashboard::player(){
 }
 void PanelDashboard::page(const String& key){
  keyboardBindingsDirty_=true;
- if(key!=page_){formPage_=0;snapshotReady_=false;}bodySuspended_=false;metricsLogged_=false;
+ if(key!=page_){formPage_=0;snapshotReady_=false;
+#if APP_SUNTON_PANEL == 3
+  state_.clear();if(key!="playback")countryOptions_="All countries";
+#endif
+ }bodySuspended_=false;metricsLogged_=false;
  page_=key;refreshNow_=true;lv_keyboard_set_textarea(keyboard_,nullptr);lv_obj_add_flag(keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(screen_,lv_disp_get_ver_res(display_));fields_.clear();buttons_.clear();labels_.clear();meters_.clear();lv_obj_clean(body_);
  for(size_t i=0;i<tabs_.size();i++)if(tabs_[i]==key)lv_dropdown_set_selected(menu_,i);
  if(key=="bno055"){labels_["bno055"]=label("");button("Compass + motion","bno:ndof");button("Motion only","bno:imu");button("Start sampling","bno:on");button("Pause sampling","bno:off");button("Reinitialize sensor","bno:reset");}
@@ -251,8 +274,14 @@ void PanelDashboard::page(const String& key){
  if(key=="wled"){labels_["ledLive"]=label("");arrays(true);}
  if(key=="motor"){labels_["motor"]=label("");for(int i=0;i<2;i++){section("Channel "+String(i+1));button("Forward (1 second)","motor:"+String(i)+":forward");button("Reverse (1 second)","motor:"+String(i)+":reverse");}}
  if(key=="playback"){
+#if APP_SUNTON_PANEL != 3
   if(!radioRequested_){radioRequested_=true;JsonDocument request;request["countries"]=true;queue("radio",request);}
+#endif
   player();section("Radio");labels_["radio"]=label("");button("Load countries","radio:countries");
+  if(state_["radio"]["countriesMode"]==true){
+   if((state_["radio"]["offset"]|0)>0)button("Previous countries","radio:countries:previous");
+   if(state_["radio"]["more"]==true)button("More countries","radio:countries:next");
+  }
   field("Country","@country","select",countryOptions_);field("Station search","@radioSearch");button("Find stations","radio:search");
   if(state_["radio"]["countriesMode"]!=true){String options;for(JsonObjectConst item:state_["radio"]["items"].as<JsonArrayConst>()){if(options.length())options+='\n';options+=String(item["name"]|"Station");}
    if(options.length()){field("Station","@station","select",options);button("Play station","radio:play");}
@@ -372,8 +401,9 @@ void PanelDashboard::event(lv_event_t* e){
   if(chosen>=0&&chosen<int(list.size())&&(!file||s->buttons_.count("file:"+String(chosen))))playItem(list[chosen].as<JsonObjectConst>(),file);return;
  }
  if(key.startsWith("radio:")){
-  a["countries"]=key=="radio:countries";String country=text("@country");a["country"]=country=="All countries"?String(""):country;a["name"]=text("@radioSearch");
+  a["countries"]=key.startsWith("radio:countries");String country=text("@country");a["country"]=country=="All countries"?String(""):country;a["name"]=text("@radioSearch");
   a["offset"]=key=="radio:next"?((s->state_["radio"]["offset"]|0)+20):key=="radio:previous"?max(0,(s->state_["radio"]["offset"]|0)-20):0;
+  if(key=="radio:countries:next"||key=="radio:countries:previous")a["offset"]=max(0,(s->state_["radio"]["offset"]|0)+(key.endsWith(":next")?40:-40));
   for(auto& f:s->fields_)if(f.path.startsWith("@"))f.dirty=false;
   lv_keyboard_set_textarea(s->keyboard_,nullptr);lv_obj_add_flag(s->keyboard_,LV_OBJ_FLAG_HIDDEN);lv_obj_set_height(s->screen_,lv_disp_get_ver_res(s->display_));s->queue("radio",a);return;
  }
@@ -523,6 +553,11 @@ void PanelDashboard::loop(const AppStateSnapshot& app,const Snapshot& snapshot,c
  }
  if(keyboardBindingsDirty_){keyboardBindingsDirty_=false;bindKeyboardDismiss(screen_);bindKeyboardDismiss(lv_disp_get_layer_top(display_));}
  lv_timer_handler();
+#if APP_SUNTON_PANEL == 3
+ // LVGL keeps reusable glyph/mask buffers after a frame. Under pressure,
+ // release only this idle scratch memory, after all drawing has finished.
+ if(heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<32768)lv_mem_buf_free_all();
+#endif
  if(!commands_.empty()){String encoded=commands_.front();commands_.pop_front();JsonDocument request;deserializeJson(request,encoded);String error;bool ok=command&&command(request["action"].as<String>(),request["args"],error);lv_label_set_text(notice_,ok?(request["action"]=="wifiScan"?"Scanning...":"Applied"):error.c_str());if(!ok&&wifiOverlay_){lv_label_set_text(wifiMessage_,error.c_str());if(wifiProgress_){lv_obj_del(wifiProgress_);wifiProgress_=nullptr;}if(wifiStep_==WifiStep::Connecting){wifiStep_=WifiStep::Credentials;lv_obj_clear_state(wifiSsid_,LV_STATE_DISABLED);lv_obj_clear_state(wifiPassword_,LV_STATE_DISABLED);}}noticeUntil_=now+4000;
   if(ok&&request["action"]=="patch"&&request["args"]["connectMqtt"]==true){JsonDocument a;a["action"]="connect";queue("mqtt",a);}
   if(ok&&request["action"]=="patch")for(JsonObjectConst change:request["args"]["changes"].as<JsonArrayConst>()){String path=change["path"]|"";auto it=drafts_.find(path);if(it!=drafts_.end()&&it->second==valueText(change["value"]))drafts_.erase(it);}

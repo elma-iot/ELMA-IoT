@@ -119,7 +119,11 @@ constexpr uint8_t BUTTON_VOLUME_STEP_PERCENT = 5;
 // out of SRAM on ceiling-speaker builds.
 // Leave contiguous internal RAM for Wi-Fi RX and web requests on non-PSRAM
 // boards. A larger ring can leave ample total heap but no packet-sized block.
+#if APP_SUNTON_PANEL
+constexpr int AUDIO_BUFFER_SIZE_RAM = 8 * 1024;
+#else
 constexpr int AUDIO_BUFFER_SIZE_RAM = 16 * 1024;
+#endif
 constexpr int AUDIO_BUFFER_SIZE_PSRAM = 1280 * 1024;
 constexpr bool LOW_BATTERY_SLEEP_ENABLED = false;
 constexpr uint8_t LOW_BATTERY_SLEEP_THRESHOLD_PERCENT = 20;
