@@ -9,6 +9,16 @@ the entire graph and stores it atomically in internal flash before activating it
 Changes to physical peripherals/pins require recompilation; browser editing cannot
 invent GPIO bindings or enable an uncompiled driver.
 
+The configured built-in LED is exposed under Hardware even when an empty factory
+project has no peripheral catalog. On ESP32-3248S035C it is the active-low RGB LED
+on GPIO4/16/17, with color and brightness inputs; automatic network indication
+remains disabled. Windows calls this node Built-in LED; the web and Android
+palettes identify the fitted RGB as Built-in RGB LED.
+
+The restart guard stops nonempty automations after three failed automatic retries.
+An empty graph consumes no retries and clears a stale guard without starting any
+automation or changing its stopped/paused mode.
+
 Each group has Play, Pause/Resume and Stop. Master controls affect all automations.
 Pause freezes scheduled execution while monitoring continues; already accepted
 hardware operations can finish. Stop cancels scheduled work and stops audio owned

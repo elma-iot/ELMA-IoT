@@ -84,6 +84,13 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
         }
         preferences.end();
     }
+    // An empty editor has no automation to recover. Unrelated audio/display
+    // crashes must not consume its retry budget or leave a permanent warning.
+    if(graph["nodes"].as<JsonArrayConst>().size()==0){
+        if(recoveryConfirmationRequired_ || recoveryRetries_)clearRecoveryState();
+        clearLogicActivity();
+        return;
+    }
     // Old releases stopped on the first crash or merely on a storage migration.
     // Release only those identifiable legacy guards, never a current exhausted
     // retry budget or an ordinary user-selected Stop/Pause state.
@@ -178,7 +185,9 @@ void LogicDevice::configureLedArrays(const String& helpers){
 
 void LogicDevice::configureStatusLed(const DeviceSettings& device) {
     const int pin=device.statusLedPin==255?-1:device.statusLedPin;
-    if(ledBinding_["pin"]==pin && ledBinding_["ledType"]==device.statusLedType &&
+    bool defined=false;
+    for(JsonObjectConst definition:devices_.as<JsonArrayConst>())if(definition["type"]=="hardware.led"){defined=true;break;}
+    if((defined || pin<0) && ledBinding_["pin"]==pin && ledBinding_["ledType"]==device.statusLedType &&
        ledBinding_["greenPin"]==device.statusLedGreenPin && ledBinding_["bluePin"]==device.statusLedBluePin)return;
     // Called again from the main loop if a simultaneous web request owns the
     // graph. Rebinding must not block device service or reset the scheduler.
@@ -187,6 +196,20 @@ void LogicDevice::configureStatusLed(const DeviceSettings& device) {
     ledBinding_["ledType"]=device.statusLedType;
     ledBinding_["greenPin"]=device.statusLedGreenPin;
     ledBinding_["bluePin"]=device.statusLedBluePin;
+    // Factory/empty projects may omit the peripheral catalog altogether. The
+    // fitted LED still needs a definition for the browser's hardware palette.
+    if(!defined && pin>=0){
+        JsonDocument filter,catalog;
+        filter["hardware.led"]=true;
+        if(!deserializeJson(catalog,ELMA_LOGIC_CATALOG,DeserializationOption::Filter(filter))){
+            if(devices_.isNull())devices_.to<JsonArray>();
+            JsonObject definition=devices_.as<JsonArray>().add<JsonObject>();
+            definition.set(catalog["hardware.led"]);
+            definition["type"]="hardware.led";
+            definition["title"]=device.statusLedType=="rgb"?"Built-in RGB LED":"Built-in LED";
+            definition["category"]="Hardware";
+        }
+    }
     for(JsonObject definition:devices_.as<JsonArray>())if(definition["type"]=="hardware.led")definition["binding"].set(ledBinding_);
     runtime_.setLedBinding(ledBinding_.as<JsonObjectConst>());
     xSemaphoreGive(mutex_);
@@ -366,6 +389,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
 void LogicDevice::enterRecoverySafeMode(const char* warning) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE)return;
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
+    if(runtime_.nodes().size()==0)return;
     quarantinedGroup_.clear();quarantinedNode_.clear();
     recoveryWarning_=warning&&*warning?warning:"Recovery safe mode stopped Logics after repeated abnormal restarts.";
     recoveryConfirmationRequired_=true;recoveryAppliedThisBoot_=true;
@@ -480,6 +504,7 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         LedArrays::reset();
         if(!runtime_.begin(std::move(accepted),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
         mode_="stopped";applyMode(mode);polled_=false;
+        if(runtime_.nodes().size()==0 && (recoveryConfirmationRequired_ || recoveryRetries_))clearRecoveryState();
 #endif
     } else if(mode!=mode_) {
         if(recoveryConfirmationRequired_&&mode=="playing"&&quarantinedGroup_.empty()&&!(command["confirmUnsafeRestart"]|false)){error=(std::string("RECOVERY_CONFIRMATION_REQUIRED: ")+recoveryWarning_+" Confirm to retry Logics.").c_str();return false;}
