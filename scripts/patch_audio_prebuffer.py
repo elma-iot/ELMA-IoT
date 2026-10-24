@@ -150,9 +150,11 @@ for source in audio_sources:
     old='i2s_set_sample_rates((i2s_port_t)m_i2s_num, sampRate);'
     if text.count(old)!=1:raise RuntimeError('Unexpected I2S rate setter')
     text=text.replace(old,'i2s_set_sample_rates((i2s_port_t)m_i2s_num,elmaDacSampleRate(sampRate,m_f_internalDAC));',1)
-    old='m_i2s_config.dma_buf_len = (psramFound() ? 512 : 256);'
-    if text.count(old)!=2:raise RuntimeError('Unexpected DMA frame length')
-    text=text.replace(old,'m_i2s_config.dma_buf_len = elmaAudioDmaLength((psramFound()?512:256),internalDAC);')
+    # Upstream 2.0.6 aligns this assignment with spaces; curated copies may
+    # already have normalized whitespace. Both have one constructor assignment.
+    pattern=r'm_i2s_config\.dma_buf_len\s*=\s*\(psramFound\(\)\s*\?\s*512\s*:\s*256\);'
+    text,count=re.subn(pattern,'m_i2s_config.dma_buf_len = elmaAudioDmaLength((psramFound()?512:256),internalDAC);',text)
+    if count!=1:raise RuntimeError(f'Unexpected DMA frame length assignments: {count}')
     source.write_text(text,encoding='utf-8')
     print('[audio] Sunton 3248 DAC: native-rate signed PCM with independent channel bias')
 
