@@ -405,7 +405,13 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
         if(!allowed(n))continue;
         if((type=="value.led_color"||type=="value.rgb_mixer"||type=="value.led_brightness"||type=="value.led_effect") &&
            (!state.enabled||int32_t(now-state.due)>=0)) {
-            state.enabled=true;state.due=now+20;JsonDocument current;
+            state.enabled=true;state.due=now+20;
+            bool watched=false;
+            for(JsonObjectConst edge:graph_["connections"].as<JsonArrayConst>())if(edge["source"]["node"]==node(n)["id"]&&edge["source"]["port"]=="changed"){watched=true;break;}
+            // Unused Changed sockets must not create a previous-value document
+            // just because a legacy graph contains these constant controls.
+            if(!watched){state.due=now+1000;continue;}
+            JsonDocument current;
             if(type=="value.led_brightness")current.set(value(n,"value"));
             else if(type=="value.led_effect"){
                 auto effect=value(n,"effect"),speed=value(n,"speed");

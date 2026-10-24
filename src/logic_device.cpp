@@ -24,7 +24,13 @@ bool releaseEditorCatalog(JsonDocument& graph) {
     // ArduinoJson remove/shrinkToFit keeps freed slots in its pool. Copy the
     // small executable graph to return the catalog's pools to the system heap.
     JsonDocument compact(graph.allocator());
-    if(!compact.set(graph) || compact.overflowed())return false;
+    if(!compact.set(graph) || compact.overflowed()) {
+        // Compaction is optional. Under heap fragmentation a second full graph
+        // may not fit even though the original executable graph remains valid.
+        // Reuse that graph rather than reject an already-persisted edit.
+        graph.shrinkToFit();
+        return !graph.overflowed();
+    }
     graph=std::move(compact);return true;
 }
 constexpr uint32_t kLogicActivityMagic = 0x454c4d41u;

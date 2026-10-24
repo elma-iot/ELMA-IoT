@@ -25,5 +25,9 @@ int main(){
   },error));
   JsonDocument status;runtime.tick(0,status.as<JsonVariantConst>());runtime.tick(100,status.as<JsonVariantConst>());
   assert(actions==1&&runtime.error().empty());
+  JsonDocument live;runtime.telemetry(live.to<JsonObject>());
+  // Unwired change events must remain dormant in old constant-only graphs.
+  assert((live["activity"]["brightness"]["sequence"]|0u)==0);
+  assert((live["activity"]["effect"]["sequence"]|0u)==0);
  }
 }
