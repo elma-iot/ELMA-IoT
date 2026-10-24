@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <atomic>
+#include "lcd_wake_gesture.h"
 #if !APP_DISABLE_DISPLAY
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -60,6 +61,7 @@ class DisplayManager {
     void restorePanelPresentation();
     uint32_t diagnosticQuietUntil_=0;
     bool screenOff_=false,wakeTouchPending_=false;
+    LcdWakeGesture wakeGesture_;
     void setScreenOff(bool off);
 #endif
 #if !APP_DISABLE_DISPLAY

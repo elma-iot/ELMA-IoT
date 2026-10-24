@@ -23,4 +23,15 @@ int main(){
   tick(400,true,true,base?255:250);
   JsonDocument live;runtime.telemetry(live.to<JsonObject>());assert(live["values"]["brightness"]["value"]==100);
  }
+ for(JsonObject node:graph["nodes"].as<JsonArray>())if(node["type"]=="value.led_effect"){
+  node["parameters"]["speed"]=1000;
+  JsonDocument compiled;std::string error;assert(ElmaLogic::validateEditable(graph,graph["devices"],compiled,error));
+  unsigned red=999;ElmaLogic::Runtime runtime;
+  assert(runtime.begin(std::move(compiled),[&](JsonObjectConst,JsonVariantConst args,std::string&){red=args["red"];return true;},error));
+  JsonDocument status;status["network"]["apMode"]=true;status["network"]["wifiConnected"]=false;
+  runtime.tick(0,status.as<JsonVariantConst>());assert(red==120);
+  runtime.tick(20,status.as<JsonVariantConst>());assert(red==20);
+  node["parameters"]["speed"]=1001;
+  assert(!ElmaLogic::validateEditable(graph,graph["devices"],compiled,error));
+ }
 }

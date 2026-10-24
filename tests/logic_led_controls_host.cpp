@@ -3,7 +3,7 @@
 #include <cassert>
 bool validateLogicHardware(JsonObject,std::string&);
 int main(){
- for(const char* effect:{"solid","blink","breathe","colorloop"}){
+ for(unsigned speed:{82u,1000u})for(const char* effect:{"solid","blink","breathe","colorloop"}){
   JsonDocument graph;
   assert(!deserializeJson(graph,R"json({"schemaVersion":1,"nodes":[
    {"id":"start","type":"event.start","parameters":{},"ports":[{"id":"out","direction":"output","type":"execution"}]},
@@ -15,13 +15,14 @@ int main(){
    {"source":{"node":"effect","port":"effect"},"target":{"node":"led","port":"effect"}},
    {"source":{"node":"effect","port":"speed"},"target":{"node":"led","port":"effectSpeed"}}]})json"));
   graph["nodes"][2]["parameters"]["effect"]=effect;
+  graph["nodes"][2]["parameters"]["speed"]=speed;
   std::string error;
   // Exercise the same hardware-port gate used by the device's Save & apply.
   assert(validateLogicHardware(graph["nodes"][3].as<JsonObject>(),error));
   for(JsonObjectConst port:graph["nodes"][3]["ports"].as<JsonArrayConst>())assert(port["enabled"]==true);
   ElmaLogic::Runtime runtime;unsigned actions=0;
   assert(runtime.begin(std::move(graph),[&](JsonObjectConst,JsonVariantConst args,std::string&){
-   assert(args["action"]=="on"&&args["brightness"]==37&&args["effect"]==effect&&args["effectSpeed"]==82);++actions;return true;
+   assert(args["action"]=="on"&&args["brightness"]==37&&args["effect"]==effect&&args["effectSpeed"]==speed);++actions;return true;
   },error));
   JsonDocument status;runtime.tick(0,status.as<JsonVariantConst>());runtime.tick(100,status.as<JsonVariantConst>());
   assert(actions==1&&runtime.error().empty());

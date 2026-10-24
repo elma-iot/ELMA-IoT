@@ -228,13 +228,13 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         if(type=="value.led_brightness" && (n["parameters"]["value"].as<double>()<0||n["parameters"]["value"].as<double>()>100))return fail("LED brightness must be 0-100%");
         if(type=="value.led_color"||type=="value.rgb_mixer")for(JsonPairConst p:n["parameters"].as<JsonObjectConst>()){
             const std::string key=p.key().c_str();if(key=="enabled"||key=="effect")continue;
-            const double maximum=key=="speed"||key=="brightness"?100:255,v=p.value().as<double>();
+            const double maximum=key=="speed"?1000:key=="brightness"?100:255,v=p.value().as<double>();
             if(!linked(id,key.c_str())&&(!std::isfinite(v)||v<0||v>maximum))return fail("LED color/mixer value is out of range");
         }
         if(type=="value.led_effect"||type=="value.led_color"||type=="hardware.led"){
             if(!linked(id,"effect")&&!BuiltinLedEffect::valid(n["parameters"]["effect"]|"solid"))return fail("Invalid built-in LED effect");
             const char* speedKey=type=="hardware.led"?"effectSpeed":"speed";double speed=n["parameters"][speedKey]|50.0;
-            if(!linked(id,speedKey)&&(!std::isfinite(speed)||speed<0||speed>100))return fail("LED effect speed must be 0-100%");
+            if(!linked(id,speedKey)&&(!std::isfinite(speed)||speed<0||speed>1000))return fail("LED effect speed must be 0-1000");
         }
         if(type=="timing.repeat"&&!linked(id,"count")){double count=n["parameters"]["count"]|0.0;if(count<1||count>128||count!=std::floor(count))return fail("Repeat count must be a whole number 1-128");}
         if(type=="condition.between"&&!linked(id,"minimum")&&!linked(id,"maximum")&&n["parameters"]["minimum"].as<double>()>n["parameters"]["maximum"].as<double>())return fail("Minimum exceeds maximum");

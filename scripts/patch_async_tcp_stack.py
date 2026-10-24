@@ -58,12 +58,13 @@ for source in root.glob("ESPAsyncWebServer/src/WebServer.cpp"):
  original=source.read_text(encoding="utf8")
  text=original
  text=text.replace("MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 16384", "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 8192")
- text=text.replace("MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 4096)", "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 2048)")
+ text=text.replace("MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 4096)", "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 1024)")
+ text=text.replace("MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 2048)", "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 1024)")
  if text!=original:source.write_text(text,encoding="utf8")
  old="      AsyncWebServerRequest *r = new AsyncWebServerRequest((AsyncWebServer *)s, c);"
  new="""#if APP_SUNTON_PANEL == 3
       if (heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 8192 ||
-          heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 2048) {
+          heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 1024) {
         c->abort();delete c;return;
       }
 #endif

@@ -153,7 +153,7 @@ bool saveCompactLogicRecord(JsonDocument& updated,String& error) {
         for(const char* path:{"/.elma-logics.json","/.elma-logics.0.json","/.elma-logics.1.json"}) {
             JsonDocument filter,revision;filter["revision"]=true;
             File file=storageOpen(target,path);
-            if(file&&!deserializeJson(revision,file,DeserializationOption::Filter(filter)))latestRevision=std::max(latestRevision,revision["revision"]|0u);
+            if(file&&!deserializeJson(revision,file,DeserializationOption::Filter(filter)))latestRevision=std::max<uint32_t>(latestRevision,revision["revision"]|uint32_t(0));
             if(file)file.close();
         }
         endStorageRead(target);

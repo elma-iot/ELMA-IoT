@@ -34,8 +34,15 @@ bool PanelDashboard::begin(uint8_t rotation,bool bootAnimation){
  DebugLog.printf("[display-memory] begin heap8=%u\n",heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
 #endif
  static bool initialized=false;if(!initialized){lv_init();initialized=true;}
- const size_t rows=psramFound()?20:8;
- pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*rows*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));if(!pixels_)return false;
+ size_t rows=psramFound()?20:8;
+ do {
+  pixels_=static_cast<lv_color_t*>(heap_caps_malloc(kPanelWidth*rows*sizeof(lv_color_t),MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));
+#if APP_SUNTON_PANEL == 3
+  if(!pixels_&&rows>1){rows/=2;continue;}
+#endif
+  break;
+ }while(true);
+ if(!pixels_)return false;
  lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*rows);lv_disp_drv_init(&displayDriver_);
  displayDriver_.hor_res=kPanelWidth;displayDriver_.ver_res=kPanelHeight;displayDriver_.draw_buf=&drawBuffer_;displayDriver_.flush_cb=flush;displayDriver_.user_data=this;displayDriver_.sw_rotate=1;
  display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_theme(display_,elmaPanelTheme(display_));lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));

@@ -162,7 +162,7 @@ bool apStatusLedBluePhase(unsigned long now) {
 }
 
 bool logicLedOwned=false;
-struct LogicLedFrame {bool on=false;uint8_t red=0,green=255,blue=0,brightness=20,speed=50;char effect[10]="solid";uint32_t started=0,lastFrame=0;} logicLedFrame;
+struct LogicLedFrame {bool on=false;uint8_t red=0,green=255,blue=0,brightness=20;uint16_t speed=50;char effect[10]="solid";uint32_t started=0,lastFrame=0;} logicLedFrame;
 void renderLogicLed(uint32_t now){
     const uint32_t color=logicLedFrame.on?BuiltinLedEffect::color(logicLedFrame.effect,now-logicLedFrame.started,logicLedFrame.speed,logicLedFrame.brightness,logicLedFrame.red,logicLedFrame.green,logicLedFrame.blue):0;
     writeStatusLedColor((color>>16)&255,(color>>8)&255,color&255);logicLedFrame.lastFrame=now;
@@ -4290,7 +4290,7 @@ void setup() {
             double brightness=args["brightness"]|20.0;
             double red=args["red"]|0.0,green=args["green"]|255.0,blue=args["blue"]|0.0;
             const char* effect=args["effect"]|"solid";double speed=args["effectSpeed"]|50.0;
-            if(!BuiltinLedEffect::valid(effect)||!std::isfinite(speed)||speed<0||speed>100){message="Invalid built-in LED effect or speed";return false;}
+            if(!BuiltinLedEffect::valid(effect)||!std::isfinite(speed)||speed<0||speed>1000){message="Invalid built-in LED effect or speed";return false;}
             if(!std::isfinite(brightness)||brightness<0||brightness>100||!std::isfinite(red)||red<0||red>255||!std::isfinite(green)||green<0||green>255||!std::isfinite(blue)||blue<0||blue>255){message="Invalid LED color";return false;}
             // The live device configuration is authoritative, including after
             // OTA or a web edit. Compiled graph bindings may reference an old pin.
@@ -4298,7 +4298,7 @@ void setup() {
             bool on=action!="off";
             if(action=="toggle")on=logicLedOwned?!logicLedFrame.on:!(lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue);
             if(!logicLedOwned||!logicLedFrame.on||strcmp(effect,logicLedFrame.effect))logicLedFrame.started=millis();
-            logicLedOwned=true;logicLedFrame.on=on;logicLedFrame.red=uint8_t(red);logicLedFrame.green=uint8_t(green);logicLedFrame.blue=uint8_t(blue);logicLedFrame.brightness=uint8_t(brightness);logicLedFrame.speed=uint8_t(speed);
+            logicLedOwned=true;logicLedFrame.on=on;logicLedFrame.red=uint8_t(red);logicLedFrame.green=uint8_t(green);logicLedFrame.blue=uint8_t(blue);logicLedFrame.brightness=uint8_t(brightness);logicLedFrame.speed=uint16_t(speed);
             strncpy(logicLedFrame.effect,effect,sizeof(logicLedFrame.effect)-1);logicLedFrame.effect[sizeof(logicLedFrame.effect)-1]='\0';renderLogicLed(millis());return true;
         } else if(std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos) {
             std::string command=args["action"]|"";

@@ -7,7 +7,7 @@ class JsonResponseTests(unittest.TestCase):
  def test_large_response_and_partial_reads(self):
   with tempfile.TemporaryDirectory() as folder:
    work=pathlib.Path(folder)
-   for name in ('json_buffer_response.h','bounded_buffer_response.h'):shutil.copyfile(ROOT/'src'/name,work/name)
+   for name in ('json_buffer_response.h','bounded_buffer_response.h','segmented_json_response.h','segmented_buffer.h'):shutil.copyfile(ROOT/'src'/name,work/name)
    (work/'ESPAsyncWebServer.h').write_text(r'''
 #pragma once
 #include <cstdint>
@@ -42,21 +42,22 @@ public:
 ''')
    (work/'main.cpp').write_text(r'''
 #include "json_buffer_response.h"
+#include "segmented_json_response.h"
 #include <cassert>
-void transfer(BoundedBufferResponse& response,const std::string& expected,bool flash=false){
+void transfer(AsyncWebServerResponse& response,const std::string& expected,bool flash=false,size_t window=2920){
  AsyncWebServerRequest request;
  request.tcp.capacity=0;response._respond(&request);assert(request.tcp.output.empty());
  request.tcp.capacity=5744;request.tcp.limit=0;assert(response._ack(&request,0,0)==0);
  request.tcp.limit=137;response._ack(&request,0,0);
  for(int i=0;response._state!=RESPONSE_END && i<10000;++i){
   size_t pending=response._writtenLength-response._ackedLength;
-  assert(pending<=2920);
+  assert(pending<=window);
   if(pending){
    const size_t ack=std::min(pending,size_t(1+(i*73)%2000));
    request.tcp.limit=1+(i*37)%2000;
    response._ack(&request,ack,0);
   } else {request.tcp.limit=1460;response._ack(&request,0,0);}
-  assert(response._writtenLength-response._ackedLength<=2920);
+  assert(response._writtenLength-response._ackedLength<=window);
   const auto before=request.tcp.output.size();
   request.tcp.capacity=0;response._ack(&request,0,0);assert(request.tcp.output.size()==before);
   request.tcp.capacity=5744;
@@ -71,6 +72,8 @@ int main(){
  BoundedBufferResponse asset(expected.data(),expected.size(),"application/javascript",200,true);transfer(asset,expected,true);
  char* data=static_cast<char*>(malloc(expected.size()+1));memcpy(data,expected.c_str(),expected.size()+1);
  JsonBufferResponse json(data,expected.size(),200);assert(json._sourceValid());transfer(json,expected);
+ JsonDocument doc;doc["payload"]=std::string(18000,'x');std::string encoded;serializeJson(doc,encoded);
+ SegmentedJsonResponse segmented(doc,encoded.size(),200);assert(segmented._sourceValid());transfer(segmented,encoded,false,1024);
  BoundedBufferResponse empty("",0,"text/plain");transfer(empty,"");
  BoundedBufferResponse head(expected.data(),expected.size(),"text/plain",200,true);
  AsyncWebServerRequest request;request.verb=HTTP_HEAD;head._respond(&request);
@@ -79,7 +82,8 @@ int main(){
  assert(head._contentLength==expected.size());
 }
 ''')
-   (work/'build.cmd').write_text(f'@call "{VCVARS}" >nul\ncl /nologo /std:c++17 /EHsc /I. main.cpp /Fe:response-test.exe\nif errorlevel 1 exit /b 1\nresponse-test.exe\n')
+   json_include=ROOT/'.pio/libdeps/sunton_3248s035c/ArduinoJson/src'
+   (work/'build.cmd').write_text(f'@call "{VCVARS}" >nul\ncl /nologo /std:c++17 /EHsc /I. /I"{json_include}" main.cpp /Fe:response-test.exe\nif errorlevel 1 exit /b 1\nresponse-test.exe\n')
    r=subprocess.run(['cmd.exe','/c',str(work/'build.cmd')],cwd=work,capture_output=True,text=True)
    self.assertEqual(r.returncode,0,r.stdout+r.stderr)
 if __name__=='__main__':unittest.main()

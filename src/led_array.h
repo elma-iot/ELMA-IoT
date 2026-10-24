@@ -162,6 +162,7 @@ inline bool action(JsonObjectConst n,JsonVariantConst a,std::string& error){
 // Reset is also requested by HTTP handlers. Only the main-loop tick may call
 // NeoPixel::show(), which can yield on ESP8266 and must never run in async TCP.
 inline void reset(){for(auto& s:arrays)if(s.pin>=0){s.on=false;s.releasePending=true;}}
+inline void releasePin(int pin){for(auto& s:arrays)if(s.pin==pin){s.on=false;s.releasePending=true;}}
 // Call from the owning loop before reset. A queue submission alone is not
 // sufficient on audio targets: the final black frame must reach the wire.
 inline bool shutdown(){

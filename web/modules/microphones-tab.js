@@ -10,7 +10,7 @@ export function createMicrophonesTab({request}){
   clearTimeout(timer);if(!active||!available||document.hidden||busy)return;busy=true;
   try{const data=await request('/api/microphones');if(!saving){enabled.checked=data.enabled;gain.value=data.gain;format.value=data.captureFormat;format.closest('label').hidden=data.clockPin!==39||data.dataPin!==38;}
    left.value=data.left*100;right.value=data.right*100;
-   notice.textContent=!data.enabled?'Microphones disabled':data.ready?`${data.channels>1?'Stereo':'Mono'} ${data.captureFormat==='pdm'?'PDM':'I2S'} · ${data.sampleRate/1000} kHz`:'Microphones unavailable — check device logs';
+   notice.textContent=!data.enabled?'Microphones disabled':data.ready?`${data.channels>1?'Stereo':'Mono'} ${data.captureFormat==='pdm'?'PDM':'I2S'} Â· ${data.sampleRate/1000} kHz`:'Microphones unavailable â€” check device logs';
   }catch(error){notice.textContent=error.message;}finally{busy=false;if(active&&available)timer=setTimeout(poll,250);}
  }
  async function save(){saving=true;enabled.disabled=gain.disabled=format.disabled=true;

@@ -19,6 +19,7 @@ bool mountFlash() {
 }
 }
 void beginStorageBackends(const SettingsBundle&) { mountFlash(); }
+bool mountSettingsStorage() { return LittleFS.totalBytes() > 0 || mountFlash(); }
 void applyStorageSettings(const SettingsBundle&) {}
 void pollStorageBackends() {}
 bool requestStorageBackgroundJob(void (*work)(void*),void* context){
@@ -59,6 +60,11 @@ void endStorageWrite(StorageTarget) {}
 void beginStorageRead(StorageTarget) {}
 void endStorageRead(StorageTarget) {}
 bool storageBusy(StorageTarget) { return false; }
+// Foreground arbitration applies to the shared SD bus. This profile only has
+// flash storage, but must expose the same contract to the common web routes.
+void prioritizeStorageOperation(StorageTarget) {}
+bool storageForegroundPending(StorageTarget) { return false; }
+bool storageWriteBlocked(StorageTarget target) { return storageBusy(target); }
 fs::FS* getStorageFs(StorageTarget target) { return target == StorageTarget::Flash && LittleFS.totalBytes() > 0 ? static_cast<fs::FS*>(&LittleFS) : nullptr; }
 bool storageMounted(StorageTarget target) { return getStorageFs(target) != nullptr; }
 bool storageReadLeaseHealthy(StorageTarget target) { return storageMounted(target); }

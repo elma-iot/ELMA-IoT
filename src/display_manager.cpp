@@ -340,7 +340,7 @@ void DisplayManager::drawWrappedLine(Adafruit_GFX& display, const String& text, 
 void DisplayManager::setScreenOff(bool off) {
     if(screenOff_==off && !restorePresentationPending_)return;
     if(off){
-        restorePresentationPending_=false;lcdWakeRequested_=false;
+        restorePresentationPending_=false;lcdWakeRequested_=false;wakeGesture_.reset();
         // Keep the panel's small I2C touch driver alive, not its LVGL tree/pixels.
         dashboard_.reset();
         if(panel_){panel_->releaseTextBuffer();panel_->sleep(true);panel_->brightness(0);}
@@ -358,7 +358,10 @@ void DisplayManager::restorePanelPresentation(){
     if(!panel_||!settings_.enabled){restorePresentationPending_=false;presentation_.store(0);return;}
     if(int32_t(millis()-presentationRestoreAt_)<0)return;
     const size_t available=heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
-    if(available<32768 || heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<8192){
+    // LVGL can draw a single row; fragmented web buffers need not prevent a
+    // return to the LCD. Text mode still needs its contiguous monochrome page.
+    const size_t contiguous=settings_.interfaceMode=="lvgl"?1536:((kPanelWidth+7)/8*kPanelHeight);
+    if(available<28672 || heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<contiguous){
         if(millis()-presentationWaitAt_>5000){setScreenOff(true);DebugLog.println("[presentation] LCD deferred: memory busy; audio continues");}
         return;
     }
@@ -394,8 +397,8 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     if(restorePresentationPending_){restorePanelPresentation();return;}
     if(panel_ && (screenOff_||wakeTouchPending_||lcdWakeRequested_)){
         if(millis()-lastTouchAt_<30)return;
-        lastTouchAt_=millis();int16_t x,y;const bool touched=panel_->readRawTouch(x,y);
-        if(screenOff_ && touched){lcdWakeRequested_=true;wakeTouchPending_=true;}
+        lastTouchAt_=millis();int16_t x=0,y=0;const bool touched=panel_->readRawTouch(x,y);
+        if(screenOff_ && wakeGesture_.update(touched,x,y,millis())){lcdWakeRequested_=true;wakeTouchPending_=false;}
         else if(wakeTouchPending_ && !touched)wakeTouchPending_=false;
         // Do not interrupt an OTA or foreground SD transfer to rebuild widgets.
         if(lcdWakeRequested_ && !wakeTouchPending_ && !state.ota.busy &&

@@ -55,3 +55,9 @@ void LogicGpio::reset() {
     }
     pins_.clear();
 }
+void LogicGpio::resetNode(const char* id) {
+    auto it=pins_.find(id);if(it==pins_.end())return;
+    auto& s=it->second;
+    if(s.pin>=0){if(s.channel>=0){ledcWrite(s.channel,0);ledcDetachPin(s.pin);}if(s.mode=="output")digitalWrite(s.pin,LOW);pinMode(s.pin,INPUT);}
+    pins_.erase(it);
+}

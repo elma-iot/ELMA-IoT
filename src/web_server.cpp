@@ -67,6 +67,7 @@ void WebServerManager::begin(
 
 #include "generated_web_assets.h"
 #include "json_buffer_response.h"
+#include "segmented_json_response.h"
 #include "storage_backend.h"
 #include "system_metrics.h"
 #include "version.h"
@@ -1081,12 +1082,12 @@ void WebServerManager::begin(
         if(gatePresentation(request))return;
         // Reserve the remaining heap for a small retry response rather than
         // constructing a large JSON payload or starting another asset stream.
-        if(request->url()!="/api/stop" && request->url()!="/api/volume" && request->url()!="/api/security" && !request->url().startsWith("/api/presentation") &&
-           (heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<16384 ||
-            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<4096)){
+        const size_t requestReserve=request->contentLength()<1024?4096:12288;
+        if(heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<requestReserve ||
+           heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<768){
             // Let the response lifecycle close the socket after receiving
             // finishes; closing inside onData can invalidate AsyncTCP's PCB.
-            request->send(503,"text/plain","Memory busy; retry shortly.");return;
+            request->send(503,"application/json","{\"error\":\"Memory busy; retry shortly.\"}");return;
         }
 #endif
         if(rejectIfWebUiLocked(request))return;
@@ -1188,17 +1189,23 @@ bool WebServerManager::redirectCaptivePortalIfNeeded(AsyncWebServerRequest* requ
 
 void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocument& doc, int statusCode) {
     const size_t length = measureJson(doc);
+    if(!psramFound()){
+    // All ESP32 boards without PSRAM use bounded response blocks.
+    // The document is released as the handler returns; keep TCP reserve while
+    // copying it into 512-byte blocks that are freed as COPY writes queue.
+    const size_t reserve=length<2048?4096:8192;
+    const size_t blocks=(length+511)/512;
+    if(doc.overflowed()||heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<length+blocks*16+reserve||heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)<768){request->send(503,"application/json","{\"error\":\"Memory busy; retry shortly.\"}");return;}
+    auto* response=new(std::nothrow) SegmentedJsonResponse(doc,length,statusCode);
+    if(!response||!response->_sourceValid()){delete response;request->send(503,"application/json","{\"error\":\"Memory busy; retry shortly.\"}");return;}
+    response->addHeader("Cache-Control","no-store");request->send(response);
+    return;
+    }
     // Keep room for TCP and the response object's send buffer. Failed JSON
     // allocations must return a retryable response, never reset the device.
     char* data = nullptr;
-#if APP_SUNTON_PANEL == 3
-    const bool smallPlaybackControl=length<512 && (request->url()=="/api/stop" || request->url()=="/api/volume" || request->url()=="/api/security" || request->url().startsWith("/api/presentation"));
-    const size_t jsonReserve=smallPlaybackControl?4096:16384;
-    const size_t jsonContiguousReserve=smallPlaybackControl?1024:4096;
-#else
     constexpr size_t jsonReserve=12000;
     constexpr size_t jsonContiguousReserve=0;
-#endif
     if (!doc.overflowed() && heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT) > length + jsonReserve &&
         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > length + 1 + jsonContiguousReserve) {
         data = static_cast<char*>(malloc(length + 1));
@@ -1221,6 +1228,7 @@ void WebServerManager::sendJson(AsyncWebServerRequest* request, const JsonDocume
     response->addHeader("Cache-Control", "no-store");
     request->send(response);
 }
+
 
 void WebServerManager::registerApiRoutes() {
     MiniExco::routes(server_,[this](AsyncWebServerRequest* r){return !redirectCaptivePortalIfNeeded(r)&&ensureAuthorized(r);},[this]{return !security_.locked();});

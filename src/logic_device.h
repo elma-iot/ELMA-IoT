@@ -4,6 +4,8 @@
 #include "app_state.h"
 #include <freertos/semphr.h>
 #include "settings_schema.h"
+#include <map>
+#include "logic_request_guard.h"
 
 // Adapter owns polling/physical GPIO. Main supplies existing subsystem actions.
 class LogicDevice {
@@ -43,6 +45,11 @@ private:
     uint32_t recoveryStableAt_ = 0;
     uint32_t activityStableAt_ = 0;
     bool actionMarkedThisTick_ = false;
+    std::map<std::string,std::string> outputOwners_;
+    LogicRequestGuard requestGuard_;
+    uint32_t executionSnapshots_=0;
+    void rememberOutput(JsonObjectConst node,JsonVariantConst args);
+    void stopOwnedOutputs(const char* groupId=nullptr);
     bool persist(JsonVariantConst graph, const std::string& mode, String& error);
     void applyMode(const std::string& mode);
     bool action(JsonObjectConst node, JsonVariantConst args, std::string& error);

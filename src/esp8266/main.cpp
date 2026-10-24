@@ -24,6 +24,7 @@
 #include <Adafruit_NeoPixel.h>
 #endif
 #include "../logic_runtime.h"
+#include "builtin_led_effect.h"
 #include "../led_array.h"
 #include "../logic_validation.h"
 #include "generated_esp8266_assets.h"
@@ -131,17 +132,44 @@ void packPeripheralMetadata(JsonDocument& document){
 }
 void defaults(){deserializeJson(config,FPSTR(ELMA_COMPACT_DEFAULTS));if(config["device"]["deviceName"].isNull())config["device"]["deviceName"]="ELMA-"+String(chipId(),HEX);if(config["device"]["friendlyName"].isNull())config["device"]["friendlyName"]="ELMA Device";}
 
-void setLed(bool on,JsonVariantConst args={}){int pin=config["device"]["statusLedPin"]|2;if(!ledPin(pin))return;ledOn=on;if(config["device"]["statusLedType"]=="neopixel"){double brightness=args["brightness"]|20.;writePixel(pin,on?uint8_t((args["red"]|0.)*brightness/100):0,on?uint8_t((args["green"]|255.)*brightness/100):0,on?uint8_t((args["blue"]|0.)*brightness/100):0);}else if(config["device"]["statusLedType"]=="rgb") {const char* channels[]={"red","green","blue"};const char* keys[]={"statusLedPin","statusLedGreenPin","statusLedBluePin"};for(int i=0;i<3;i++){int p=config["device"][keys[i]]|-1;if(!ledPin(p))continue;int value=on?int((args[channels[i]]|255.)*(args["brightness"]|20.)*1023./25500.):0;if(config["device"]["statusLedActiveLow"]|false)value=1023-value;pwmWrite(p,1000,value);}}else{
- double brightness=constrain(args["brightness"]|100.,0.,100.);
- int duty=on?int(lround(brightness*1023./100.)):0;
- if(config["device"]["statusLedActiveLow"]|false)duty=1023-duty;
+// Render effect frames without allocating JSON every 20 ms on compact chips.
+void writeLed(bool on,unsigned red,unsigned green,unsigned blue,unsigned brightness){
+ int pin=config["device"]["statusLedPin"]|2;if(!ledPin(pin))return;
+ if(config["device"]["statusLedType"]=="neopixel")writePixel(pin,on?red*brightness/100:0,on?green*brightness/100:0,on?blue*brightness/100:0);
+ else if(config["device"]["statusLedType"]=="rgb"){
+  const unsigned colors[]={red,green,blue};const char* keys[]={"statusLedPin","statusLedGreenPin","statusLedBluePin"};
+  for(int i=0;i<3;i++){int p=config["device"][keys[i]]|-1;if(!ledPin(p))continue;int value=on?colors[i]*brightness*1023/25500:0;if(config["device"]["statusLedActiveLow"]|false)value=1023-value;pwmWrite(p,1000,value);}
+ }else{
+  int duty=on?brightness*1023/100:0;if(config["device"]["statusLedActiveLow"]|false)duty=1023-duty;
 #ifdef ESP8266
- // Preserve the shared PWM frequency selected by other GPIO nodes.
- analogWriteRange(1023);analogWrite(pin,duty);
+  analogWriteRange(1023);analogWrite(pin,duty);
 #else
- pwmWrite(pin,1000,duty);
+  pwmWrite(pin,1000,duty);
 #endif
-}}
+ }
+}
+void setLed(bool on,JsonVariantConst args={}){ledOn=on;writeLed(on,args["red"]|0u,args["green"]|255u,args["blue"]|0u,args["brightness"]|100u);}
+struct CompactLedFrame {uint32_t started=0,at=0;uint16_t speed=50;uint8_t red=0,green=255,blue=0,brightness=20;char effect[10]="solid";} ledFrame;
+void renderLed(uint32_t now){
+ ledFrame.at=now;uint32_t color=BuiltinLedEffect::color(ledFrame.effect,now-ledFrame.started,ledFrame.speed,ledFrame.brightness,ledFrame.red,ledFrame.green,ledFrame.blue);
+ unsigned red=(color>>16)&255,green=(color>>8)&255,blue=color&255;
+ if(config["device"]["statusLedType"]=="regular")writeLed(ledOn,255,255,255,std::max(red,std::max(green,blue))*100/255);
+ else writeLed(ledOn,red,green,blue,100);
+}
+// Index + 1 identifies the last successful writer; zero means unowned.
+uint8_t outputOwners[65]{};
+int outputSlot(JsonObjectConst node){if(node["type"]=="hardware.led")return 64;int pin=-1;if(node["type"]=="hardware.gpio")pin=node["parameters"]["pin"]|-1;else if(LedArrays::matches(node))pin=node["binding"]["pins"]["DIN"]|-1;else if(PortablePeripherals::output(node))pin=PortablePeripherals::pin(node);return pin>=0&&pin<64?pin:-1;}
+void rememberOutput(JsonObjectConst node){int slot=outputSlot(node);if(slot<0)return;unsigned index=0;for(JsonObjectConst n:runtime.nodes()){++index;if(n["id"]==node["id"]){outputOwners[slot]=index<256?index:0;break;}}}
+void stopOwnedOutputs(const char* group=nullptr){
+ for(unsigned slot=0;slot<65;slot++)if(outputOwners[slot]){unsigned index=0;for(JsonObjectConst node:runtime.nodes())if(++index==outputOwners[slot]){
+  bool selected=!group;for(JsonObjectConst g:runtime.graph()["groups"].as<JsonArrayConst>())if(g["id"]==group)for(JsonVariantConst member:g["nodes"].as<JsonArrayConst>())if(member==node["id"])selected=true;
+  if(!selected)break;
+  if(slot==64){ledManual=true;setLed(false);}else if(LedArrays::matches(node))LedArrays::releasePin(slot);
+  else if(PortablePeripherals::output(node)){JsonDocument args;args["action"]="off";std::string ignored;PortablePeripherals::action(node,args.as<JsonVariantConst>(),ignored);}
+  else {analogWrite(slot,0);pinMode(slot,INPUT);}
+  outputOwners[slot]=0;break;
+ }}
+}
 void telemetryStatus(){
  static uint32_t previous=millis();static uint64_t elapsed=0;
  uint32_t now=millis();elapsed+=uint32_t(now-previous);previous=now;
@@ -172,8 +200,8 @@ void telemetryStatus(){
 #endif
 }
 void updateStatus(){StateGuard guard;status.clear();status["firmware"]["version"]=APP_VERSION "-compact";status["device"].set(config["device"]);status["hardware"]["chipModel"]=ELMA_COMPACT_CHIP;status["hardware"]["boardProfile"]=ELMA_8266_BOARD;status["hardware"]["flashSize"]=flashBytes();status["hardware"]["freeHeap"]=ESP.getFreeHeap();status["hardware"]["largestFreeBlock"]=largestHeap();status["hardware"]["psramSize"]=0;status["wifi"]["connected"]=WiFi.status()==WL_CONNECTED;status["wifi"]["rssi"]=WiFi.RSSI();status["wifi"]["ip"]=WiFi.localIP().toString();status["wifi"]["ssid"]=WiFi.SSID();status["network"]["wifiConnected"]=WiFi.status()==WL_CONNECTED;status["network"]["apMode"]=WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP;status["network"]["ip"]=WiFi.localIP().toString();status["network"]["ssid"]=WiFi.SSID();status["network"]["apSsid"]=String(config["wifi"]["apSsid"]|"").length()?String(config["wifi"]["apSsid"]|""):"ELMA-"+String(chipId(),HEX);status["network"]["wifiRssi"]=WiFi.RSSI();status["system"]["uptime"]=millis()/1000;status["builtinLed"]["digital"]=ledOn;status["error"]=fault;status["plotsAvailable"]=false;for(JsonObjectConst n:runtime.graph()["nodes"].as<JsonArrayConst>())if(strcmp(n["type"]|"","mainboard.plot")==0){status["plotsAvailable"]=true;break;}telemetryStatus();
- for(JsonObjectConst n:runtime.nodes())PortablePeripherals::sample(n,status.as<JsonObject>());
- for(JsonObjectConst n:runtime.nodes())if(n["type"]=="hardware.gpio"){int pin=n["parameters"]["pin"]|-1;auto v=status["gpio"][n["id"].as<const char*>()];if(digitalPin(pin))v["digital"]=digitalRead(pin)!=0;if(compactADC(pin)){v["analog"]=analogRead(pin);
+ for(JsonObjectConst n:runtime.nodes())if(runtime.nodeRunning(n["id"]|""))PortablePeripherals::sample(n,status.as<JsonObject>());
+ for(JsonObjectConst n:runtime.nodes())if(runtime.nodeRunning(n["id"]|"")&&n["type"]=="hardware.gpio"){int pin=n["parameters"]["pin"]|-1;auto v=status["gpio"][n["id"].as<const char*>()];if(digitalPin(pin))v["digital"]=digitalRead(pin)!=0;if(compactADC(pin)){v["analog"]=analogRead(pin);
 #ifdef ESP32
 v["millivolts"]=analogReadMilliVolts(pin);
 #endif
@@ -184,10 +212,17 @@ if(pin==17&&ELMA_COMPACT_ADC_PAD){int raw=analogRead(A0);v["analog"]=raw;v["mill
 }
 }
 bool action(JsonObjectConst node,JsonVariantConst args,std::string& error){error.clear();String type=node["type"]|"",command=args["action"]|"";
- if(LedArrays::matches(node))return LedArrays::action(node,args,error);
- if(PortablePeripherals::output(node))return PortablePeripherals::action(node,args,error);
- if(type=="hardware.led"){ledManual=command!="release";setLed(command=="toggle"?!ledOn:command!="off"&&command!="release",args);return true;}
- if(type=="hardware.gpio"){int pin=node["parameters"]["pin"]|-1;if(!digitalPin(pin)||pin==(config["device"]["statusLedPin"]|2)){error="GPIO unavailable or reserved";return false;}String m=node["parameters"]["mode"]|"input";if(m=="output"){pinMode(pin,OUTPUT);if(command=="write")digitalWrite(pin,args["state"]|false);else if(command=="toggle")digitalWrite(pin,!digitalRead(pin));else{error="Unsupported GPIO action";return false;}}else if(m=="pwm"&&command=="pwm"){double duty=args["duty"]|-1.;int hz=node["parameters"]["frequency"]|1000;if(!isfinite(duty)||duty<0||duty>100||hz<100||hz>ELMA_COMPACT_PWM_MAX){error="PWM frequency or duty exceeds the selected chip capability";return false;}pwmWrite(pin,hz,int(duty*10.23));}else{error="GPIO is not an output";return false;}return true;}
+ if(LedArrays::matches(node)){bool ok=LedArrays::action(node,args,error);if(ok)rememberOutput(node);return ok;}
+ if(PortablePeripherals::output(node)){bool ok=PortablePeripherals::action(node,args,error);if(ok)rememberOutput(node);return ok;}
+ if(type=="hardware.led"){
+  if(command=="release"){ledManual=false;outputOwners[64]=0;setLed(false);return true;}
+  if(command!="on"&&command!="off"&&command!="toggle"&&command!="write"){error="Unsupported LED action";return false;}
+  double speed=args["effectSpeed"]|50.,brightness=args["brightness"]|20.,red=args["red"]|0.,green=args["green"]|255.,blue=args["blue"]|0.;const char* effect=args["effect"]|"solid";
+  if(!BuiltinLedEffect::valid(effect)||!isfinite(speed)||speed<0||speed>1000||!isfinite(brightness)||brightness<0||brightness>100||!isfinite(red)||red<0||red>255||!isfinite(green)||green<0||green>255||!isfinite(blue)||blue<0||blue>255){error="Invalid LED effect, speed or color";return false;}
+  if(!ledManual||!ledOn||strcmp(effect,ledFrame.effect))ledFrame.started=millis();
+  ledOn=command=="toggle"?!ledOn:command!="off";ledManual=true;ledFrame.speed=uint16_t(speed);ledFrame.brightness=brightness;ledFrame.red=red;ledFrame.green=green;ledFrame.blue=blue;strlcpy(ledFrame.effect,effect,sizeof(ledFrame.effect));renderLed(millis());rememberOutput(node);return true;
+ }
+ if(type=="hardware.gpio"){int pin=node["parameters"]["pin"]|-1;if(!digitalPin(pin)||pin==(config["device"]["statusLedPin"]|2)){error="GPIO unavailable or reserved";return false;}String m=node["parameters"]["mode"]|"input";if(m=="output"){pinMode(pin,OUTPUT);if(command=="write")digitalWrite(pin,args["state"]|false);else if(command=="toggle")digitalWrite(pin,!digitalRead(pin));else{error="Unsupported GPIO action";return false;}}else if(m=="pwm"&&command=="pwm"){double duty=args["duty"]|-1.;int hz=node["parameters"]["frequency"]|1000;if(!isfinite(duty)||duty<0||duty>100||hz<100||hz>ELMA_COMPACT_PWM_MAX){error="PWM frequency or duty exceeds the selected chip capability";return false;}pwmWrite(pin,hz,int(duty*10.23));}else{error="GPIO is not an output";return false;}rememberOutput(node);return true;}
  if(type=="mainboard.plot"){double value=args["value"].as<double>();if(args["value"].isNull()||!isfinite(value)){error="Plot value unavailable";return false;}auto& s=samples[sampleSequence%8];s.sequence=++sampleSequence;s.at=millis();s.value=value;strlcpy(s.plot,node["parameters"]["plot"]|"Plot",sizeof(s.plot));strlcpy(s.series,node["parameters"]["series"]|"Value",sizeof(s.series));strlcpy(s.unit,node["parameters"]["unit"]|"",sizeof(s.unit));return true;}
  error="Action unsupported by ESP8266 compact profile";return false;
 }
@@ -239,7 +274,7 @@ bool loadGraphDocument(JsonVariantConst input,String& error,bool validateOnly=fa
  for(JsonObjectConst n:input["nodes"].as<JsonArrayConst>())if(n["type"]=="hardware.gpio"&&n["parameters"]["mode"]=="pwm") {int hz=n["parameters"]["frequency"]|1000;if(sharedFrequency&&sharedFrequency!=hz){error="ESP8266 PWM outputs must share one frequency";return false;}sharedFrequency=hz;}
 #endif
  // The previous graph is already persisted; release its working set before validating its replacement.
- LedArrays::reset();std::string resetError;runtime.begin("{\"schemaVersion\":1,\"nodes\":[],\"connections\":[]}",action,resetError);
+ stopOwnedOutputs();LedArrays::reset();std::string resetError;runtime.begin("{\"schemaVersion\":1,\"nodes\":[],\"connections\":[]}",action,resetError);
  if(provisioningBusy)Serial.printf("[clone] validating nodes=%u heap=%u\n",unsigned(input["nodes"].size()),ESP.getFreeHeap());
  JsonDocument defs,accepted;if(!devices(defs,input)){error="Insufficient memory for hardware definitions";return false;}std::string why;if(provisioningBusy)Serial.printf("[clone] definitions ready heap=%u\n",ESP.getFreeHeap());if(!ElmaLogic::validateEditable(input,defs.as<JsonArrayConst>(),accepted,why)){error=String(why.c_str())+" (free heap "+String(ESP.getFreeHeap())+" bytes)";return false;}
  if(provisioningBusy)Serial.printf("[clone] graph validated heap=%u\n",ESP.getFreeHeap());
@@ -264,14 +299,14 @@ bool loadGraphDocument(JsonVariantConst input,String& error,bool validateOnly=fa
  accepted.clear();JsonDocument executable;File instructions=LittleFS.open("/instructions.tmp","r");auto parsedInstructions=deserializeJson(executable,instructions);instructions.close();LittleFS.remove("/instructions.tmp");
  if(parsedInstructions){error="Cannot load runtime instructions";return false;}
  if(executable.overflowed()||ESP.getFreeHeap()<6000){error="Insufficient free heap for instruction graph";return false;}
- if(provisioningBusy)Serial.printf("[clone] starting runtime heap=%u\n",ESP.getFreeHeap());if(!runtime.begin(std::move(executable),action,why)){error=why.c_str();return false;}for(JsonObjectConst n:runtime.nodes())if(n["type"]=="hardware.gpio"){int pin=n["parameters"]["pin"]|-1;if(digitalPin(pin)){String m=n["parameters"]["mode"]|"input";
+ if(provisioningBusy)Serial.printf("[clone] starting runtime heap=%u\n",ESP.getFreeHeap());if(!runtime.begin(std::move(executable),action,why)){error=why.c_str();return false;}for(JsonObjectConst n:runtime.nodes())if(runtime.nodeRunning(n["id"]|"")&&n["type"]=="hardware.gpio"){int pin=n["parameters"]["pin"]|-1;if(digitalPin(pin)){String m=n["parameters"]["mode"]|"input";
 #ifdef ESP8266
 int down=INPUT_PULLDOWN_16;
 #else
 int down=INPUT_PULLDOWN;
 #endif
 pinMode(pin,m=="input_pullup"?INPUT_PULLUP:m=="input_pulldown"?down:m=="output"||m=="pwm"?OUTPUT:INPUT);}}
- if(mode=="stopped")runtime.suspend();else if(mode=="paused")runtime.pause(millis());return true;
+ if(mode=="stopped")runtime.restart();else if(mode=="paused")runtime.pause(millis());return true;
 }
 bool loadGraph(const String& raw,String& error,bool validateOnly=false){JsonDocument input;auto parsed=deserializeJson(input,raw);if(parsed){error=parsed.c_str();return false;}return loadGraphDocument(input.as<JsonVariantConst>(),error,validateOnly);}
 bool loadGraphFile(const char* path,String& error,bool validateOnly=false){
@@ -436,8 +471,8 @@ void setupHttp(){for(const auto& asset:ELMA_8266_ASSETS){auto* a=&asset;server.o
  auto* settings=new AsyncCallbackJsonWebHandler("/api/settings",[](AsyncWebServerRequest* r,JsonVariant& v){StateGuard guard;if(settingsApplying||pendingSettings.length()||provisioningBusy){errorReply(r,"Configuration is already being applied",409);return;}serializeJson(v,pendingSettings);settingsResult="";++settingsOperation;JsonDocument out;out["pending"]=true;out["operation"]=settingsOperation;jsonReply(r,out,202);});settings->setMaxContentLength(kConfigLimit);server.addHandler(settings);
  server.on("/api/logics",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;logicReply(r,r->hasParam("live"));});
  auto* logic=new StoredGraphHandler([](AsyncWebServerRequest* r,JsonVariant& v){StateGuard guard;String error;if(!v["graph"].isNull()){v["graph"].remove("devices");if(!loadGraphDocument(v["graph"],error)){restoreGraphAfterRequest=true;errorReply(r,error);return;}if(!saveJsonFile("/logics.json",v["graph"])){restoreGraphAfterRequest=true;errorReply(r,"Logics storage failed; restoring previous graph");return;}}
- if(v["mode"].is<const char*>()){String target=v["mode"].as<String>();if(target!="playing"&&target!="paused"&&target!="stopped"){errorReply(r,"Invalid mode");return;}String previousMode=mode;mode=target;if(mode=="playing"){if(previousMode=="paused")runtime.resume(millis());else runtime.restart();}else if(mode=="paused")runtime.pause(millis());else runtime.suspend();saveFile("/mode",mode);}
- if(v["group"].is<JsonObjectConst>()){if(!runtime.controlGroup(v["group"]["id"]|"",v["group"]["mode"]|"",millis())){errorReply(r,"Unknown group or mode");return;}}
+ if(v["mode"].is<const char*>()){String target=v["mode"].as<String>();if(target!="playing"&&target!="paused"&&target!="stopped"){errorReply(r,"Invalid mode");return;}String previousMode=mode;mode=target;if(mode=="playing"){if(previousMode=="paused")runtime.resume(millis());else runtime.restart();}else if(mode=="paused")runtime.pause(millis());else {stopOwnedOutputs();runtime.restart();status.clear();}saveFile("/mode",mode);}
+ if(v["group"].is<JsonObjectConst>()){if(!runtime.controlGroup(v["group"]["id"]|"",v["group"]["mode"]|"",millis())){errorReply(r,"Unknown group or mode");return;}if(v["group"]["mode"]=="stopped"){stopOwnedOutputs(v["group"]["id"]|"");if(!runtime.hasRunningNodes())status.clear();}}
  logicReply(r,true);});server.addHandler(logic);
  server.on("/api/plots",HTTP_GET,[](AsyncWebServerRequest* r){StateGuard guard;if(provisioningBusy){r->send(503,"application/json","{\"error\":\"Configuration transfer in progress; retry shortly\"}");return;}JsonDocument out;uint32_t after=r->hasParam("after")?r->getParam("after")->value().toInt():r->hasParam("since")?r->getParam("since")->value().toInt():0;uint32_t boot=r->hasParam("boot")?r->getParam("boot")->value().toInt():bootId;plotReply(out,boot==bootId?after:0);jsonReply(r,out);});server.begin();}
 uint32_t crc32(const String& text){uint32_t crc=~0u;for(size_t i=0;i<text.length();i++){crc^=uint8_t(text[i]);for(int k=0;k<8;k++)crc=(crc>>1)^(0xEDB88320u&-(crc&1));}return ~crc;}
@@ -470,6 +505,6 @@ if(!recoverConfiguration())fault="Configuration recovery failed";
 defaults();String saved=readFile("/settings.json",kConfigLimit);if(saved.length()){JsonDocument d;if(!deserializeJson(d,saved))config.set(d);}saved="";mode=readFile("/mode",16);if(mode!="paused"&&mode!="stopped")mode="playing";setLed(false);connectWifi();
 if(!LittleFS.exists("/logics.json")&&config["windowsLogic"].is<JsonObject>()){if(!saveJsonFile("/logics.json",config["windowsLogic"]))fault="Cannot persist default Logics";}
 config.remove("windowsLogic");packPeripheralMetadata(config);{JsonDocument lean;lean.set(config);config=std::move(lean);}loadSavedGraph(fault);setupHttp();Serial.println("[clone] provisioning ready");}
-void loop(){StateGuard guard;serialTick();if(pendingSettings.length()){settingsApplying=true;provisioningBusy=true;Serial.println("[settings] applying");JsonDocument incoming;auto parsed=deserializeJson(incoming,pendingSettings);pendingSettings="";if(parsed)settingsResult="Invalid settings JSON";else if(!applyConfiguration(incoming.as<JsonVariantConst>(),settingsResult,nullptr,&incoming)){}incoming.clear();settingsApplying=false;provisioningBusy=false;Serial.println("[settings] complete "+settingsResult);return;}if(provisioningBusy){yield();return;}uint32_t now=millis();if(applyArrayDefaultsPending){applyArrayDefaultsPending=false;JsonDocument arrayDevices;devices(arrayDevices);for(JsonObjectConst n:arrayDevices.as<JsonArrayConst>())if(LedArrays::matches(n)){JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";args["configured"]=true;std::string why;if(!LedArrays::action(n,args.as<JsonVariantConst>(),why))fault=why.c_str();}}LedArrays::bootWifi((WiFi.getMode()&WIFI_AP)!=0,WiFi.status()==WL_CONNECTED,now);LedArrays::tick(now);if(wifiReconfigureAt&&int32_t(now-wifiReconfigureAt)>=0){wifiReconfigureAt=0;connectWifi();}if(now-lastTick>=25){lastTick=now;if(!ledManual){bool wanted=WiFi.status()==WL_CONNECTED||((now/500)%2);if(wanted!=ledOn)setLed(wanted);}updateStatus();if(mode=="playing")runtime.tick(now,status.as<JsonVariantConst>());fault=runtime.error().c_str();}if(now-lastNetwork>=5000){lastNetwork=now;networkReport();}if(WiFi.status()==WL_CONNECTED&&WiFi.getMode()==WIFI_AP_STA&&WiFi.softAPgetStationNum()==0)WiFi.softAPdisconnect(true);yield();}
+void loop(){StateGuard guard;serialTick();if(pendingSettings.length()){settingsApplying=true;provisioningBusy=true;Serial.println("[settings] applying");JsonDocument incoming;auto parsed=deserializeJson(incoming,pendingSettings);pendingSettings="";if(parsed)settingsResult="Invalid settings JSON";else if(!applyConfiguration(incoming.as<JsonVariantConst>(),settingsResult,nullptr,&incoming)){}incoming.clear();settingsApplying=false;provisioningBusy=false;Serial.println("[settings] complete "+settingsResult);return;}if(provisioningBusy){yield();return;}uint32_t now=millis();if(applyArrayDefaultsPending){applyArrayDefaultsPending=false;JsonDocument arrayDevices;devices(arrayDevices);for(JsonObjectConst n:arrayDevices.as<JsonArrayConst>())if(LedArrays::matches(n)){JsonDocument args;args.set(n["binding"]["defaults"]);args["action"]="strip";args["configured"]=true;std::string why;if(!LedArrays::action(n,args.as<JsonVariantConst>(),why))fault=why.c_str();}}LedArrays::bootWifi((WiFi.getMode()&WIFI_AP)!=0,WiFi.status()==WL_CONNECTED,now);LedArrays::tick(now);if(wifiReconfigureAt&&int32_t(now-wifiReconfigureAt)>=0){wifiReconfigureAt=0;connectWifi();}if(ledManual&&ledOn&&BuiltinLedEffect::frameDue(now,ledFrame.at))renderLed(now);if(now-lastTick>=25){lastTick=now;if(!ledManual){bool wanted=WiFi.status()==WL_CONNECTED||((now/500)%2);if(wanted!=ledOn)setLed(wanted);}if(mode=="playing"&&runtime.hasRunningNodes()){updateStatus();runtime.tick(now,status.as<JsonVariantConst>());}fault=runtime.error().c_str();}if(now-lastNetwork>=5000){lastNetwork=now;networkReport();}if(WiFi.status()==WL_CONNECTED&&WiFi.getMode()==WIFI_AP_STA&&WiFi.softAPgetStationNum()==0)WiFi.softAPdisconnect(true);yield();}
 
 #endif // ESP8266

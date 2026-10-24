@@ -32,6 +32,8 @@ public:
     uint32_t recordingPollInterval(uint32_t normal) const;
     bool paused() const { return paused_; }
     bool active() const { return graph_["nodes"].size() != 0; }
+    bool hasRunningNodes() const;
+    bool nodeRunning(const char* id) const {int n=index(id);return n>=0&&allowed(size_t(n));}
     const std::string& error() const { return error_; }
     JsonObjectConst graph() const { return graph_.as<JsonObjectConst>(); }
     JsonArrayConst nodes() const { return graph_["nodes"].as<JsonArrayConst>(); }

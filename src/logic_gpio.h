@@ -10,6 +10,7 @@ public:
     bool action(JsonObjectConst node, JsonVariantConst args, std::string& error);
     void sample(JsonObjectConst node, JsonObject target);
     void reset();
+    void resetNode(const char* id);
 private:
     struct PinState {int pin=-1,channel=-1;std::string mode;bool high=false;};
     std::map<std::string,PinState> pins_;

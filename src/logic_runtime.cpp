@@ -88,6 +88,7 @@ JsonVariantConst Runtime::path(const char* name) const {
 }
 
 JsonVariantConst Runtime::value(size_t n, const char* port) {
+    if(!allowed(n))return {};
     std::string id = node(n)["id"].as<std::string>();
     if (!cache_[id][port].isNull()) return cache_[id][port];
     if (++depth_ > 32 || ++budget_ > 2048) { --depth_; error_ = "Logics evaluation budget exceeded"; return {}; }
@@ -146,7 +147,7 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
         } else {
             auto level=[&](const char* key,unsigned maximum){auto v=input(n,key);double d=v.as<double>();return !v.isNull()&&std::isfinite(d)?unsigned(std::max(0.0,std::min(double(maximum),d))):0u;};
             auto effect=input(n,"effect");const char* mode=effect|"solid";
-            const uint32_t rgb=on?BuiltinLedEffect::color(BuiltinLedEffect::valid(mode)?mode:"solid",now_,level("speed",100),level("brightness",100),level("red",255),level("green",255),level("blue",255)):0;
+            const uint32_t rgb=on?BuiltinLedEffect::color(BuiltinLedEffect::valid(mode)?mode:"solid",now_,level("speed",1000),level("brightness",100),level("red",255),level("green",255),level("blue",255)):0;
             result.set(unsigned(rgb>>(std::strcmp(port,"red")==0?16:std::strcmp(port,"green")==0?8:0))&255u);
         }
     }
@@ -417,7 +418,7 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
                 auto effect=value(n,"effect"),speed=value(n,"speed");
                 if(!effect.isNull()&&!speed.isNull()){
                     unsigned mode=0;for(const char* name:{"solid","blink","breathe","colorloop"}){if(effect==name)break;++mode;}
-                    current.set((mode<<8)|unsigned(std::max(0.0,std::min(100.0,speed.as<double>()))));
+                    current.set((mode<<10)|unsigned(std::max(0.0,std::min(1000.0,speed.as<double>()))));
                 }
             } else {
                 // Scalar signatures avoid allocating an object/array just to
@@ -481,13 +482,14 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
 namespace ElmaLogic {
 void Runtime::pause(uint32_t now) { if(!paused_) {paused_=true;pausedAt_=now;freezeStates(now);} }
 void Runtime::resume(uint32_t now) {if(!paused_)return;paused_=false;freezeStates(now);}
-void Runtime::restart() {suspend();for(auto& state:states_)state=State{};previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();}
+void Runtime::restart() {suspend();pulses_.shrink_to_fit();for(auto& state:states_)state=State{};previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();}
 void Runtime::telemetry(JsonObject target) const {
     for(JsonPairConst n:cache_.as<JsonObjectConst>())for(JsonPairConst p:n.value().as<JsonObjectConst>()) {
         if(p.value().is<JsonObjectConst>() || p.value().is<JsonArrayConst>())continue;
         target["values"][n.key().c_str()][p.key().c_str()].set(p.value());
     }
     for(size_t n=0;n<activity_.size();++n) {
+        if(!allowed(n))continue;
         const std::string id=node(n)["id"].as<std::string>();
         if(node(n)["type"]=="timing.countdown" && states_[n].pending) {
             const auto& state=states_[n];
@@ -504,9 +506,9 @@ void Runtime::telemetry(JsonObject target) const {
 
 namespace ElmaLogic {
 void Runtime::observe(JsonVariantConst status) {
-    status_=status;cache_.clear();budget_=0;depth_=0;
-    for(size_t n=0;n<states_.size();++n)for(JsonObjectConst p:node(n)["ports"].as<JsonArrayConst>())if(p["direction"]=="output" && p["type"]!="execution" && p["type"]!="audio" && p["type"]!="peripheral")value(n,p["id"]|"");
-    status_={};
+    // A stopped runtime is not a second live evaluator. Retain no transient
+    // readings or effect frames while the user edits its saved graph.
+    (void)status;cache_.clear();status_={};
 }
 }
 
@@ -516,6 +518,7 @@ bool Runtime::allowed(size_t n) const {
     for(JsonObjectConst group:graph_["groups"].as<JsonArrayConst>())for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>())if(member==node(n)["id"])return group["mode"]=="playing" || group["mode"].isNull();
     return true;
 }
+bool Runtime::hasRunningNodes() const {for(size_t n=0;n<states_.size();++n)if(allowed(n))return true;return false;}
 void Runtime::freezeStates(uint32_t now) {
     for(size_t n=0;n<states_.size();++n){auto& state=states_[n];bool blocked=!allowed(n);
         if(blocked&&!state.frozen){state.frozen=true;state.frozenAt=now;state.alarm.previous=0;}
@@ -527,7 +530,10 @@ bool Runtime::controlGroup(const char* id,const char* mode,uint32_t now) {
     for(JsonObject group:graph_["groups"].as<JsonArray>())if(group["id"]==id){
         if(group["mode"]==mode)return true;
         group["mode"]=mode;
-        if(std::string(mode)=="stopped")for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>()){int n=index(member|"");if(n>=0){states_[n]=State{};previous_.remove(member|"");}}
+        if(std::string(mode)=="stopped"){
+            for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>()){int n=index(member|"");if(n>=0){states_[n]=State{};previous_.remove(member|"");cache_.remove(member|"");}}
+            if(!hasRunningNodes()){cache_.clear();previous_.clear();pulses_.clear();pulses_.shrink_to_fit();status_={};}
+        }
         freezeStates(now);return true;
     }
     return false;

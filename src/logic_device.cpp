@@ -61,6 +61,38 @@ int pin(JsonObjectConst node) {
         if (item.value().is<int>() && item.value().as<int>() >= 0) return item.value().as<int>();
     return -1;
 }
+std::string outputKey(JsonObjectConst node) {
+    if(node["type"]=="hardware.led")return "builtin-led";
+    if(node["type"]=="hardware.gpio"&&(node["parameters"]["mode"]=="output"||node["parameters"]["mode"]=="pwm"))return "pin:"+std::to_string(node["parameters"]["pin"]|-1);
+    if(LedArrays::matches(node))return "array:"+std::to_string(node["binding"]["pins"]["DIN"]|-1);
+    if(PortablePeripherals::output(node)||(node["binding"]["group"]=="control"&&String(node["peripheral"]["profile"]|"").indexOf("relay")>=0))return "pin:"+std::to_string(pin(node));
+    return {};
+}
+}
+
+void LogicDevice::rememberOutput(JsonObjectConst node,JsonVariantConst args) {
+    auto key=outputKey(node);if(key.empty())return;
+    if(args["action"]=="release")outputOwners_.erase(key);
+    else outputOwners_[key]=node["id"]|"";
+}
+void LogicDevice::stopOwnedOutputs(const char* groupId) {
+    for(auto it=outputOwners_.begin();it!=outputOwners_.end();) {
+        if(groupId&&groupForNode(it->second.c_str())!=groupId){++it;continue;}
+        for(JsonObjectConst node:runtime_.nodes())if(node["id"]==it->second.c_str()) {
+            JsonDocument args;args["action"]="off";std::string ignored;
+            if(node["type"]=="hardware.gpio")gpio_.resetNode(it->second.c_str());
+            else if(LedArrays::matches(node))LedArrays::releasePin(node["binding"]["pins"]["DIN"]|-1);
+            else if(PortablePeripherals::output(node))PortablePeripherals::action(node,args.as<JsonVariantConst>(),ignored);
+            else if(node["type"]=="hardware.led"){if(actions_)actions_(node,args.as<JsonVariantConst>(),ignored);}
+            else {int gpio=pin(node);if(gpio>=0)digitalWrite(gpio,LOW);}
+            break;
+        }
+        it=outputOwners_.erase(it);
+    }
+    if(audioOwned_&&(!groupId||groupForNode(audioOwner_.c_str())==groupId))for(JsonObjectConst node:runtime_.nodes())if(node["id"]==audioOwner_){
+        JsonDocument args;args["action"]="stop";std::string ignored;if(actions_)actions_(node,args.as<JsonVariantConst>(),ignored);audioOwned_=false;break;
+    }
+    if(!groupId||!std::strcmp(logicActivityMarker.group,groupId)){clearLogicActivity();activityStableAt_=0;actionMarkedThisTick_=false;}
 }
 
 std::string LogicDevice::groupForNode(const char* nodeId) const {
@@ -316,20 +348,21 @@ bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::strin
     if(String(node["type"]|"").startsWith("hardware.can.")){String problem;bool ok=CanBus::command(args,problem);error=problem.c_str();return ok;}
     if(String(node["type"]|"")=="hardware.modbus.read"){String problem;bool ok=Rs485::command(args,problem);error=problem.c_str();return ok;}
     if(String(node["type"]|"").startsWith("hardware.hmi.")){String problem;bool ok=RoundHmi::command(args,problem);error=problem.c_str();return ok;}
-    if(LedArrays::matches(node))return LedArrays::action(node,args,error);
- if(PortablePeripherals::output(node))return PortablePeripherals::action(node,args,error);
+    if(LedArrays::matches(node)){bool ok=LedArrays::action(node,args,error);if(ok)rememberOutput(node,args);return ok;}
+ if(PortablePeripherals::output(node)){bool ok=PortablePeripherals::action(node,args,error);if(ok)rememberOutput(node,args);return ok;}
     if (node["binding"]["group"]=="control" && std::string(node["peripheral"]["profile"]|"").find("relay")!=std::string::npos) {
         int gpio=pin(node);std::string command=args["action"]|"";
         if(gpio<0 || (command!="on" && command!="off" && command!="toggle" && command!="set")) {error="Unsupported Logics relay action";return false;}
         bool on=command=="on" || (command=="toggle" && digitalRead(gpio)==HIGH);
         if(command=="toggle")on=!on;
         if(command=="set"){if(!args["value"].is<double>() || (args["value"]!=0 && args["value"]!=1)){error="Relay Set Value accepts 0 or 1";return false;}on=args["value"].as<double>()!=0;}
-        pinMode(gpio,OUTPUT);digitalWrite(gpio,on?HIGH:LOW);return true;
+        pinMode(gpio,OUTPUT);digitalWrite(gpio,on?HIGH:LOW);rememberOutput(node,args);return true;
     }
-    if(node["type"]=="hardware.gpio")return gpio_.action(node,args,error);
+    if(node["type"]=="hardware.gpio"){bool ok=gpio_.action(node,args,error);if(ok)rememberOutput(node,args);return ok;}
     bool ok=actions_ && actions_(node,args,error);
     if(ok && (node["binding"]["group"]=="audio" || std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos))audioOwned_=args["action"]=="play" || (audioOwned_ && args["action"]!="stop");
     if(ok && args["action"]=="play")audioOwner_=node["id"]|"";
+    if(ok)rememberOutput(node,args);
     return ok;
 }
 
@@ -342,8 +375,10 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     LedArrays::tick(now,!updating);
     if (!runtime_.active() || !state_)return;
     if (updating) {runtime_.suspend();polled_=false;return;}
+    if(mode_!="playing"||!runtime_.hasRunningNodes())return;
     if (polled_ && uint32_t(now-lastPoll_)<(mode_=="playing"?runtime_.recordingPollInterval(minimumPollIntervalMs):minimumPollIntervalMs))return;
     polled_=true;lastPoll_=now;
+    ++executionSnapshots_;
     JsonDocument snapshot;JsonObject root=snapshot.to<JsonObject>();state_->toJson(root);appendSystemMetricsJson(root);
     root["system"]["lastError"]=state_->snapshot().system.lastError;
     if(status_)status_(root);
@@ -351,6 +386,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     for(JsonObjectConst n:runtime_.nodes())if(String(n["type"]|"").startsWith("hardware.can.")){CanBus::snapshot(root["can"].to<JsonObject>());break;}
     for(JsonObjectConst n:runtime_.nodes())if(String(n["type"]|"").startsWith("hardware.modbus.")){Rs485::snapshot(root["rs485"].to<JsonObject>(),false);break;}
     for(JsonObjectConst n:runtime_.nodes()) {
+        if(!runtime_.nodeRunning(n["id"]|""))continue;
         if(n["type"]=="hardware.gpio" && mode_=="playing")gpio_.sample(n,root["gpio"][n["id"].as<std::string>()].to<JsonObject>());
         if(n["binding"]["kind"]!="peripheral")continue;
         std::string id=n["peripheral"]["id"].as<std::string>();auto target=root["peripherals"][id];
@@ -378,8 +414,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     const bool waitingForActionStability=logicActivityMarker.magic==kLogicActivityMagic &&
         logicActivityMarker.node[0]!='\0' && static_cast<int32_t>(now-activityStableAt_)<0;
     if(!waitingForActionStability)markLogicActivity("",{});
-    if(mode_=="playing")runtime_.tick(now,snapshot.as<JsonVariantConst>());
-    else runtime_.observe(snapshot.as<JsonVariantConst>());
+    runtime_.tick(now,snapshot.as<JsonVariantConst>());
     if(recoveryRetries_ && mode_=="playing" && runtime_.error().empty() &&
         static_cast<int32_t>(now-recoveryStableAt_)>=0){
         Preferences writer;
@@ -407,7 +442,7 @@ void LogicDevice::enterRecoverySafeMode(const char* warning) {
         preferences.putBool("active",true);preferences.putString("group","");preferences.putString("node","");
         preferences.putString("warning",recoveryWarning_.c_str());preferences.end();
     }
-    runtime_.restart();mode_="stopped";String ignored;persist(runtime_.graph(),mode_,ignored);
+    stopOwnedOutputs();gpio_.reset();runtime_.restart();mode_="stopped";String ignored;persist(runtime_.graph(),mode_,ignored);
 }
 
 void LogicDevice::shuttingDown() {
@@ -425,7 +460,7 @@ bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String&
     return saveCompactLogicRecord(record,error);
 }
 void LogicDevice::applyMode(const std::string& mode) {
-    if(mode=="stopped")gpio_.reset();
+    if(mode=="stopped"){stopOwnedOutputs();gpio_.reset();}
     if(mode==mode_)return;
     if(mode=="paused")runtime_.pause(millis());
     else if(mode=="stopped") {
@@ -454,7 +489,11 @@ void LogicDevice::ledSnapshot(JsonObject response) {
 }
 void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){response["error"]="Logics busy";return;}
-    response["mode"]=mode_;response["updating"]=updating_;runtime_.telemetry(response["live"].to<JsonObject>());
+    response["mode"]=mode_;response["updating"]=updating_;
+    if(mode_=="playing")runtime_.telemetry(response["live"].to<JsonObject>());else response["live"]["error"]=runtime_.error();
+    response["requestDeduplication"]=true;
+    response["execution"]["running"]=mode_=="playing"&&runtime_.hasRunningNodes();
+    response["execution"]["ownedOutputs"]=outputOwners_.size();response["execution"]["snapshots"]=executionSnapshots_;
     response["groups"].set(runtime_.graph()["groups"]);
     bool hasPlots=false;for(JsonObjectConst node:runtime_.graph()["nodes"].as<JsonArrayConst>())if(node["type"]=="mainboard.plot"){hasPlots=true;break;}response["hasPlots"]=hasPlots;
     response["ledBinding"].set(ledBinding_);
@@ -471,6 +510,9 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){error="Logics busy";return false;}
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
     if(updating_){error="Wait for firmware transfer to finish";return false;}
+    const auto requestState=requestGuard_.check(command);
+    if(requestState==LogicRequestGuard::Invalid||requestState==LogicRequestGuard::Conflict){error="Invalid or reused Logics request sequence";return false;}
+    if(requestState==LogicRequestGuard::Replayed){response["mode"]=mode_;response["groups"].set(runtime_.graph()["groups"]);response["saved"]=true;response["replayed"]=true;return true;}
     bool saved=true;
     std::string mode=command["mode"]|mode_.c_str();
     if(mode!="playing"&&mode!="paused"&&mode!="stopped"){error="Invalid Logics control state";return false;}
@@ -483,7 +525,17 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         if(std::string(groupMode)!="playing"&&std::string(groupMode)!="paused"&&std::string(groupMode)!="stopped"){error="Invalid group control state";return false;}
         if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&(quarantinedGroup_.empty()||quarantinedGroup_==id)&&!(command["confirmUnsafeRestart"]|false)){error=(std::string("RECOVERY_CONFIRMATION_REQUIRED: ")+recoveryWarning_+" Confirm to retry this automation.").c_str();return false;}
         if(recoveryConfirmationRequired_&&std::string(groupMode)=="playing"&&(quarantinedGroup_.empty()||quarantinedGroup_==id))clearRecoveryState();
-        JsonDocument updated;updated.set(runtime_.graph());bool found=false;
+        runtime_.releaseEvaluationCache();
+        // Stop releases producers/caches first; persistence must never keep an
+        // effect, output or recording alive merely because RAM is tight.
+        if(std::string(groupMode)=="stopped"){
+            if(!runtime_.controlGroup(id,"stopped",millis())){error="Group not found; save the canvas first";return false;}
+            stopOwnedOutputs(id);
+        }
+        JsonDocument updated;
+        ElmaLogic::copyPersistedGraph(runtime_.graph(),updated.to<JsonObject>());
+        if(updated.overflowed()){error="Insufficient memory to update automation state; try again";return false;}
+        bool found=false;
         for(JsonObject group:updated["groups"].as<JsonArray>())if(group["id"]==id){group["mode"]=groupMode;found=true;}
         if(!found){error="Group not found; save the canvas first";return false;}
         const bool resumeRuntime=std::string(groupMode)=="playing"&&mode_!="playing";
@@ -494,13 +546,11 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         saved=persist(updated.as<JsonVariantConst>(),resumeRuntime?"playing":mode_,error);
         if(resumeRuntime) {
             applyMode("playing");
-            for(JsonObjectConst group:updated["groups"].as<JsonArrayConst>())if(group["id"]!=id)runtime_.controlGroup(group["id"]|"","stopped",millis());
+            for(JsonObjectConst group:updated["groups"].as<JsonArrayConst>())if(group["id"]!=id){runtime_.controlGroup(group["id"]|"","stopped",millis());stopOwnedOutputs(group["id"]|"");}
             polled_=false;
         }
         runtime_.controlGroup(id,groupMode,millis());
-        if(std::string(groupMode)=="stopped" && audioOwned_)for(JsonObjectConst group:runtime_.graph()["groups"].as<JsonArrayConst>())if(group["id"]==id)for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>())for(JsonObjectConst n:runtime_.nodes())if(n["id"]==member&&n["id"]==audioOwner_ ) {
-            JsonDocument args;args["action"]="stop";std::string message;actions_(n,args.as<JsonVariantConst>(),message);audioOwned_=false;
-        }
+        if(std::string(groupMode)=="stopped")stopOwnedOutputs(id);
     } else if(!command["graph"].isNull()) {
 #ifdef APP_LEGACY_OTA_FIT
         error="Legacy OTA compatibility runs the compiled graph. Recompile to edit, or migrate to the larger OTA layout for live graph editing.";return false;
@@ -512,7 +562,7 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         if(audioOwned_)for(JsonObjectConst n:runtime_.nodes())if(n["id"]==audioOwner_){JsonDocument stop;stop["action"]="stop";stop["all"]=true;std::string ignored;actions_(n,stop.as<JsonVariantConst>(),ignored);break;}
         audioOwned_=false;
         if(!releaseEditorCatalog(accepted)){error="Insufficient memory for Logics graph";return false;}
-        gpio_.reset();
+        stopOwnedOutputs();gpio_.reset();
         LedArrays::reset();
         if(!runtime_.begin(std::move(accepted),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
         mode_="stopped";applyMode(mode);polled_=false;
@@ -521,10 +571,13 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
     } else if(mode!=mode_) {
         if(recoveryConfirmationRequired_&&mode=="playing"&&quarantinedGroup_.empty()&&!(command["confirmUnsafeRestart"]|false)){error=(std::string("RECOVERY_CONFIRMATION_REQUIRED: ")+recoveryWarning_+" Confirm to retry Logics.").c_str();return false;}
         if(recoveryConfirmationRequired_&&mode=="playing"&&quarantinedGroup_.empty())clearRecoveryState();
+        runtime_.releaseEvaluationCache();
+        if(mode=="stopped")applyMode(mode);
         saved=persist(runtime_.graph(),mode,error);
         applyMode(mode);
     }
     response["mode"]=mode_;response["groups"].set(runtime_.graph()["groups"]);response["saved"]=saved;
     if(!saved){response["warning"]=String("Control applied for this session; reboot persistence failed. ")+error;error="";}
+    else requestGuard_.remember(command);
     return true;
 }

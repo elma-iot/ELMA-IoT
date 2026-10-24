@@ -4,10 +4,14 @@
 namespace BuiltinLedEffect {
 inline bool frameDue(uint32_t now,uint32_t previous){return int32_t(now-previous)>=20;}
 inline bool valid(const char* mode){return mode&&(!std::strcmp(mode,"solid")||!std::strcmp(mode,"blink")||!std::strcmp(mode,"breathe")||!std::strcmp(mode,"colorloop"));}
+inline uint32_t interval(unsigned speed,uint32_t slow,uint32_t fast){
+ speed=speed>1000?1000:speed;
+ return speed<=100?slow-(slow-fast)*speed/100:fast*100/speed;
+}
 inline uint32_t color(const char* mode,uint32_t elapsed,unsigned speed,unsigned brightness,unsigned red,unsigned green,unsigned blue){
- speed=speed>100?100:speed;brightness=brightness>100?100:brightness;
- const uint32_t period=12000-speed*100;unsigned gain=255;
- if(!std::strcmp(mode,"blink"))gain=(elapsed/(1000-speed*8))%2?0:255;
+ speed=speed>1000?1000:speed;brightness=brightness>100?100:brightness;
+ const uint32_t period=interval(speed,12000,2000);unsigned gain=255;
+ if(!std::strcmp(mode,"blink"))gain=(elapsed/interval(speed,1000,200))%2?0:255;
  else if(!std::strcmp(mode,"breathe")){unsigned p=(elapsed%period)*510/period,triangle=p<=255?p:510-p;gain=triangle*triangle/255;}
  else if(!std::strcmp(mode,"colorloop")){
   unsigned hue=(elapsed%period)*1536/period,sector=hue/256,x=hue%256;
