@@ -5,7 +5,7 @@ import {connectionTip,connectionPopup,RESET_TIP} from './logic-connection-tips.j
 import {updateHardware,gpioPins,applyLiveLedBinding} from './logic-hardware.js';
 import {LOGIC_CATALOG} from './logic-catalog.js';
 import {LOGIC_HELP,PERIPHERAL_HELP} from './logic-help.js';
-import {clone,id,createNode,connect,removeNodes,duplicate,compatible,recordingLink,specKey,problems,upgradeNodes} from './logic-graph-model.js';
+import {compactLogicRequest,clone,id,createNode,connect,removeNodes,duplicate,compatible,recordingLink,specKey,problems,upgradeNodes} from './logic-graph-model.js';
 import {groupSelection} from './logic-groups.js';
 import {createLogicCanvas} from './logic-canvas.js';
 import {helpIdForNode,openOnlineHelp} from './online-help.js';
@@ -58,7 +58,7 @@ export function createLogicsTab(options={}){
  async function request(payload,live=false){
   if(options.request)return options.request('/api/logics'+(live?'?live=1':''),payload);
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
-  try{const response=await fetch('/api/logics'+(live?'?live=1':''),{cache:'no-store',signal:controller.signal,...(payload?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}:{})});
+  try{const response=await fetch('/api/logics'+(live?'?live=1':''),{cache:'no-store',signal:controller.signal,...(payload?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(compactLogicRequest(payload))}:{})});
    const result=await response.json();if(!response.ok||result.error)throw Error(result.error||`Logics request failed (${response.status})`);return result;
   }finally{clearTimeout(timeout);}
  }

@@ -503,6 +503,7 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
 #ifdef APP_LEGACY_OTA_FIT
         error="Legacy OTA compatibility runs the compiled graph. Recompile to edit, or migrate to the larger OTA layout for live graph editing.";return false;
 #else
+        runtime_.releaseEvaluationCache();
         JsonDocument accepted;std::string message;
         if(!ElmaLogic::validateEditable(command["graph"],devices_.as<JsonArrayConst>(),accepted,message)){error=message.c_str();return false;}
         if(!persist(accepted.as<JsonVariantConst>(),mode,error))return false;

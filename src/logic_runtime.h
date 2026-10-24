@@ -21,6 +21,8 @@ public:
     void pause(uint32_t now);
     void resume(uint32_t now);
     void restart();
+    // Called under the device mutex before a graph edit; preserve scheduler/action state.
+    void releaseEvaluationCache() { cache_.clear(); }
     bool controlGroup(const char* id, const char* mode, uint32_t now);
     void observe(JsonVariantConst status);
     void setLedBinding(JsonObjectConst binding);

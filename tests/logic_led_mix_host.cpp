@@ -14,6 +14,7 @@ int main(){
   JsonDocument status;auto network=status["network"].to<JsonObject>();
   auto tick=[&](unsigned now,bool ap,bool sta,unsigned expected){network["apMode"]=ap;network["wifiConnected"]=sta;runtime.tick(now,status.as<JsonVariantConst>());assert(runtime.error().empty());assert(red==expected);};
   tick(0,true,true,base?255:250);const auto initial=calls;
+  runtime.releaseEvaluationCache(); // editing must preserve previous signatures and action state
   tick(20,true,true,base?255:250);assert(calls==initial); // no repeated action for unchanged values
   tick(40,false,true,150+base);
   tick(60,false,false,base);

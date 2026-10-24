@@ -47,3 +47,10 @@ export function problems(graph,specs){
 }
 
 export function upgradeNodes(graph,specs){for(const node of graph.nodes){const definition=specs.find(s=>specKey(s)===specKey(node));if(!definition)continue;if(node.type==='hardware.gpio'&&node.ports?.some(p=>p.id==='on'||p.id==='off')){const links=graph.connections.filter(e=>e.target.node===node.id&&['on','off','write'].includes(e.target.port));if(links.length<=1){if(links.length&&links[0].target.port!=='write'){node.parameters.state=links[0].target.port==='on';links[0].target.port='write';}node.ports=clone(definition.ports);}}if(['mainboard.plot','mainboard.save_data'].includes(node.type))for(const p of node.ports||[])if(p.id==='value'&&p.type==='number')p.type='measurement';const old=node.ports||[],next=definition.ports;const safe=old.every(p=>next.some(q=>['id','label','type','direction'].every(key=>p[key]===q[key])&&(!q.required||p.required)))&&next.filter(q=>!old.some(p=>p.id===q.id)).every(q=>!q.required);if(safe){node.ports=clone(next);node.parameters={...clone(definition.parameters),...node.parameters};}}}
+
+// Send executable graph data only; firmware rebuilds trusted ports and bindings.
+export function compactLogicRequest(payload){
+ if(!payload?.graph)return payload;
+ const {devices,...graph}=payload.graph;
+ return {...payload,graph:{...graph,nodes:(graph.nodes||[]).map(({ports,binding,...node})=>node)}};
+}
