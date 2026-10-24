@@ -85,9 +85,8 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
     auto fail=[&](const char* message){error=message;return false;};
     if(input["schemaVersion"]!=1 || !input["nodes"].is<JsonArrayConst>() || !input["connections"].is<JsonArrayConst>() || input["nodes"].size()>64 || input["connections"].size()>128 || measureJson(input)>32768)return fail("Invalid graph or graph exceeds 64 nodes / 128 links / 32 KiB");
     output.clear();output["schemaVersion"]=1;
-#ifndef APP_ESP8266_COMPACT
-    output["devices"].set(devices);
-#endif
+    // Device contracts belong to LogicDevice, not every executable graph.
+    // Duplicating the editor catalog here makes a live save exhaust ESP32 RAM.
     output["view"].set(input["view"]);
     if(input["view"]["labels"].size()>64)return fail("At most 64 canvas labels are supported");
     std::vector<std::string> labelIds;
@@ -109,7 +108,8 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         filter[type]["parameters"]=true;filter[type]["binding"]=true;
         for(const char* key:{"id","type","direction","required"})filter[type]["ports"][0][key]=true;
 #else
-        filter[type]=true;
+        filter[type]["parameters"]=true;filter[type]["binding"]=true;filter[type]["title"]=true;
+        for(const char* key:{"id","label","type","direction","required","enabled"})filter[type]["ports"][0][key]=true;
 #endif
         auto parseError=deserializeJson(definition,ELMA_LOGIC_CATALOG,DeserializationOption::Filter(filter));
         if(parseError){error=std::string("Cannot load node definition ")+type+": "+parseError.c_str();return false;}
@@ -139,7 +139,12 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         if(spec["peripheral"]["id"].is<const char*>())target["peripheral"]["id"].set(spec["peripheral"]["id"]);
 #else
         target["name"]=n["name"]|spec["title"]|type;
-        target["ports"].set(spec["ports"]);target["binding"].set(spec["binding"]);target["peripheral"].set(spec["peripheral"]);
+        auto runtimePorts=target["ports"].to<JsonArray>();
+        for(JsonObjectConst p:spec["ports"].as<JsonArrayConst>()) {
+            auto q=runtimePorts.add<JsonObject>();
+            for(const char* key:{"id","label","type","direction","required","enabled"})if(!p[key].isNull())q[key].set(p[key]);
+        }
+        target["binding"].set(spec["binding"]);target["peripheral"].set(spec["peripheral"]);
         auto position=target["position"].to<JsonObject>();
         for(const char* axis:{"x","y"}) {double v=n["position"][axis]|0.0;if(!std::isfinite(v)||std::abs(v)>50000)return fail("Invalid node position");position[axis]=v;}
 #endif

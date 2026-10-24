@@ -24,5 +24,11 @@ int main(){
  record["graph"]["threshold"]=60;record["mode"]="stopped";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60&&restored["mode"]=="stopped");
  sdMounted=false;record["graph"]["large"]=std::string(6500,'x');record["mode"]="paused";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));sdMounted=true;assert(loadLogicRecord(restored));assert(restored["mode"]=="paused");assert(restored["graph"]["large"].as<std::string>().size()==6500);
  sd.failRename=true;nvsWrite=false;record["graph"]["threshold"]=70;assert(!saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60);assert(!error.empty());
- std::cout<<"PASS: SD without LittleFS, NVS multi-page blob, latest revision restoration, failed-write previous graph retained\n";
+ // The device save path owns an already compact record: no second graph copy.
+ sdMounted=false;nvsWrite=true;JsonDocument compact,check;
+ compact["source"]=99;compact["mode"]="stopped";
+ compact["graph"]["nodes"].to<JsonArray>();compact["graph"]["connections"].to<JsonArray>();
+ assert(saveCompactLogicRecord(compact,error));assert(compact["revision"].as<unsigned>()>0);
+ assert(loadLogicRecord(check));assert(check["revision"]==compact["revision"]);
+ std::cout<<"PASS: SD without LittleFS, NVS multi-page blob, latest revision restoration, failed-write previous graph retained, in-place compact save\n";
 }

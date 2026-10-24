@@ -21,6 +21,8 @@
 
 namespace {
 bool releaseEditorCatalog(JsonDocument& graph) {
+    // Live validation already excludes the catalog; avoid another graph copy.
+    if(!graph.containsKey("devices"))return !graph.overflowed();
     graph.remove("devices");
     // ArduinoJson remove/shrinkToFit keeps freed slots in its pool. Copy the
     // small executable graph to return the catalog's pools to the system heap.
@@ -420,7 +422,7 @@ bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String&
     JsonDocument record;record["source"]=source_;record["mode"]=mode;
     ElmaLogic::copyPersistedGraph(graph,record["graph"].to<JsonObject>());
     if(record.overflowed()){error="Insufficient memory to save complete Logics graph; previous save retained";return false;}
-    return saveLogicRecord(record.as<JsonVariantConst>(),error);
+    return saveCompactLogicRecord(record,error);
 }
 void LogicDevice::applyMode(const std::string& mode) {
     if(mode=="stopped")gpio_.reset();

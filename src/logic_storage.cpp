@@ -32,14 +32,14 @@ void removeChunkBank(Preferences& prefs,char bank){
     prefs.remove(countKey);
     for(uint8_t i=0;i<count;++i){std::string key=chunkKey(bank,i);prefs.remove(key.c_str());}
 }
-bool writeChunkBank(Preferences& prefs,char bank,const std::string& data){
-    size_t count=(data.size()+kNvsLogicChunkBytes-1)/kNvsLogicChunkBytes;
+bool writeChunkBank(Preferences& prefs,char bank,const char* data,size_t length){
+    size_t count=(length+kNvsLogicChunkBytes-1)/kNvsLogicChunkBytes;
     if(!count||count>kNvsLogicMaxChunks)return false;
     removeChunkBank(prefs,bank);
     for(size_t i=0;i<count;++i){
-        size_t at=i*kNvsLogicChunkBytes,size=std::min(kNvsLogicChunkBytes,data.size()-at);
+        size_t at=i*kNvsLogicChunkBytes,size=std::min(kNvsLogicChunkBytes,length-at);
         std::string key=chunkKey(bank,uint8_t(i));
-        if(prefs.putBytes(key.c_str(),data.data()+at,size)!=size){removeChunkBank(prefs,bank);return false;}
+        if(prefs.putBytes(key.c_str(),data+at,size)!=size){removeChunkBank(prefs,bank);return false;}
     }
     char countKey[3]={bank,'c','\0'};
     return prefs.putUChar(countKey,uint8_t(count))==sizeof(uint8_t);
@@ -124,15 +124,24 @@ bool loadLogicRecord(JsonDocument& record) {
     }
     return found;
 }
-bool saveLogicRecord(JsonVariantConst record,String& error) {
-    // Release the old record before allocating its replacement.
-    {JsonDocument previous;loadLogicRecord(previous);}
-    JsonDocument updated;
-    for(JsonPairConst pair:record.as<JsonObjectConst>())if(strcmp(pair.key().c_str(),"graph"))updated[pair.key()].set(pair.value());
-    ElmaLogic::copyPersistedGraph(record["graph"],updated["graph"].to<JsonObject>());
+bool saveCompactLogicRecord(JsonDocument& updated,String& error) {
+    // Read only revisions. Loading the previous full graph here overlaps the
+    // HTTP body, validated graph, running graph and new persistent record.
+    for(auto target:{StorageTarget::Flash,StorageTarget::Sd}) {
+        if(!storageMounted(target))continue;
+        beginStorageRead(target);
+        for(const char* path:{"/.elma-logics.json","/.elma-logics.0.json","/.elma-logics.1.json"}) {
+            JsonDocument filter,revision;filter["revision"]=true;
+            File file=storageOpen(target,path);
+            if(file&&!deserializeJson(revision,file,DeserializationOption::Filter(filter)))latestRevision=std::max(latestRevision,revision["revision"]|0u);
+            if(file)file.close();
+        }
+        endStorageRead(target);
+    }
+    {Preferences prefs;if(prefs.begin("elma-logics",true)){latestRevision=std::max(latestRevision,prefs.getUInt("revision",0));prefs.end();}}
     uint32_t next=latestRevision+1;updated["revision"]=next;
     if(updated.overflowed()){error="Insufficient memory to save complete Logics graph; previous save retained";return false;}
-    record=updated.as<JsonVariantConst>();
+    JsonVariantConst record=updated.as<JsonVariantConst>();
     for(auto target:{StorageTarget::Flash,StorageTarget::Sd}) {
         auto fs=getStorageFs(target);
         if(!fs || !storageMounted(target))continue;
@@ -154,12 +163,13 @@ bool saveLogicRecord(JsonVariantConst record,String& error) {
     // MessagePack is substantially smaller than the editable JSON and NVS
     // already journals blob updates atomically. Keep the legacy JSON reader
     // above so graphs saved by older firmware migrate on their next save.
-    String packed;serializeMsgPack(record,packed);std::string data(packed.c_str(),packed.length());
+    String packed;const size_t expected=measureMsgPack(record);
+    if(serializeMsgPack(record,packed)!=expected || packed.length()!=expected){error="Insufficient memory to encode Logics; previous save retained";return false;}
     auto writeCompact=[&](){
         Preferences prefs;bool saved=prefs.begin("elma-logics",false);
         if(saved){
             uint8_t active=prefs.getUChar("bank",0)&1,next=active^1;char bank=next?'b':'a';
-            saved=writeChunkBank(prefs,bank,data);
+            saved=writeChunkBank(prefs,bank,packed.c_str(),packed.length());
             if(saved){saved=prefs.putUChar("bank",next)==sizeof(uint8_t);if(saved){removeChunkBank(prefs,active?'b':'a');prefs.remove("compact");prefs.remove("record");}}
             prefs.end();
         }
@@ -179,6 +189,13 @@ bool saveLogicRecord(JsonVariantConst record,String& error) {
     if(ok){rememberRevision(next);error="";return true;}
     error="Cannot persist Logics: insert a configured SD card or free internal storage";
     return false;
+}
+bool saveLogicRecord(JsonVariantConst record,String& error) {
+    JsonDocument updated;
+    for(JsonPairConst pair:record.as<JsonObjectConst>())if(strcmp(pair.key().c_str(),"graph"))updated[pair.key()].set(pair.value());
+    ElmaLogic::copyPersistedGraph(record["graph"],updated["graph"].to<JsonObject>());
+    if(updated.overflowed()){error="Insufficient memory to save complete Logics graph; previous save retained";return false;}
+    return saveCompactLogicRecord(updated,error);
 }
 bool clearLogicRecord() {
     bool ok=true;
