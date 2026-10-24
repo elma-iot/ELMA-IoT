@@ -1,0 +1,29 @@
+name: Verify and consolidate compiler SDK release
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'Canonical unpublished SDK release ID'
+        required: true
+        type: string
+      manifest_sha256:
+        description: 'Reviewed SHA-256 of compiler-packages.json'
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: compiler-sdk-${{ inputs.release_id }}
+  cancel-in-progress: false
+jobs:
+  consolidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify every SDK and publish the canonical draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SDK_RELEASE_ID: ${{ inputs.release_id }}
+          SDK_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        run: python scripts/consolidate_compiler_release.py
