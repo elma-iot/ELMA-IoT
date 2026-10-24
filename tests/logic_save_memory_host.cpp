@@ -21,8 +21,8 @@ public:
         void* q=std::realloc(p,n);if(q){blocks.erase(p);blocks[q]=n;used=used-old+n;peak=std::max(peak,used);}return q;
     }
 };
-int main(){
-    std::ifstream file("Firmware/tests/led_boolean_mix.graph.json");std::stringstream raw;raw<<file.rdbuf();
+int main(int argc,char** argv){
+    std::ifstream file(argc>1?argv[1]:"Firmware/tests/led_boolean_mix.graph.json");std::stringstream raw;raw<<file.rdbuf();
     JsonDocument input;assert(!deserializeJson(input,raw.str()));
     // Large editor-only metadata must not multiply during a save. Contracts
     // are rebuilt from trusted definitions, not supplied browser port data.

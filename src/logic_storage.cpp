@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdio>
 #include <algorithm>
+#include <cstdlib>
 #include "logic_storage_graph.h"
 
 namespace {
@@ -32,15 +33,34 @@ void removeChunkBank(Preferences& prefs,char bank){
     prefs.remove(countKey);
     for(uint8_t i=0;i<count;++i){std::string key=chunkKey(bank,i);prefs.remove(key.c_str());}
 }
-bool writeChunkBank(Preferences& prefs,char bank,const char* data,size_t length){
+uint32_t recordCrc(uint32_t crc,uint8_t value){crc^=value;for(int i=0;i<8;++i)crc=(crc>>1)^((crc&1)?0xedb88320u:0u);return crc;}
+struct RecordWriter {
+    File& file;uint32_t crc=0xffffffffu;
+    size_t write(uint8_t value){size_t n=file.write(value);if(n)crc=recordCrc(crc,value);return n;}
+    size_t write(const uint8_t* data,size_t length){size_t n=file.write(data,length);for(size_t i=0;i<n;++i)crc=recordCrc(crc,data[i]);return n;}
+};
+bool verifyRecord(StorageTarget target,const char* path,size_t expected,uint32_t crc){
+    File file=storageOpen(target,path);if(!file)return false;
+    size_t count=0;uint32_t actual=0xffffffffu;int value;
+    while((value=file.read())>=0){actual=recordCrc(actual,uint8_t(value));++count;}
+    file.close();return count==expected&&actual==crc;
+}
+bool writeChunkBank(Preferences& prefs,char bank,JsonVariantConst record){
+    const size_t length=measureMsgPack(record);
     size_t count=(length+kNvsLogicChunkBytes-1)/kNvsLogicChunkBytes;
     if(!count||count>kNvsLogicMaxChunks)return false;
+    auto* buffer=static_cast<uint8_t*>(std::malloc(kNvsLogicChunkBytes));
+    if(!buffer)return false;
+    struct Release{void* p;~Release(){std::free(p);}} release{buffer};
     removeChunkBank(prefs,bank);
-    for(size_t i=0;i<count;++i){
-        size_t at=i*kNvsLogicChunkBytes,size=std::min(kNvsLogicChunkBytes,length-at);
-        std::string key=chunkKey(bank,uint8_t(i));
-        if(prefs.putBytes(key.c_str(),data+at,size)!=size){removeChunkBank(prefs,bank);return false;}
-    }
+    struct ChunkWriter {
+        Preferences& prefs;char bank;uint8_t* buffer;size_t used=0,index=0;bool ok=true;
+        bool flush(){if(!used)return ok;auto key=chunkKey(bank,uint8_t(index));ok=ok&&prefs.putBytes(key.c_str(),buffer,used)==used;if(ok){++index;used=0;}return ok;}
+        size_t write(uint8_t value){if(!ok)return 0;buffer[used++]=value;return used<kNvsLogicChunkBytes||flush()?1:0;}
+        size_t write(const uint8_t* data,size_t size){size_t n=0;while(n<size&&write(data[n]))++n;return n;}
+    } writer{prefs,bank,buffer};
+    const size_t written=serializeMsgPack(record,writer);
+    if(written!=length||!writer.flush()||writer.index!=count){removeChunkBank(prefs,bank);return false;}
     char countKey[3]={bank,'c','\0'};
     return prefs.putUChar(countKey,uint8_t(count))==sizeof(uint8_t);
 }
@@ -152,9 +172,10 @@ bool saveCompactLogicRecord(JsonDocument& updated,String& error) {
         File file=storageOpen(target,path,"w");
         bool ok=false;
         if(file) {
-            size_t expected=measureJson(record),written=serializeJson(record,file);
+            RecordWriter writer{file};
+            size_t expected=measureJson(record),written=serializeJson(record,writer);
             file.flush();file.close();
-            if(written==expected){JsonDocument check;File verify=storageOpen(target,path);ok=verify&&!deserializeJson(check,verify)&&check["revision"]==next;if(verify)verify.close();}
+            if(written==expected)ok=verifyRecord(target,path,expected,writer.crc);
         }
         if(!ok)fs->remove(path);
         endStorageWrite(target);
@@ -163,13 +184,11 @@ bool saveCompactLogicRecord(JsonDocument& updated,String& error) {
     // MessagePack is substantially smaller than the editable JSON and NVS
     // already journals blob updates atomically. Keep the legacy JSON reader
     // above so graphs saved by older firmware migrate on their next save.
-    String packed;const size_t expected=measureMsgPack(record);
-    if(serializeMsgPack(record,packed)!=expected || packed.length()!=expected){error="Insufficient memory to encode Logics; previous save retained";return false;}
     auto writeCompact=[&](){
         Preferences prefs;bool saved=prefs.begin("elma-logics",false);
         if(saved){
             uint8_t active=prefs.getUChar("bank",0)&1,next=active^1;char bank=next?'b':'a';
-            saved=writeChunkBank(prefs,bank,packed.c_str(),packed.length());
+            saved=writeChunkBank(prefs,bank,record);
             if(saved){saved=prefs.putUChar("bank",next)==sizeof(uint8_t);if(saved){removeChunkBank(prefs,active?'b':'a');prefs.remove("compact");prefs.remove("record");}}
             prefs.end();
         }

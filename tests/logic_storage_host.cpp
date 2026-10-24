@@ -8,8 +8,8 @@
 using String=std::string;
 enum class StorageTarget{Flash,Sd};
 namespace fs {struct FS{std::map<std::string,std::string> files;bool failRename=false;bool rename(const char* a,const char* b){if(failRename||files.count(b))return false;files[b]=files[a];files.erase(a);return true;}void remove(const char* path){files.erase(path);}};}
-fs::FS flash,sd;bool flashMounted=false,sdMounted=false,nvsWrite=true;
-struct File{std::string* data=nullptr;size_t at=0;explicit operator bool()const{return data;}size_t write(uint8_t byte){data->push_back(char(byte));return 1;}size_t write(const uint8_t* bytes,size_t count){data->append(reinterpret_cast<const char*>(bytes),count);return count;}int read(){return data&&at<data->size()?uint8_t((*data)[at++]):-1;}size_t readBytes(char* out,size_t count){size_t n=0;while(n<count){int c=read();if(c<0)break;out[n++]=char(c);}return n;}void flush(){}void close(){}};
+fs::FS flash,sd;bool flashMounted=false,sdMounted=false,nvsWrite=true,corruptWrites=false;
+struct File{std::string* data=nullptr;size_t at=0;explicit operator bool()const{return data;}size_t write(uint8_t byte){data->push_back(char(byte^(corruptWrites?1:0)));return 1;}size_t write(const uint8_t* bytes,size_t count){data->append(reinterpret_cast<const char*>(bytes),count);if(corruptWrites&&count)(*data)[data->size()-1]^=1;return count;}int read(){return data&&at<data->size()?uint8_t((*data)[at++]):-1;}size_t readBytes(char* out,size_t count){size_t n=0;while(n<count){int c=read();if(c<0)break;out[n++]=char(c);}return n;}void flush(){}void close(){}};
 bool storageMounted(StorageTarget target){return target==StorageTarget::Flash?flashMounted:sdMounted;}
 fs::FS* getStorageFs(StorageTarget target){return storageMounted(target)?target==StorageTarget::Flash?&flash:&sd:nullptr;}
 File storageOpen(StorageTarget target,const char* path,const char* mode="r"){auto fs=getStorageFs(target);if(!fs||(*mode=='w'&&fs->failRename))return {};if(*mode=='w')fs->files[path].clear();auto item=fs->files.find(path);return item==fs->files.end()?File{}:File{&item->second};}
@@ -24,6 +24,9 @@ int main(){
  record["graph"]["threshold"]=60;record["mode"]="stopped";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60&&restored["mode"]=="stopped");
  sdMounted=false;record["graph"]["large"]=std::string(6500,'x');record["mode"]="paused";assert(saveLogicRecord(record.as<JsonVariantConst>(),error));sdMounted=true;assert(loadLogicRecord(restored));assert(restored["mode"]=="paused");assert(restored["graph"]["large"].as<std::string>().size()==6500);
  sd.failRename=true;nvsWrite=false;record["graph"]["threshold"]=70;assert(!saveLogicRecord(record.as<JsonVariantConst>(),error));assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60);assert(!error.empty());
+ sd.failRename=false;sdMounted=true;nvsWrite=false;corruptWrites=true;
+ assert(!saveLogicRecord(record.as<JsonVariantConst>(),error));corruptWrites=false;
+ assert(loadLogicRecord(restored));assert(restored["graph"]["threshold"]==60); // CRC rejects corrupt bytes, preserving the active slot.
  // The device save path owns an already compact record: no second graph copy.
  sdMounted=false;nvsWrite=true;JsonDocument compact,check;
  compact["source"]=99;compact["mode"]="stopped";

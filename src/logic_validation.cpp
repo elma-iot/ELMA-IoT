@@ -141,6 +141,15 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
         target["name"]=n["name"]|spec["title"]|type;
         auto runtimePorts=target["ports"].to<JsonArray>();
         for(JsonObjectConst p:spec["ports"].as<JsonArrayConst>()) {
+#if APP_SUNTON_PANEL == 3
+            // Unwired optional inputs read their parameter directly. Keep the
+            // runtime contract only for wired/required inputs and live outputs;
+            // the editor restores the full palette contract from its catalog.
+            bool connected=false;
+            for(JsonObjectConst edge:input["connections"].as<JsonArrayConst>())
+                if(edge["target"]["node"]==id&&edge["target"]["port"]==p["id"])connected=true;
+            if(p["direction"]=="input"&&p["required"]!=true&&!connected)continue;
+#endif
             auto q=runtimePorts.add<JsonObject>();
             for(const char* key:{"id","label","type","direction","required","enabled"})if(!p[key].isNull())q[key].set(p[key]);
         }
