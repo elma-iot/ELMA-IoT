@@ -9,7 +9,8 @@
   ],
   "build": {
     "flags": [
-      "-DTF_LITE_DISABLE_X86_NEON"
+      "-DTF_LITE_DISABLE_X86_NEON",
+      "-fno-exceptions"
     ],
     "libArchive": true,
     "srcFilter": [

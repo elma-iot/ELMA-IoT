@@ -255,8 +255,8 @@ class AudioPlayer::Impl {
         publish();
     }
 
-#if APP_SUNTON_PANEL == 3
     bool usesInternalDac()const{return bclkPin==255 && wsPin==254;}
+#if APP_SUNTON_PANEL == 3
     void setDacGainPercent(uint8_t percent) {
         dacGainPercent=min(uint8_t(100),percent);
         hardwareAudioVolume=dacGainPercent?DefaultConfig::AUDIO_MAX_HARDWARE_VOLUME:0;
