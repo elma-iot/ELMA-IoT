@@ -14,6 +14,7 @@ public:
     bool begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const DeviceSettings& device);
     void configureStatusLed(const DeviceSettings& device);
     void configureLedArrays(const String& helpers);
+    bool configurePeripheralPins(const SettingsBundle& settings);
     void loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs = 100);
     void shuttingDown();
     bool request(JsonVariantConst command, JsonDocument& response, String& error);

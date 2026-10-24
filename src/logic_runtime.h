@@ -27,6 +27,7 @@ public:
     void observe(JsonVariantConst status);
     void setLedBinding(JsonObjectConst binding);
     void setPeripheralBinding(const char* id,JsonObjectConst binding);
+    void setPeripheralPins(const char* id,JsonObjectConst pins);
     void telemetry(JsonObject target) const;
     bool testAction(const char* nodeId, const char* command, std::string& error);
     uint32_t recordingPollInterval(uint32_t normal) const;

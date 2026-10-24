@@ -4,6 +4,7 @@
 #include <string>
 namespace PortablePeripherals {
 static bool outputKnown[64]{},outputOn[64]{};
+static uint16_t outputDuty[64]{};
 inline bool state(int pin){return pin>=0&&pin<64&&outputKnown[pin]?outputOn[pin]:digitalRead(pin)!=LOW;}
 inline int pin(JsonObjectConst n){for(JsonPairConst p:n["binding"]["pins"].as<JsonObjectConst>())if(p.value().is<int>()&&p.value().as<int>()>=0)return p.value().as<int>();return -1;}
 inline bool output(JsonObjectConst n){const char* p=n["peripheral"]["profile"]|"";for(const char* allowed:{"relay-module","mosfet-switch","solenoid-valve-driver","pump-driver","vibration-motor","led-pwm-dimmer","pwm-fan"})if(!strcmp(p,allowed))return true;return false;}
@@ -15,7 +16,7 @@ inline bool action(JsonObjectConst n,JsonVariantConst args,std::string& error){i
 #else
  analogWriteResolution(10);
 #endif
- analogWrite(p,int(v*1023/100));}outputKnown[p]=true;outputOn[p]=v>0;return true;}
+ analogWrite(p,int(v*1023/100));}outputKnown[p]=true;outputOn[p]=v>0;outputDuty[p]=uint16_t(v*1023/100);return true;}
 inline void sample(JsonObjectConst n,JsonObject root){if(n["binding"]["kind"]!="peripheral")return;const char* id=n["peripheral"]["id"]|"";auto target=root["peripherals"][id];String profile=n["peripheral"]["profile"]|"";int p=pin(n);if(p<0)return;
  if(n["binding"]["group"]=="input"){
   if(profile.indexOf("analog")>=0){auto pins=n["binding"]["pins"];int x=pins["VRX"]|pins["OUT"]|p,y=pins["VRY"]|-1,sw=pins["SW"]|-1;target["value"]=analogRead(x);target["x"].set(target["value"]);if(y>=0)target["y"]=analogRead(y);if(sw>=0){pinMode(sw,INPUT_PULLUP);target["pressed"]=digitalRead(sw)==LOW;}}

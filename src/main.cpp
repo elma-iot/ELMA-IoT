@@ -2954,7 +2954,12 @@ bool initializeRuntimeObjects() {
            mqttManager != nullptr && webServer != nullptr && soundEffects != nullptr && deferredActions != nullptr;
 }
 
-void applyRuntimeSettings() {
+bool applyRuntimeSettings() {
+    if(!logicDevice.configurePeripheralPins(*settings)) {
+        deferredActions->pendingSettings=*settings;
+        deferredActions->settingsApplyPending=true;
+        return false;
+    }
     applyStorageSettings(*settings);
     initializeButtons();
     motorController.applySettings(*settings);
@@ -3014,6 +3019,7 @@ void applyRuntimeSettings() {
     // Repaint the current status immediately on the newly selected LED pin so
     // the pin change is visible right after Save Device Settings.
     updateStatusLedForNetwork(wifiManager->isConnected(), wifiManager->isApMode());
+    return true;
 }
 
 void preserveLearnedMotorStates(SettingsBundle& target, const SettingsBundle& source) {
@@ -4503,20 +4509,23 @@ void setup() {
 
 namespace {
 void flushPendingSettingsNow() {
+    static uint32_t retryAt=0;
+    if(retryAt&&int32_t(millis()-retryAt)<0)return;
     SettingsApplyGuard guard(0);
     if(!guard)return;
     if (deferredActions == nullptr || !deferredActions->settingsApplyPending) {
         return;
     }
-    settingsManager->save(deferredActions->pendingSettings);
     *settings = deferredActions->pendingSettings; // Already validated; avoid nested defaults/load on loopTask.
     if (deferredActions->settingsApplyDisplayOnly) {
         displayManager->applySettings(settings->oled);
     } else if (deferredActions->settingsApplyWifiPowerOnly) {
         wifiManager->applySettings(*settings);
     } else {
-        applyRuntimeSettings();
+        if(!applyRuntimeSettings()){retryAt=millis()+100;return;}
     }
+    retryAt=0;
+    settingsManager->save(deferredActions->pendingSettings);
     deferredActions->settingsApplyPending = false;
     deferredActions->settingsApplyWifiPowerOnly = false;
     deferredActions->settingsApplyDisplayOnly = false;

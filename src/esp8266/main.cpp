@@ -16,6 +16,7 @@
 #include <AsyncJson.h>
 #include <ArduinoJson.h>
 #include "../portable_peripherals.h"
+#include "../peripheral_pin_binding.h"
 #if defined(CONFIG_IDF_TARGET_ESP32C2)
 #include <esp_cpu.h>
 #include <soc/gpio_reg.h>
@@ -170,6 +171,26 @@ void stopOwnedOutputs(const char* group=nullptr){
   outputOwners[slot]=0;break;
  }}
 }
+void rebindPeripheralPins(JsonArrayConst definitions){
+ struct Output {const char* id;uint16_t duty;};std::vector<Output> outputs;unsigned index=0;
+ for(JsonObjectConst node:runtime.nodes()){
+  ++index;bool changed=false;
+  for(JsonObjectConst d:definitions)if(d["binding"]["kind"]=="peripheral"&&!LedArrays::matches(d)&&d["peripheral"]["id"]==node["peripheral"]["id"]&&node["binding"]["pins"]!=d["binding"]["pins"])changed=true;
+  if(!changed)continue;int slot=outputSlot(node);
+  if(slot>=0&&slot<64&&outputOwners[slot]==index){
+   outputs.push_back({node["id"]|"",PortablePeripherals::output(node)?PortablePeripherals::outputDuty[slot]:uint16_t(digitalRead(slot)?1023:0)});
+   if(PortablePeripherals::output(node)){JsonDocument args;args["action"]="off";std::string ignored;PortablePeripherals::action(node,args.as<JsonVariantConst>(),ignored);}
+   else analogWrite(slot,0);
+   pinMode(slot,INPUT);outputOwners[slot]=0;
+  }
+ }
+ for(JsonObjectConst d:definitions)if(d["binding"]["kind"]=="peripheral"&&!LedArrays::matches(d))runtime.setPeripheralPins(d["peripheral"]["id"]|"",d["binding"]["pins"].as<JsonObjectConst>());
+ for(const auto& output:outputs)for(JsonObjectConst n:runtime.nodes())if(n["id"]==output.id&&mode=="playing"&&runtime.nodeRunning(output.id)){
+  JsonDocument args;args["action"]="set";std::string ignored;
+  args["value"]=n["peripheral"]["profile"]=="relay-module"?(output.duty?1.:0.):output.duty*100./1023.;
+  if(PortablePeripherals::action(n,args.as<JsonVariantConst>(),ignored))rememberOutput(n);
+ }
+}
 void telemetryStatus(){
  static uint32_t previous=millis();static uint64_t elapsed=0;
  uint32_t now=millis();elapsed+=uint32_t(now-previous);previous=now;
@@ -236,10 +257,11 @@ bool devices(JsonDocument& d,JsonVariantConst graph={}){
   for(JsonObjectConst n:graph["nodes"].as<JsonArrayConst>())if(n["type"]=="hardware.gpio")filter[0]["binding"]["allowedPins"][String(n["parameters"]["pin"]|-1)]=true;
   if(deserializeJson(d,FPSTR(ELMA_8266_DEVICES),DeserializationOption::Filter(filter)))return false;
  }
-// Rebind configured arrays from saved settings; never accept graph-supplied pins.
+// Resolve every peripheral from saved configuration, never graph-supplied pins.
 JsonDocument helpers;
 if(config["ui"]["peripheralHelperBindings"].is<const char*>())deserializeJson(helpers,config["ui"]["peripheralHelperBindings"].as<const char*>());
 else helpers.set(config["ui"]["peripheralHelperBindings"]);
+for(JsonObject definition:d.as<JsonArray>())if(!LedArrays::matches(definition))PeripheralPins::apply(definition,helpers.as<JsonObjectConst>(),config.as<JsonObjectConst>());
 for(JsonObject definition:d.as<JsonArray>())if(LedArrays::matches(definition)){
  String key="control:"+String(definition["binding"]["index"]|0);std::string why;
  if(!LedArrays::updateBinding(definition["binding"],helpers[key],why))return false;
@@ -354,9 +376,10 @@ bool applyConfiguration(JsonVariantConst v,String& error,const char* stagedGraph
   if(incomingOwner)incomingOwner->clear();
   JsonDocument helpers,bindings,filter;
   if(deserializeJson(helpers,next["ui"]["peripheralHelperBindings"].as<const char*>())){error="Invalid peripheral options";return false;}
-  filter[0]["type"]=true;filter[0]["peripheral"]["id"]=true;
+  filter[0]["type"]=true;filter[0]["peripheral"]["id"]=true;filter[0]["peripheral"]["profile"]=true;
   for(const char* key:{"kind","group","pins","count","index","layout","rows","columns","serpentine","maxCount","defaults"})filter[0]["binding"][key]=true;
   if(deserializeJson(bindings,FPSTR(ELMA_8266_DEVICES),DeserializationOption::Filter(filter))){error="Cannot validate array configuration";return false;}filter.clear();
+  for(JsonObject n:bindings.as<JsonArray>())if(!LedArrays::matches(n))PeripheralPins::apply(n,helpers.as<JsonObjectConst>(),next.as<JsonObjectConst>());
   for(JsonObject n:bindings.as<JsonArray>())if(LedArrays::matches(n)){
    String key="control:"+String(n["binding"]["index"]|0);std::string why;
    if(!LedArrays::updateBinding(n["binding"],helpers[key],why)){error=why.c_str();return false;}
@@ -378,6 +401,7 @@ bool applyConfiguration(JsonVariantConst v,String& error,const char* stagedGraph
   if(!saveJsonFile("/settings.array.tmp",next)){error="Cannot save array settings";return false;}
   if(!LittleFS.rename("/settings.array.tmp","/settings.json")){error="Cannot commit array settings";return false;}
   config=std::move(next);LedArrays::reset();
+  rebindPeripheralPins(bindings.as<JsonArrayConst>());
   for(JsonObjectConst n:bindings.as<JsonArrayConst>())if(LedArrays::matches(n))runtime.setPeripheralBinding(n["peripheral"]["id"]|"",n["binding"]);
   applyArrayDefaultsPending=true;return true;
  }

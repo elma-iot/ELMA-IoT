@@ -8,6 +8,10 @@
 #include <cctype>
 
 namespace ElmaLogic {
+void Runtime::setPeripheralPins(const char* id,JsonObjectConst pins){
+ for(const char* collection:{"devices","nodes"})for(JsonObject item:graph_[collection].as<JsonArray>())if(item["peripheral"]["id"]==id)
+  for(JsonPairConst pin:pins)if(item["binding"]["pins"].containsKey(pin.key().c_str()))item["binding"]["pins"][pin.key().c_str()].set(pin.value());
+}
 void Runtime::setPeripheralBinding(const char* id,JsonObjectConst binding){
  for(const char* collection:{"devices","nodes"})for(JsonObject item:graph_[collection].as<JsonArray>())if(item["peripheral"]["id"]==id)item["binding"].set(binding);
 }

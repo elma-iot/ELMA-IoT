@@ -4,6 +4,7 @@
 #include "logic_device.h"
 #include "led_array.h"
 #include "portable_peripherals.h"
+#include "peripheral_pin_binding.h"
 #include "system_metrics.h"
 #include "device_log.h"
 #include "storage_backend.h"
@@ -188,6 +189,56 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
     bool groupStopped=false;
     if(!quarantinedGroup_.empty())for(JsonObject group:graph["groups"].as<JsonArray>())if(group["id"]==quarantinedGroup_){group["mode"]="stopped";groupStopped=true;break;}
     if(!groupStopped){quarantinedGroup_.clear();mode_="stopped";graph["mode"]="stopped";}
+}
+
+bool LogicDevice::configurePeripheralPins(const SettingsBundle& settings){
+ if(!mutex_)return true;
+ if(xSemaphoreTake(mutex_,0)!=pdTRUE)return false;
+ JsonDocument helpers,primary,profiles,filter;
+ bool ok=!deserializeJson(helpers,settings.ui.peripheralHelperBindings);
+ filter["sensors"]=true;
+ ok=ok&&!deserializeJson(profiles,settings.ui.peripheralProfileSelections,DeserializationOption::Filter(filter));
+ int first=-1,index=0;for(JsonVariantConst p:profiles["sensors"].as<JsonArrayConst>()){
+  if(String(p|"").indexOf("voltage-divider")>=0){first=index;break;}++index;
+ }
+ primary["_firstDivider"]=first;primary["battery"]["adcPin"]=settings.battery.adcPin;
+ primary["audio"]["wsPin"]=settings.audio.wsPin;primary["audio"]["bclkPin"]=settings.audio.bclkPin;primary["audio"]["doutPin"]=settings.audio.doutPin;
+ primary["oled"]["sdaPin"]=settings.oled.sdaPin;primary["oled"]["sclPin"]=settings.oled.sclPin;primary["oled"]["resetPin"]=settings.oled.resetPin;
+ primary["sd"]["csPin"]=settings.sd.csPin;primary["sd"]["sckPin"]=settings.sd.sckPin;primary["sd"]["mosiPin"]=settings.sd.mosiPin;primary["sd"]["misoPin"]=settings.sd.misoPin;
+ ok=ok&&!helpers.overflowed()&&!primary.overflowed()&&!profiles.overflowed();
+ if(!ok){reportedError_="Peripheral GPIO settings could not be read; retrying";xSemaphoreGive(mutex_);return false;}
+ for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(!LedArrays::matches(n)&&PeripheralPins::changed(n,helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>()))
+  for(JsonPairConst p:n["binding"]["pins"].as<JsonObjectConst>()){
+   int next=PeripheralPins::resolve(n,p.key().c_str(),helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>());
+   if(next>=0&&(!GPIO_IS_VALID_GPIO(next)||(PortablePeripherals::output(n)&&!GPIO_IS_VALID_OUTPUT_GPIO(next)))){reportedError_="Peripheral GPIO is unavailable on this chip";xSemaphoreGive(mutex_);return false;}
+  }
+ struct Output {const char* id;uint16_t duty;};std::vector<Output> outputs;
+ for(JsonObjectConst old:runtime_.nodes())if(!LedArrays::matches(old)&&PeripheralPins::changed(old,helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>())){
+   auto owner=outputOwners_.find(outputKey(old));
+   if(owner!=outputOwners_.end()&&owner->second==(old["id"]|"")){
+    int gpio=pin(old);if(gpio<0||gpio>=64){outputOwners_.erase(owner);continue;}
+    uint16_t duty=PortablePeripherals::output(old)?PortablePeripherals::outputDuty[gpio]:(digitalRead(gpio)?1023:0);
+    outputs.push_back({old["id"]|"",duty});
+    JsonDocument args;args["action"]="off";std::string ignored;
+    if(PortablePeripherals::output(old))PortablePeripherals::action(old,args.as<JsonVariantConst>(),ignored);
+    if(GPIO_IS_VALID_OUTPUT_GPIO(gpio)){digitalWrite(gpio,LOW);pinMode(gpio,INPUT);}
+    outputOwners_.erase(owner);
+   }
+ }
+ for(JsonObject n:devices_.as<JsonArray>())if(!LedArrays::matches(n)&&PeripheralPins::changed(n,helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>())){
+  const char* id=n["peripheral"]["id"]|"";
+  PeripheralPins::apply(n,helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>());
+  runtime_.setPeripheralPins(id,n["binding"]["pins"].as<JsonObjectConst>());
+ }
+ for(const auto& output:outputs)for(JsonObjectConst n:runtime_.nodes())if(n["id"]==output.id&&mode_=="playing"&&runtime_.nodeRunning(output.id)){
+  int gpio=pin(n);if(gpio<0)continue;
+  JsonDocument args;args["action"]="set";std::string ignored;
+  if(PortablePeripherals::output(n)){args["value"]=n["peripheral"]["profile"]=="relay-module"?(output.duty?1.:0.):output.duty*100./1023.;PortablePeripherals::action(n,args.as<JsonVariantConst>(),ignored);}
+  else {pinMode(gpio,OUTPUT);digitalWrite(gpio,output.duty?HIGH:LOW);}
+  rememberOutput(n,args.as<JsonVariantConst>());
+ }
+ if(reportedError_.rfind("Peripheral GPIO",0)==0)reportedError_.clear();
+ xSemaphoreGive(mutex_);return true;
 }
 
 // Called from the main loop so array allocation/refresh never runs in TCP callbacks.
