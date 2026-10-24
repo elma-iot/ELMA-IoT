@@ -12,6 +12,7 @@
 #include "can_service.h"
 #include "logic_catalog.h"
 #include "logic_storage.h"
+#include "logic_storage_graph.h"
 #include "logic_recovery_policy.h"
 #include <Preferences.h>
 #include <esp_attr.h>
@@ -416,7 +417,9 @@ void LogicDevice::shuttingDown() {
 }
 
 bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String& error) {
-    JsonDocument record;record["source"]=source_;record["mode"]=mode;record["graph"].set(graph);
+    JsonDocument record;record["source"]=source_;record["mode"]=mode;
+    ElmaLogic::copyPersistedGraph(graph,record["graph"].to<JsonObject>());
+    if(record.overflowed()){error="Insufficient memory to save complete Logics graph; previous save retained";return false;}
     return saveLogicRecord(record.as<JsonVariantConst>(),error);
 }
 void LogicDevice::applyMode(const std::string& mode) {

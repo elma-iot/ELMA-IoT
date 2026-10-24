@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdio>
 #include <algorithm>
+#include "logic_storage_graph.h"
 
 namespace {
 constexpr size_t kNvsLogicChunkBytes=1000;
@@ -124,12 +125,13 @@ bool loadLogicRecord(JsonDocument& record) {
     return found;
 }
 bool saveLogicRecord(JsonVariantConst record,String& error) {
-    JsonDocument previous,updated;loadLogicRecord(previous);updated.set(record);uint32_t next=latestRevision+1;updated["revision"]=next;
-    // Contracts and bindings are rebuilt from trusted firmware definitions on restore.
-    updated["graph"].remove("devices");
-    for(JsonObject node:updated["graph"]["nodes"].as<JsonArray>()) {
-        node.remove("ports");node.remove("binding");
-    }
+    // Release the old record before allocating its replacement.
+    {JsonDocument previous;loadLogicRecord(previous);}
+    JsonDocument updated;
+    for(JsonPairConst pair:record.as<JsonObjectConst>())if(strcmp(pair.key().c_str(),"graph"))updated[pair.key()].set(pair.value());
+    ElmaLogic::copyPersistedGraph(record["graph"],updated["graph"].to<JsonObject>());
+    uint32_t next=latestRevision+1;updated["revision"]=next;
+    if(updated.overflowed()){error="Insufficient memory to save complete Logics graph; previous save retained";return false;}
     record=updated.as<JsonVariantConst>();
     for(auto target:{StorageTarget::Flash,StorageTarget::Sd}) {
         auto fs=getStorageFs(target);
@@ -171,7 +173,7 @@ bool saveLogicRecord(JsonVariantConst record,String& error) {
         Preferences logs;
         if(logs.begin("rebootlog",false)){uint8_t active=logs.getUChar("active",0)&1;logs.remove(active?"boot0":"boot1");logs.end();}
         Preferences stale;
-        if(stale.begin("elma-logics",false)){stale.remove("compact");stale.remove("record");removeChunkBank(stale,stale.getUChar("bank",0)&1?'b':'a');stale.end();}
+        if(stale.begin("elma-logics",false)){stale.remove("compact");stale.remove("record");removeChunkBank(stale,stale.getUChar("bank",0)&1?'a':'b');stale.end();}
         ok=writeCompact();
     }
     if(ok){rememberRevision(next);error="";return true;}
