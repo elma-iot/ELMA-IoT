@@ -1,4 +1,5 @@
 #include "logic_runtime.h"
+#include "builtin_led_effect.h"
 #include "logic_text.h"
 #include "logic_sleep_contract.h"
 #include <algorithm>
@@ -132,7 +133,29 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
     }
     else if(type.compare(0,7,"bridge.")==0)result.set(input(n,"value"));
     else if(type=="recording.interval")result.set(input(n,"value"));
-    else if(type=="value.led_effect")result.set(input(n,port));
+    else if(type=="value.led_brightness"||type=="value.led_effect"||type=="value.led_color") {
+        auto enabled=input(n,"enabled");
+        // Older compiled projects predate the optional gate. A missing linked
+        // value is unavailable, not a reason to fall back to the inline value.
+        if(enabled.isNull()&&linked(n,"enabled")){--depth_;return {};}
+        const bool on=enabled.isNull()||enabled.as<bool>();
+        if(type=="value.led_brightness")result.set(on?input(n,"value").as<double>():0.0);
+        else if(type=="value.led_effect") {
+            if(std::strcmp(port,"effect")==0)result.set(on?input(n,"effect").as<const char*>():"solid");
+            else result.set(on?input(n,"speed").as<double>():0.0);
+        } else {
+            auto level=[&](const char* key,unsigned maximum){auto v=input(n,key);double d=v.as<double>();return !v.isNull()&&std::isfinite(d)?unsigned(std::max(0.0,std::min(double(maximum),d))):0u;};
+            auto effect=input(n,"effect");const char* mode=effect|"solid";
+            const uint32_t rgb=on?BuiltinLedEffect::color(BuiltinLedEffect::valid(mode)?mode:"solid",now_,level("speed",100),level("brightness",100),level("red",255),level("green",255),level("blue",255)):0;
+            result.set(unsigned(rgb>>(std::strcmp(port,"red")==0?16:std::strcmp(port,"green")==0?8:0))&255u);
+        }
+    }
+    else if(type=="value.rgb_mixer") {
+        const std::string axis=port;const char* base=axis=="red"?"baseRed":axis=="green"?"baseGreen":"baseBlue";
+        double sum=0;bool valid=true;
+        for(const std::string key:{axis+"A",axis+"B",std::string(base)}){auto v=input(n,key.c_str());double d=v.as<double>();if(v.isNull()||!std::isfinite(d)){valid=false;break;}sum+=d;}
+        if(valid)result.set(unsigned(std::max(0.0,std::min(255.0,sum))));
+    }
     else if (type.compare(0, 6, "value.") == 0) result.set(input(n, "value"));
     else if (type.compare(0, 10, "mainboard.") == 0) {
         auto binding = node(n)["binding"];
@@ -380,6 +403,25 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
             state.recordingAt=now;state.recordingStarted=true;
         }
         if(!allowed(n))continue;
+        if((type=="value.led_color"||type=="value.rgb_mixer"||type=="value.led_brightness"||type=="value.led_effect") &&
+           (!state.enabled||int32_t(now-state.due)>=0)) {
+            state.enabled=true;state.due=now+20;JsonDocument current;
+            if(type=="value.led_brightness")current.set(value(n,"value"));
+            else if(type=="value.led_effect"){
+                auto effect=value(n,"effect"),speed=value(n,"speed");
+                if(!effect.isNull()&&!speed.isNull()){
+                    unsigned mode=0;for(const char* name:{"solid","blink","breathe","colorloop"}){if(effect==name)break;++mode;}
+                    current.set((mode<<8)|unsigned(std::max(0.0,std::min(100.0,speed.as<double>()))));
+                }
+            } else {
+                // Scalar signatures avoid allocating an object/array just to
+                // compare a 24-bit color on boards without PSRAM.
+                auto red=value(n,"red"),green=value(n,"green"),blue=value(n,"blue");
+                if(!red.isNull()&&!green.isNull()&&!blue.isNull())current.set((red.as<uint32_t>()<<16)|(green.as<uint32_t>()<<8)|blue.as<uint32_t>());
+            }
+            const bool first=!state.initialized;
+            if(changed(n,current.as<JsonVariantConst>(),"change")||(first&&!current.isNull()))emit(n,"changed");
+        }
         if(type=="hardware.sleep"&&state.sleeping && status_["power"]["node"]==node(n)["id"] && (status_["power"]["sequence"]|0u)!=state.wakeSequence) {
             state.sleeping=false;const std::string error=status_["power"]["error"]|"";
             if(error.empty())emit(n);else {error_=error;activity_[n].failed=true;emit(n,"failed");}

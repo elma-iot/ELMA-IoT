@@ -1,0 +1,857 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "type": "mainboard.wifi.ap",
+      "title": "Wi-Fi \u00b7 AP mode",
+      "category": "Mainboard",
+      "ports": [
+        {
+          "id": "value",
+          "label": "AP mode",
+          "type": "boolean",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {},
+      "helpId": "logics.mainboard-wifi-ap",
+      "subcategory": "Wi-Fi",
+      "binding": {
+        "kind": "status",
+        "endpoint": "/api/status",
+        "path": "network.apMode"
+      },
+      "description": "",
+      "id": "ap",
+      "name": "Wi-Fi \u00b7 AP mode",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "mainboard.wifi.connected",
+      "title": "Wi-Fi \u00b7 STA connected",
+      "category": "Mainboard",
+      "ports": [
+        {
+          "id": "value",
+          "label": "STA connected",
+          "type": "boolean",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {},
+      "helpId": "logics.mainboard-wifi-connected",
+      "subcategory": "Wi-Fi",
+      "binding": {
+        "kind": "status",
+        "endpoint": "/api/status",
+        "path": "network.wifiConnected"
+      },
+      "description": "",
+      "id": "sta",
+      "name": "Wi-Fi \u00b7 STA connected",
+      "position": {
+        "x": 50,
+        "y": 0
+      }
+    },
+    {
+      "type": "value.led_brightness",
+      "title": "LED Brightness",
+      "category": "LED controls",
+      "ports": [
+        {
+          "id": "enabled",
+          "label": "Enabled",
+          "type": "boolean",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "value",
+          "label": "Brightness %",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "changed",
+          "label": "Changed",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "value": 100,
+        "enabled": true
+      },
+      "helpId": "logics.value-led-brightness",
+      "id": "brightness",
+      "name": "LED Brightness",
+      "position": {
+        "x": 100,
+        "y": 0
+      }
+    },
+    {
+      "type": "value.led_effect",
+      "title": "LED Effect",
+      "category": "LED controls",
+      "ports": [
+        {
+          "id": "enabled",
+          "label": "Enabled",
+          "type": "boolean",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effect",
+          "label": "Effect",
+          "type": "string",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "speed",
+          "label": "Speed %",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "changed",
+          "label": "Changed",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "effect": "blink",
+        "speed": 100,
+        "enabled": true
+      },
+      "helpId": "logics.value-led-effect",
+      "id": "effect",
+      "name": "LED Effect",
+      "position": {
+        "x": 150,
+        "y": 0
+      }
+    },
+    {
+      "type": "value.led_color",
+      "title": "LED Color",
+      "category": "LED controls",
+      "ports": [
+        {
+          "id": "enabled",
+          "label": "Enabled",
+          "type": "boolean",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "brightness",
+          "label": "Brightness %",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effect",
+          "label": "Effect",
+          "type": "string",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "speed",
+          "label": "Effect speed %",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "changed",
+          "label": "Changed",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "enabled": true,
+        "red": 100,
+        "green": 0,
+        "blue": 0,
+        "brightness": 100.0,
+        "effect": "solid",
+        "speed": 50.0
+      },
+      "helpId": "logics.value-led-color",
+      "id": "apColor",
+      "name": "LED Color",
+      "position": {
+        "x": 200,
+        "y": 0
+      }
+    },
+    {
+      "type": "value.led_color",
+      "title": "LED Color",
+      "category": "LED controls",
+      "ports": [
+        {
+          "id": "enabled",
+          "label": "Enabled",
+          "type": "boolean",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "brightness",
+          "label": "Brightness %",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effect",
+          "label": "Effect",
+          "type": "string",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "speed",
+          "label": "Effect speed %",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "changed",
+          "label": "Changed",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "enabled": true,
+        "red": 150,
+        "green": 0,
+        "blue": 0,
+        "brightness": 100.0,
+        "effect": "solid",
+        "speed": 50.0
+      },
+      "helpId": "logics.value-led-color",
+      "id": "staColor",
+      "name": "LED Color",
+      "position": {
+        "x": 250,
+        "y": 0
+      }
+    },
+    {
+      "type": "value.rgb_mixer",
+      "title": "RGB Mixer",
+      "category": "LED controls",
+      "ports": [
+        {
+          "id": "redA",
+          "label": "Red A",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "greenA",
+          "label": "Green A",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "blueA",
+          "label": "Blue A",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "redB",
+          "label": "Red B",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "greenB",
+          "label": "Green B",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "blueB",
+          "label": "Blue B",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "type": "number",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "changed",
+          "label": "Changed",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "baseRed",
+          "label": "Basered",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "baseGreen",
+          "label": "Basegreen",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "baseBlue",
+          "label": "Baseblue",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "redA": 0.0,
+        "greenA": 0.0,
+        "blueA": 0.0,
+        "redB": 0.0,
+        "greenB": 0.0,
+        "blueB": 0.0,
+        "baseRed": 0,
+        "baseGreen": 0,
+        "baseBlue": 0
+      },
+      "helpId": "logics.value-rgb-mixer",
+      "id": "mixer",
+      "name": "RGB Mixer",
+      "position": {
+        "x": 300,
+        "y": 0
+      }
+    },
+    {
+      "type": "hardware.led",
+      "title": "Built-in LED",
+      "category": "Hardware",
+      "ports": [
+        {
+          "id": "on",
+          "label": "ON",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "off",
+          "label": "OFF",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "toggle",
+          "label": "Toggle",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "write",
+          "label": "Set color",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "release",
+          "label": "Automatic status",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effect",
+          "label": "Effect",
+          "type": "string",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "out",
+          "label": "Done",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "digital",
+          "label": "Is on",
+          "type": "boolean",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "brightness",
+          "label": "Brightness",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effectSpeed",
+          "label": "Effect speed",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "red": 0,
+        "green": 0,
+        "blue": 0,
+        "brightness": 100,
+        "effect": "solid",
+        "effectSpeed": 50.0
+      },
+      "helpId": "logics.hardware-led",
+      "description": "Controls the configured status LED or the board\u2019s built-in LED. Automatic status returns ownership to network indicators. Brightness controls regular LEDs through PWM; RGB color controls require NeoPixel/RGB hardware.",
+      "id": "led",
+      "name": "Built-in LED",
+      "position": {
+        "x": 350,
+        "y": 0
+      },
+      "binding": {
+        "kind": "led",
+        "pin": 4,
+        "ledType": "rgb",
+        "greenPin": 16,
+        "bluePin": 17
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "0",
+      "source": {
+        "node": "ap",
+        "port": "value"
+      },
+      "target": {
+        "node": "apColor",
+        "port": "enabled"
+      }
+    },
+    {
+      "id": "1",
+      "source": {
+        "node": "sta",
+        "port": "value"
+      },
+      "target": {
+        "node": "staColor",
+        "port": "enabled"
+      }
+    },
+    {
+      "id": "2",
+      "source": {
+        "node": "sta",
+        "port": "value"
+      },
+      "target": {
+        "node": "brightness",
+        "port": "enabled"
+      }
+    },
+    {
+      "id": "3",
+      "source": {
+        "node": "brightness",
+        "port": "value"
+      },
+      "target": {
+        "node": "staColor",
+        "port": "brightness"
+      }
+    },
+    {
+      "id": "4",
+      "source": {
+        "node": "ap",
+        "port": "value"
+      },
+      "target": {
+        "node": "effect",
+        "port": "enabled"
+      }
+    },
+    {
+      "id": "5",
+      "source": {
+        "node": "effect",
+        "port": "effect"
+      },
+      "target": {
+        "node": "apColor",
+        "port": "effect"
+      }
+    },
+    {
+      "id": "6",
+      "source": {
+        "node": "effect",
+        "port": "speed"
+      },
+      "target": {
+        "node": "apColor",
+        "port": "speed"
+      }
+    },
+    {
+      "id": "7",
+      "source": {
+        "node": "apColor",
+        "port": "red"
+      },
+      "target": {
+        "node": "mixer",
+        "port": "redA"
+      }
+    },
+    {
+      "id": "8",
+      "source": {
+        "node": "apColor",
+        "port": "green"
+      },
+      "target": {
+        "node": "mixer",
+        "port": "greenA"
+      }
+    },
+    {
+      "id": "9",
+      "source": {
+        "node": "apColor",
+        "port": "blue"
+      },
+      "target": {
+        "node": "mixer",
+        "port": "blueA"
+      }
+    },
+    {
+      "id": "10",
+      "source": {
+        "node": "staColor",
+        "port": "red"
+      },
+      "target": {
+        "node": "mixer",
+        "port": "redB"
+      }
+    },
+    {
+      "id": "11",
+      "source": {
+        "node": "staColor",
+        "port": "green"
+      },
+      "target": {
+        "node": "mixer",
+        "port": "greenB"
+      }
+    },
+    {
+      "id": "12",
+      "source": {
+        "node": "staColor",
+        "port": "blue"
+      },
+      "target": {
+        "node": "mixer",
+        "port": "blueB"
+      }
+    },
+    {
+      "id": "13",
+      "source": {
+        "node": "mixer",
+        "port": "red"
+      },
+      "target": {
+        "node": "led",
+        "port": "red"
+      }
+    },
+    {
+      "id": "14",
+      "source": {
+        "node": "mixer",
+        "port": "green"
+      },
+      "target": {
+        "node": "led",
+        "port": "green"
+      }
+    },
+    {
+      "id": "15",
+      "source": {
+        "node": "mixer",
+        "port": "blue"
+      },
+      "target": {
+        "node": "led",
+        "port": "blue"
+      }
+    },
+    {
+      "id": "16",
+      "source": {
+        "node": "mixer",
+        "port": "changed"
+      },
+      "target": {
+        "node": "led",
+        "port": "write"
+      }
+    }
+  ],
+  "groups": [],
+  "devices": [
+    {
+      "type": "hardware.led",
+      "title": "Built-in LED",
+      "category": "Hardware",
+      "ports": [
+        {
+          "id": "on",
+          "label": "ON",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "off",
+          "label": "OFF",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "toggle",
+          "label": "Toggle",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "write",
+          "label": "Set color",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "release",
+          "label": "Automatic status",
+          "type": "execution",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effect",
+          "label": "Effect",
+          "type": "string",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "out",
+          "label": "Done",
+          "type": "execution",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "digital",
+          "label": "Is on",
+          "type": "boolean",
+          "direction": "output",
+          "required": false
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "brightness",
+          "label": "Brightness",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        },
+        {
+          "id": "effectSpeed",
+          "label": "Effect speed",
+          "type": "number",
+          "direction": "input",
+          "required": false
+        }
+      ],
+      "parameters": {
+        "red": 0,
+        "green": 0,
+        "blue": 0,
+        "brightness": 100,
+        "effect": "solid",
+        "effectSpeed": 50.0
+      },
+      "helpId": "logics.hardware-led",
+      "description": "Controls the configured status LED or the board\u2019s built-in LED. Automatic status returns ownership to network indicators. Brightness controls regular LEDs through PWM; RGB color controls require NeoPixel/RGB hardware.",
+      "id": "led",
+      "name": "Built-in LED",
+      "position": {
+        "x": 350,
+        "y": 0
+      },
+      "binding": {
+        "kind": "led",
+        "pin": 4,
+        "ledType": "rgb",
+        "greenPin": 16,
+        "bluePin": 17
+      }
+    }
+  ]
+}

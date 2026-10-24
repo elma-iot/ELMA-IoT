@@ -212,7 +212,12 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             if(!output)return fail("Connect Sampling Interval to Save Data.Value or Transfer to Plotter.Value");
         }
         if(type=="value.led_brightness" && (n["parameters"]["value"].as<double>()<0||n["parameters"]["value"].as<double>()>100))return fail("LED brightness must be 0-100%");
-        if(type=="value.led_effect"||type=="hardware.led"){
+        if(type=="value.led_color"||type=="value.rgb_mixer")for(JsonPairConst p:n["parameters"].as<JsonObjectConst>()){
+            const std::string key=p.key().c_str();if(key=="enabled"||key=="effect")continue;
+            const double maximum=key=="speed"||key=="brightness"?100:255,v=p.value().as<double>();
+            if(!linked(id,key.c_str())&&(!std::isfinite(v)||v<0||v>maximum))return fail("LED color/mixer value is out of range");
+        }
+        if(type=="value.led_effect"||type=="value.led_color"||type=="hardware.led"){
             if(!linked(id,"effect")&&!BuiltinLedEffect::valid(n["parameters"]["effect"]|"solid"))return fail("Invalid built-in LED effect");
             const char* speedKey=type=="hardware.led"?"effectSpeed":"speed";double speed=n["parameters"][speedKey]|50.0;
             if(!linked(id,speedKey)&&(!std::isfinite(speed)||speed<0||speed>100))return fail("LED effect speed must be 0-100%");
@@ -263,7 +268,7 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             for(JsonObjectConst d:devices)if(d["type"]==capability&&d["peripheral"]["id"]==device["peripheral"]["id"])supported=true;
             if(device["type"]!="peripheral.reference"||!supported)return fail("Action is unsupported for this peripheral reference");
         }
-        root[i]=type=="clock.alarm" || (type=="mainboard.save_data"||type=="mainboard.plot")&&!linked(id,"in") || type.find("event.")==0 || n["binding"]["kind"]=="transition" || n["binding"]["kind"]=="lifecycle" || type=="peripheral.rising" || type=="peripheral.falling" || type=="condition.if"&&!linked(id,"in") || type=="timing.timer"&&linked(id,"enabled");
+        root[i]=type=="value.led_color"||type=="value.rgb_mixer"||type=="value.led_brightness"||type=="value.led_effect"||type=="clock.alarm" || (type=="mainboard.save_data"||type=="mainboard.plot")&&!linked(id,"in") || type.find("event.")==0 || n["binding"]["kind"]=="transition" || n["binding"]["kind"]=="lifecycle" || type=="peripheral.rising" || type=="peripheral.falling" || type=="condition.if"&&!linked(id,"in") || type=="timing.timer"&&linked(id,"enabled");
     }
     std::function<void(size_t)> reach=[&](size_t i){if(reached[i])return;reached[i]=true;for(auto next:adjacency[i])reach(next);};
     for(size_t i=0;i<nodes.size();++i)if(root[i])reach(i);
