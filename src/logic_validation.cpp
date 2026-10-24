@@ -63,7 +63,7 @@ bool validateLogicHardware(JsonObject n,std::string& error) {
         if(mode=="analog")enabled.insert({"analog","millivolts"});
     } else {
         if((n["binding"]["pin"]|-1)<0){error="Built-in LED is unavailable";return false;}
-        enabled={"on","off","toggle","write","release","out","digital"};
+        enabled={"on","off","toggle","write","release","out","digital","effect","effectSpeed"};
         if(n["binding"]["ledType"]!="regular" || n["binding"]["brightnessSupported"]==true)enabled.insert("brightness");
         if(n["binding"]["ledType"]!="regular")enabled.insert({"red","green","blue"});
         for(const char* key:{"red","green","blue","brightness"}) {
