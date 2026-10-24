@@ -14492,6 +14492,7 @@ for (const field of elements.settingsForm.elements) {
       populateWapeTriggerPinOptions();
       updateBatteryUi();
       state.settingsDirty = true;
+      queueSettingsSave(150);
     });
     continue;
   }
