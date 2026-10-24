@@ -1,3 +1,4 @@
+import {bindCompactGpioAutosave} from '../modules/compact-gpio-autosave.js';
 import {animateArray} from '../modules/led-effects.js';
 import {arrayOptions,arraySvg,arrayDefaults,arrayControls} from '../modules/led-array.js';
 import {createLogicsTab} from '../modules/logic-editor.js';
@@ -102,7 +103,7 @@ loadConfiguration();
 
 form.elements.kind.onchange=()=>{for(const field of document.querySelectorAll('[data-rgb]'))field.hidden=form.elements.kind.value!=='rgb';};
 
-form.onsubmit=async e=>{e.preventDefault();try{await save({device:{statusLedPin:Number(form.elements.pin.value),statusLedType:form.elements.kind.value,statusLedActiveLow:form.elements.activeLow.checked,statusLedGreenPin:Number(form.elements.green.value),statusLedBluePin:Number(form.elements.blue.value)}});}catch(e){showError(e.message);}};
+bindCompactGpioAutosave({form,ready:()=>configurationReady,save,onError:showError});
 
 wifiForm.onsubmit=async e=>{e.preventDefault();const wifi={ssid:wifiForm.elements.ssid.value};if(wifiForm.elements.password.value)wifi.password=wifiForm.elements.password.value;try{await save({wifi});wifiForm.elements.password.value='';}catch(e){showError(e.message);}};
 

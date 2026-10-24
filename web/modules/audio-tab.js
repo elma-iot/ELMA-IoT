@@ -77,6 +77,7 @@ export function createAudioTab({
         populateWapeTriggerPinOptions();
         updateBatteryUi();
         state.settingsDirty = true;
+        if (hasDistinctI2sPins()) queueSettingsSave(150);
       });
     }
 

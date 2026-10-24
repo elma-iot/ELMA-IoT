@@ -12,5 +12,7 @@ assert.equal(graph.nodes[0].ports[1].enabled,false);
 assert.equal(graph.nodes[0].ports[3].enabled,true);
 applyLiveLedBinding(graph,{kind:'led',pin:-1,ledType:'regular'});
 assert.ok(graph.nodes[0].ports.every(port=>!port.enabled));
+applyLiveLedBinding(graph,{kind:'led',pin:0,ledType:'neopixel'});
+assert.ok(graph.nodes[0].ports.every(port=>port.enabled),'GPIO0 enables LED ports after configuration autosave');
 assert.equal(JSON.stringify([graph.connections,graph.groups,graph.nodes[0].parameters]),preserved);
 console.log('PASS: live web LED pin/type/port updates preserve wiring and group state');
