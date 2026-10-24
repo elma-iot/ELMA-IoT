@@ -62,6 +62,12 @@ private:
     unsigned budget_ = 0, depth_ = 0;
     bool started_ = false, paused_ = false;
     uint32_t pausedAt_ = 0;
+    // One physical built-in LED: only its last writer may refresh wired values.
+    int ledOwner_ = -1;
+    uint64_t ledSignature_ = 0;
+    bool ledEnabled_ = false, ledSignatureKnown_ = false, ledDeferred_ = false;
+    void refreshLed();
+    void rememberLed(size_t n, const char* command, JsonVariantConst args);
     struct Activity { uint32_t at = 0, sequence = 0; bool failed = false; };
     std::vector<Activity> activity_;
     JsonObjectConst node(size_t index) const { return graph_["nodes"][index].as<JsonObjectConst>(); }

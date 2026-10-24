@@ -3328,6 +3328,9 @@ void serviceCloneProvisioningSerial() {
         } else if (command == "ELMA_CLONE_PING") {
             DebugLog.printf("[clone] provisioning ready identity=%s\n", settings->device.deviceName.c_str());
             Serial.flush();
+        } else if (command == "ELMA_LOGICS_STATUS") {
+            logicDevice.printDiagnostics();
+            DebugLog.printf("[logics-led] owned=%u on=%u rgb=%u,%u,%u brightness=%u rendered=%u,%u,%u\n",unsigned(logicLedOwned),unsigned(logicLedFrame.on),unsigned(logicLedFrame.red),unsigned(logicLedFrame.green),unsigned(logicLedFrame.blue),unsigned(logicLedFrame.brightness),unsigned(lastStatusLedRed),unsigned(lastStatusLedGreen),unsigned(lastStatusLedBlue));
         } else if (command == "ELMA_CONFIG_SNAPSHOT") {
             JsonDocument settingsDocument;
             settingsManager->toJson(*settings, settingsDocument.to<JsonObject>());

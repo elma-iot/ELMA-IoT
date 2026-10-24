@@ -24,6 +24,13 @@ void Runtime::setLedBinding(JsonObjectConst binding) {
     }
 }
 namespace {
+uint64_t ledSignature(JsonVariantConst args) {
+    const char* effect=args["effect"]|"solid";unsigned mode=0;
+    for(const char* name:{"solid","blink","breathe","colorloop"}){if(!std::strcmp(effect,name))break;++mode;}
+    return uint64_t(args["red"]|0u) | (uint64_t(args["green"]|255u)<<8) |
+        (uint64_t(args["blue"]|0u)<<16) | (uint64_t(args["brightness"]|20u)<<24) |
+        (uint64_t(mode)<<31) | (uint64_t(args["effectSpeed"]|50u)<<34);
+}
 void setBuzzerPreset(JsonObject source,const char* requested) {
     const std::string preset=requested?requested:"beep";
     auto melody=source["melody"].to<JsonObject>();melody["instrument"]="organ";melody["octave"]=4;
@@ -47,6 +54,7 @@ bool Runtime::begin(JsonDocument&& payload, Action action, std::string& error) {
     if(payload.overflowed() || payload["schemaVersion"]!=1 || !payload["nodes"].is<JsonArray>() || !payload["connections"].is<JsonArray>() || payload["nodes"].size()>64 || payload["connections"].size()>128 || measureJson(payload)>32768){error="Invalid/oversized compiled Logics payload";return false;}
     suspend();states_.clear();states_.shrink_to_fit();pulses_.clear();pulses_.shrink_to_fit();activity_.clear();activity_.shrink_to_fit();
     graph_=std::move(payload);previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();
+    ledOwner_=-1;ledEnabled_=false;ledSignatureKnown_=false;ledDeferred_=false;
     states_.assign(graph_["nodes"].size(), State{}); action_ = std::move(action);
     pulses_.reserve(std::min(size_t(128),graph_["connections"].size()+size_t(4))); activity_.assign(states_.size(), Activity{});
     for (JsonObjectConst edge : graph_["connections"].as<JsonArrayConst>()) {
@@ -232,6 +240,47 @@ void Runtime::emit(size_t n, const char* port) {
     }
 }
 
+void Runtime::rememberLed(size_t n,const char* command,JsonVariantConst args) {
+    bool on=true;
+    if(!std::strcmp(command,"off")||!std::strcmp(command,"release"))on=false;
+    else if(!std::strcmp(command,"toggle"))on=ledOwner_>=0?!ledEnabled_:!status_["builtinLed"]["digital"].as<bool>();
+    ledOwner_=on?int(n):-1;ledEnabled_=on;ledDeferred_=false;
+    ledSignature_=ledSignature(args);ledSignatureKnown_=true;
+}
+
+void Runtime::refreshLed() {
+    if(ledOwner_<0||!ledEnabled_||!allowed(size_t(ledOwner_)))return;
+    const size_t n=size_t(ledOwner_);bool wired=false;
+    const char* keys[]={"red","green","blue","brightness","effect","effectSpeed"};
+    JsonVariantConst values[6];
+    for(unsigned i=0;i<6;i++){
+        values[i]=input(n,keys[i]);
+        if(linked(n,keys[i])){wired=true;if(values[i].isNull())return;}
+    }
+    if(!wired&&!ledDeferred_)return;
+    // A scalar signature keeps unchanged frames allocation-free. Arguments and
+    // device writes are produced only when the wired control values change.
+    const char* effect=values[4]|"solid";unsigned mode=0;
+    for(const char* name:{"solid","blink","breathe","colorloop"}){if(!std::strcmp(effect,name))break;++mode;}
+    const unsigned defaults[]={0,255,0,20,0,50},maximum[]={255,255,255,100,0,1000};
+    unsigned numeric[6]{};
+    for(unsigned i=0;i<6;i++)if(i!=4){
+        double value=values[i]|double(defaults[i]);
+        if(!std::isfinite(value)||value<0||value>maximum[i]){error_="Invalid LED color or speed";return;}
+        numeric[i]=unsigned(value);
+    }
+    uint64_t signature=uint64_t(numeric[0])|(uint64_t(numeric[1])<<8)|(uint64_t(numeric[2])<<16)|
+        (uint64_t(numeric[3])<<24)|(uint64_t(mode)<<31)|(uint64_t(numeric[5])<<34);
+    if(ledSignatureKnown_&&signature==ledSignature_)return;
+    JsonDocument args;args["action"]="write";
+    for(unsigned i=0;i<6;i++)args[keys[i]].set(values[i]);
+    std::string error;
+    if(action_&&action_(node(n),args.as<JsonVariantConst>(),error)){
+        ledSignature_=signature;ledSignatureKnown_=true;
+        if(ledDeferred_){ledDeferred_=false;if(error_=="Connected input value unavailable")error_.clear();emit(n);}
+    }else error_=error.empty()?"Logics action failed":error;
+}
+
 bool Runtime::testAction(const char* nodeId, const char* command, std::string& error) {
     const int found=index(nodeId ? nodeId : "");
     if(found<0){error="Logics test node was not found; save the canvas first";return false;}
@@ -348,10 +397,16 @@ void Runtime::execute(size_t n, const char* trigger) {
         if(type.compare(0,10,"mainboard.")!=0)for(auto p:node(n)["ports"].as<JsonArrayConst>()) {
             const char* key=p["id"]|"";
             if(p["direction"]=="input" && p["type"]!="execution" && linked(n,key) && input(n,key).isNull()) {
+                // Do not consume a one-shot startup On merely because a wired
+                // status source has not produced its first sample yet.
+                if(type=="hardware.led" && (!std::strcmp(trigger,"on")||!std::strcmp(trigger,"write"))){
+                    ledOwner_=int(n);ledEnabled_=true;ledSignatureKnown_=false;ledDeferred_=true;
+                }
                 error_="Connected input value unavailable";activity_[n].at=now_;++activity_[n].sequence;activity_[n].failed=true;return;
             }
         }
         if (action_ && action_(target,args.as<JsonVariantConst>(),error)) {
+            if(type=="hardware.led")rememberLed(n,trigger,args.as<JsonVariantConst>());
 #if APP_ESP8266_COMPACT
             // Wi-Fi telemetry may be absent during boot; a later valid sample recovers.
             if(type=="mainboard.plot" && error_=="Plot value unavailable") error_.clear();
@@ -474,6 +529,8 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
         }
     }
     drain();
+    refreshLed();
+    drain(); // A deferred startup On completes Done exactly once.
     for(size_t n=0;n<states_.size();++n)for(JsonObjectConst p:node(n)["ports"].as<JsonArrayConst>())if(p["direction"]=="output" && p["type"]!="execution" && p["type"]!="audio" && p["type"]!="peripheral")value(n,p["id"]|"");
     status_={};
 }
@@ -482,7 +539,7 @@ void Runtime::tick(uint32_t now, JsonVariantConst status) {
 namespace ElmaLogic {
 void Runtime::pause(uint32_t now) { if(!paused_) {paused_=true;pausedAt_=now;freezeStates(now);} }
 void Runtime::resume(uint32_t now) {if(!paused_)return;paused_=false;freezeStates(now);}
-void Runtime::restart() {suspend();pulses_.shrink_to_fit();for(auto& state:states_)state=State{};previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();}
+void Runtime::restart() {suspend();ledOwner_=-1;ledEnabled_=false;ledSignatureKnown_=false;ledDeferred_=false;pulses_.shrink_to_fit();for(auto& state:states_)state=State{};previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();}
 void Runtime::telemetry(JsonObject target) const {
     for(JsonPairConst n:cache_.as<JsonObjectConst>())for(JsonPairConst p:n.value().as<JsonObjectConst>()) {
         if(p.value().is<JsonObjectConst>() || p.value().is<JsonArrayConst>())continue;
@@ -531,7 +588,7 @@ bool Runtime::controlGroup(const char* id,const char* mode,uint32_t now) {
         if(group["mode"]==mode)return true;
         group["mode"]=mode;
         if(std::string(mode)=="stopped"){
-            for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>()){int n=index(member|"");if(n>=0){states_[n]=State{};previous_.remove(member|"");cache_.remove(member|"");}}
+            for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>()){int n=index(member|"");if(n>=0){if(n==ledOwner_){ledOwner_=-1;ledEnabled_=false;ledDeferred_=false;}states_[n]=State{};previous_.remove(member|"");cache_.remove(member|"");}}
             if(!hasRunningNodes()){cache_.clear();previous_.clear();pulses_.clear();pulses_.shrink_to_fit();status_={};}
         }
         freezeStates(now);return true;

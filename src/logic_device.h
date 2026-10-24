@@ -19,6 +19,7 @@ public:
     bool request(JsonVariantConst command, JsonDocument& response, String& error);
     void snapshot(JsonDocument& response, bool graph);
     void ledSnapshot(JsonObject response);
+    void printDiagnostics();
     void enterRecoverySafeMode(const char* warning);
     const char* mode() const { return mode_.c_str(); }
 private:

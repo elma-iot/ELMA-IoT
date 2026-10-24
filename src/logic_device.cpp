@@ -506,6 +506,12 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     if(recoveryConfirmationRequired_ || recoveryRetries_){response["recovery"]["confirmationRequired"]=recoveryConfirmationRequired_;response["recovery"]["retryAttempt"]=recoveryRetries_;response["recovery"]["retryLimit"]=kLogicMaxAutoRetries;response["recovery"]["groupId"]=quarantinedGroup_;response["recovery"]["nodeId"]=quarantinedNode_;response["recovery"]["warning"]=recoveryWarning_;}
     xSemaphoreGive(mutex_);
 }
+void LogicDevice::printDiagnostics() {
+    if(!mutex_||xSemaphoreTake(mutex_,pdMS_TO_TICKS(20))!=pdTRUE){DebugLog.println("[logics-state] busy");return;}
+    DebugLog.printf("[logics-state] mode=%s running=%u snapshots=%u owned=%u retries=%u confirmation=%u error=%s\n",mode_.c_str(),unsigned(mode_=="playing"&&runtime_.hasRunningNodes()),unsigned(executionSnapshots_),unsigned(outputOwners_.size()),unsigned(recoveryRetries_),unsigned(recoveryConfirmationRequired_),runtime_.error().c_str());
+    for(JsonObjectConst group:runtime_.graph()["groups"].as<JsonArrayConst>())DebugLog.printf("[logics-group] id=%s mode=%s\n",group["id"]|"",group["mode"]|"playing");
+    xSemaphoreGive(mutex_);
+}
 bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String& error) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){error="Logics busy";return false;}
     struct Unlock {SemaphoreHandle_t m;~Unlock(){xSemaphoreGive(m);}} unlock{mutex_};
