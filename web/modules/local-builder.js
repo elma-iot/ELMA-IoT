@@ -2,6 +2,7 @@ import { boardChipFamily, applyBoardFilter } from "./board-pin-policy.js";
 
 export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessage, toast, validatePins = () => {} }) {
   let active = false;
+  let dependencyPackages = false;
   let jobId = "";
   let timer = null;
   let cancelRequested = false;
@@ -355,6 +356,14 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
       },
       firmwareMode: usesMinimalFirmware() ? "minimal" : "full",
     };
+    if (dependencyPackages) {
+      const plan = await api("/api/builder/dependencies/plan", { method: "POST", body: JSON.stringify(payload) });
+      if (plan.packages?.length) {
+        const names = plan.packages.map(pack => `${pack.name}: ${(pack.bytes / 1048576).toFixed(1)} MiB (${pack.source})`).join("\n");
+        if (!window.confirm(`This board needs a first-use compiler download:\n\n${names}\n\nDownload and compile? Tools are unpacked once and reused for future compilations, including offline.`)) return;
+        payload.downloadDependencies = true;
+      }
+    }
     const response = await api("/api/builder/jobs", { method: "POST", body: JSON.stringify(payload) });
     jobId = response.jobId;
     cancelRequested = false;
@@ -386,6 +395,7 @@ export function createLocalBuilder({ elements, currentSettingsSnapshot, setMessa
     try {
       status = await api("/api/builder/status");
       active = Boolean(status.active);
+      dependencyPackages = Boolean(status.dependencyPackages);
     } catch {
       return;
     }
