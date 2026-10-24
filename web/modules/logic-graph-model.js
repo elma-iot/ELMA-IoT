@@ -31,6 +31,8 @@ export function problems(graph,specs){
  if(n.type==='peripheral.play'&&linked)add(hints,n.id,'Play.Out means accepted, not audio finished. A directly connected Stop can cut playback short.');
  if(n.type==='recording.interval'){const ms=n.parameters.duration*recordingUnits[n.parameters.timeUnit];if(!Number.isFinite(ms)||ms<1||ms>31536000000)add(errors,n.id,'Recording interval must be 1 ms to 365 days.');if(!outgoing.length)add(errors,n.id,'Connect Sampling Interval to Save Data.Value or Transfer to Plotter.Value.');}
  if(n.type==='timing.timer'&&!incoming.some(e=>['in','enabled'].includes(e.target.port)))add(errors,n.id,'Timer needs Start or Enabled.');
+ if(n.type==='value.led_brightness'&&(!Number.isFinite(n.parameters.value)||n.parameters.value<0||n.parameters.value>100))add(errors,n.id,'LED brightness must be 0-100%.');
+ if(['value.led_effect','hardware.led'].includes(n.type)){const speed=n.parameters[n.type==='hardware.led'?'effectSpeed':'speed']??50;if(!['solid','blink','breathe','colorloop'].includes(n.parameters.effect??'solid')||!Number.isFinite(speed)||speed<0||speed>100)add(errors,n.id,'Invalid built-in LED effect or speed.');}
  const sleepError=sleepProblem(n,graph);if(sleepError)add(errors,n.id,sleepError);
  if(n.type==='clock.alarm'&&!validAlarm(n.parameters))add(errors,n.id,'Invalid alarm clock source, date, time or weekdays');
  if(n.type.startsWith('condition.')&&outgoing.some(e=>graph.nodes.find(x=>x.id===e.target.node)?.type==='event.change'))add(hints,n.id,'On Change fires on true and false. Use Rising Edge to act only on true.');

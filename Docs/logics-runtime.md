@@ -19,6 +19,18 @@ The restart guard stops nonempty automations after three failed automatic retrie
 An empty graph consumes no retries and clears a stale guard without starting any
 automation or changing its stopped/paused mode.
 
+For the full ESP32 firmware, LED controls provides separate LED Brightness
+(0-100%) and LED Effect nodes. Connect Effect and Speed outputs to the built-in
+LED's Effect and Effect speed inputs. Solid, Blink, Breathe and Color loop run
+cooperatively with no extra task or frame buffer. An ON or Set color pulse applies
+the inputs; use a change event for updates after On started. RGB channels use
+0-255, while Boolean to Number produces 0 or 1. Condition branches can select
+separate LED nodes with explicit colors for different Wi-Fi states.
+
+Context-menu search includes canvas actions such as Group when nodes are selected.
+The popup repositions when expanded and stays inside the viewport with scrolling
+when needed.
+
 Each group has Play, Pause/Resume and Stop. Master controls affect all automations.
 Pause freezes scheduled execution while monitoring continues; already accepted
 hardware operations can finish. Stop cancels scheduled work and stops audio owned

@@ -1,4 +1,5 @@
 #include "sunton_cpu.h"
+#include "builtin_led_effect.h"
 #include "robot_service.h"
 #include "spk_media.h"
 #include "motion_capture.h"
@@ -161,8 +162,13 @@ bool apStatusLedBluePhase(unsigned long now) {
 }
 
 bool logicLedOwned=false;
+struct LogicLedFrame {bool on=false;uint8_t red=0,green=255,blue=0,brightness=20,speed=50;char effect[10]="solid";uint32_t started=0,lastFrame=0;} logicLedFrame;
+void renderLogicLed(uint32_t now){
+    const uint32_t color=logicLedFrame.on?BuiltinLedEffect::color(logicLedFrame.effect,now-logicLedFrame.started,logicLedFrame.speed,logicLedFrame.brightness,logicLedFrame.red,logicLedFrame.green,logicLedFrame.blue):0;
+    writeStatusLedColor((color>>16)&255,(color>>8)&255,color&255);logicLedFrame.lastFrame=now;
+}
 void updateStatusLedForNetwork(bool wifiConnected, bool apMode, unsigned long now = millis()) {
-    if(logicLedOwned)return;
+    if(logicLedOwned){if(BuiltinLedEffect::frameDue(now,logicLedFrame.lastFrame))renderLogicLed(now);return;}
 #if APP_SUNTON_PANEL == 3
     // This board's RGB is reserved for user Logics, not network activity.
     writeStatusLedColor(0,0,0);return;
@@ -4283,13 +4289,17 @@ void setup() {
             if(action!="on"&&action!="off"&&action!="toggle"&&action!="write"){message="Unsupported LED action";return false;}
             double brightness=args["brightness"]|20.0;
             double red=args["red"]|0.0,green=args["green"]|255.0,blue=args["blue"]|0.0;
+            const char* effect=args["effect"]|"solid";double speed=args["effectSpeed"]|50.0;
+            if(!BuiltinLedEffect::valid(effect)||!std::isfinite(speed)||speed<0||speed>100){message="Invalid built-in LED effect or speed";return false;}
             if(!std::isfinite(brightness)||brightness<0||brightness>100||!std::isfinite(red)||red<0||red>255||!std::isfinite(green)||green<0||green>255||!std::isfinite(blue)||blue<0||blue>255){message="Invalid LED color";return false;}
             // The live device configuration is authoritative, including after
             // OTA or a web edit. Compiled graph bindings may reference an old pin.
             applyStatusLedConfig(settings->device.statusLedPin,settings->device.statusLedGreenPin,settings->device.statusLedBluePin,settings->device.statusLedType);
-            logicLedOwned=true;bool on=action!="off";
-            if(action=="toggle")on=!(lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue);
-            writeStatusLedColor(on?uint8_t(red*brightness/100):0,on?uint8_t(green*brightness/100):0,on?uint8_t(blue*brightness/100):0);return true;
+            bool on=action!="off";
+            if(action=="toggle")on=logicLedOwned?!logicLedFrame.on:!(lastStatusLedRed||lastStatusLedGreen||lastStatusLedBlue);
+            if(!logicLedOwned||!logicLedFrame.on||strcmp(effect,logicLedFrame.effect))logicLedFrame.started=millis();
+            logicLedOwned=true;logicLedFrame.on=on;logicLedFrame.red=uint8_t(red);logicLedFrame.green=uint8_t(green);logicLedFrame.blue=uint8_t(blue);logicLedFrame.brightness=uint8_t(brightness);logicLedFrame.speed=uint8_t(speed);
+            strncpy(logicLedFrame.effect,effect,sizeof(logicLedFrame.effect)-1);logicLedFrame.effect[sizeof(logicLedFrame.effect)-1]='\0';renderLogicLed(millis());return true;
         } else if(std::string(node["peripheral"]["profile"]|"").find("buzzer")!=std::string::npos) {
             std::string command=args["action"]|"";
             if(command=="stop"){bool stopped=queueLogicAudioStop(node,error,args["all"]|false);if(!stopped)message=error.c_str();return stopped;}
@@ -4923,6 +4933,10 @@ void loop() {
 
     if(!logicSleepPending())logicDevice.loop(now, otaManager->isFirmwareTransferActive(),
                      audioLatencySensitive ? kLogicPollIntervalDuringAudioMs : 100U);
+    if(logicLedOwned){
+        if(String(logicDevice.mode())=="stopped"){logicLedFrame.on=false;writeStatusLed(false);logicLedOwned=false;}
+        else if(BuiltinLedEffect::frameDue(now,logicLedFrame.lastFrame))renderLogicLed(now);
+    }
     processDeferredActions();
     processLogicSleep(otaManager->isFirmwareTransferActive() || audioLatencySensitive, [](){motorController.prepareForRestart();});
     if (activeAudioOutputEnabled) {

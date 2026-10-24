@@ -1,4 +1,5 @@
 #include "robot_control_policy.h"
+#include "builtin_led_effect.h"
 #include "logic_validation.h"
 #ifdef APP_ESP8266_COMPACT
 #include "generated_esp8266_catalog.h"
@@ -209,6 +210,12 @@ bool validateEditable(JsonVariantConst input,JsonArrayConst devices,JsonDocument
             if(!std::isfinite(ms)||ms<1||ms>31536000000.0)return fail("Recording interval must be 1 ms to 365 days");
             bool output=false;for(JsonObjectConst e:links)if(e["source"]["node"]==id)output=true;
             if(!output)return fail("Connect Sampling Interval to Save Data.Value or Transfer to Plotter.Value");
+        }
+        if(type=="value.led_brightness" && (n["parameters"]["value"].as<double>()<0||n["parameters"]["value"].as<double>()>100))return fail("LED brightness must be 0-100%");
+        if(type=="value.led_effect"||type=="hardware.led"){
+            if(!linked(id,"effect")&&!BuiltinLedEffect::valid(n["parameters"]["effect"]|"solid"))return fail("Invalid built-in LED effect");
+            const char* speedKey=type=="hardware.led"?"effectSpeed":"speed";double speed=n["parameters"][speedKey]|50.0;
+            if(!linked(id,speedKey)&&(!std::isfinite(speed)||speed<0||speed>100))return fail("LED effect speed must be 0-100%");
         }
         if(type=="timing.repeat"&&!linked(id,"count")){double count=n["parameters"]["count"]|0.0;if(count<1||count>128||count!=std::floor(count))return fail("Repeat count must be a whole number 1-128");}
         if(type=="condition.between"&&!linked(id,"minimum")&&!linked(id,"maximum")&&n["parameters"]["minimum"].as<double>()>n["parameters"]["maximum"].as<double>())return fail("Minimum exceeds maximum");

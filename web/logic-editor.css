@@ -78,3 +78,5 @@ body:has(#tab-logics.active) .wrap{width:min(1920px,calc(100% - 24px));max-width
 .logic-route-handle.route-focused{visibility:visible;pointer-events:all}
 .logic-route-arm.route-focused{visibility:visible;pointer-events:none}
 .logic-route-corridor.route-focused{visibility:visible;pointer-events:stroke}
+
+.logic-context-menu [hidden]{display:none!important}.logic-context-menu #logic-add-node-search{z-index:2}

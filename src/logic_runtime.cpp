@@ -132,6 +132,7 @@ JsonVariantConst Runtime::value(size_t n, const char* port) {
     }
     else if(type.compare(0,7,"bridge.")==0)result.set(input(n,"value"));
     else if(type=="recording.interval")result.set(input(n,"value"));
+    else if(type=="value.led_effect")result.set(input(n,port));
     else if (type.compare(0, 6, "value.") == 0) result.set(input(n, "value"));
     else if (type.compare(0, 10, "mainboard.") == 0) {
         auto binding = node(n)["binding"];
@@ -316,7 +317,7 @@ void Runtime::execute(size_t n, const char* trigger) {
         if(type.compare(0,13,"hardware.hmi.")==0){args["action"]=type.substr(13);for(const char* key:{"itemId","parent","title","kind","submenu","minimum","maximum","step","value","unit","icon","text","navigation","configuration","childId"})args[key].set(input(n,key));}
         if(type=="hardware.gpio" || type=="hardware.led") {
             args["action"]=trigger;
-            for(const char* key:{"state","duty","red","green","blue","brightness"})args[key].set(input(n,key));
+            for(const char* key:{"state","duty","red","green","blue","brightness","effect","effectSpeed"})args[key].set(input(n,key));
         }
         std::string error;
         // Never replace a connected-but-unavailable converted value with an action's default.
