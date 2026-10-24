@@ -1,0 +1,6 @@
+# Same NVS, OTA metadata and storage offsets as ota_4m.csv; USB updates only.
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+factory,  app,  factory, 0x10000,  0x3E0000,
+storage,  data, spiffs,  0x3F0000, 0x10000,
