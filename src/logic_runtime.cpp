@@ -57,7 +57,7 @@ bool Runtime::begin(const char* payload, Action action, std::string& error) {
 bool Runtime::begin(JsonDocument&& payload, Action action, std::string& error) {
     if(payload.overflowed() || payload["schemaVersion"]!=1 || !payload["nodes"].is<JsonArray>() || !payload["connections"].is<JsonArray>() || payload["nodes"].size()>64 || payload["connections"].size()>128 || measureJson(payload)>32768){error="Invalid/oversized compiled Logics payload";return false;}
     suspend();states_.clear();states_.shrink_to_fit();pulses_.clear();pulses_.shrink_to_fit();activity_.clear();activity_.shrink_to_fit();
-    graph_=std::move(payload);previous_.clear();cache_.clear();started_=false;paused_=false;error_.clear();
+    graph_=std::move(payload);previous_.clear();cache_.clear();started_=false;paused_=false;updateSuspended_=false;error_.clear();
     ledOwner_=-1;ledEnabled_=false;ledSignatureKnown_=false;ledDeferred_=false;
     states_.assign(graph_["nodes"].size(), State{}); action_ = std::move(action);
     pulses_.reserve(std::min(size_t(128),graph_["connections"].size()+size_t(4))); activity_.assign(states_.size(), Activity{});
@@ -428,12 +428,22 @@ void Runtime::drain() {
 }
 
 void Runtime::lifecycle(const char* event) {
+    if(updateSuspended_)return;
     for(size_t n=0;n<states_.size();++n) if(node(n)["binding"]["kind"]=="lifecycle" && node(n)["binding"]["event"]==event) emit(n);
     drain();
 }
 
 void Runtime::suspend() {
     pulses_.clear(); for(auto& state:states_) {state.pending=false;state.enabled=false;state.initialized=false;}
+}
+void Runtime::releaseForUpdate(){
+    updateSuspended_=true;
+    suspend();cache_.clear();previous_.clear();status_=JsonVariantConst();
+    states_.clear();states_.shrink_to_fit();pulses_.clear();pulses_.shrink_to_fit();activity_.clear();activity_.shrink_to_fit();
+}
+void Runtime::restoreAfterUpdate(){
+    states_.assign(graph_["nodes"].size(),State{});activity_.assign(states_.size(),Activity{});
+    restart();updateSuspended_=false;
 }
 
 uint64_t Runtime::recordingInterval(size_t n) const {
@@ -453,7 +463,7 @@ uint32_t Runtime::recordingPollInterval(uint32_t normal) const {
     return std::max<uint32_t>(1,normal);
 }
 void Runtime::tick(uint32_t now, JsonVariantConst status) {
-    if(paused_)return;
+    if(paused_||updateSuspended_)return;
     now_=now;status_=status;cache_.clear();budget_=0;depth_=0;
     started_=true;
     for(size_t n=0;n<states_.size();++n) {
@@ -575,7 +585,7 @@ void Runtime::observe(JsonVariantConst status) {
 
 namespace ElmaLogic {
 bool Runtime::allowed(size_t n) const {
-    if(paused_)return false;
+    if(paused_||updateSuspended_)return false;
     for(JsonObjectConst group:graph_["groups"].as<JsonArrayConst>())for(JsonVariantConst member:group["nodes"].as<JsonArrayConst>())if(member==node(n)["id"])return group["mode"]=="playing" || group["mode"].isNull();
     return true;
 }

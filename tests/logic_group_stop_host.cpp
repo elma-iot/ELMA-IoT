@@ -21,6 +21,12 @@ int main(){
     assert(live["values"].isNull()); // no color/effect/source re-evaluation while stopped
     runtime.observe(status);live.clear();runtime.telemetry(live.to<JsonObject>());assert(live["values"].isNull());
     assert(runtime.controlGroup(id.c_str(),"playing",2000));runtime.tick(2020,status);assert(calls>before);
+    const auto beforeUpdate=calls;runtime.releaseForUpdate();
+    assert(!runtime.hasRunningNodes());runtime.tick(2040,status);runtime.lifecycle("started");assert(calls==beforeUpdate);
+    live.clear();runtime.telemetry(live.to<JsonObject>());assert(live["values"].isNull());
+    runtime.restoreAfterUpdate();assert(runtime.hasRunningNodes());runtime.tick(2060,status);assert(calls>beforeUpdate);
+    assert(runtime.controlGroup(id.c_str(),"stopped",2080));runtime.releaseForUpdate();runtime.restoreAfterUpdate();
+    assert(!runtime.hasRunningNodes()); // OTA must not overwrite a saved Stop mode.
     auto outside=graph["nodes"].as<JsonArray>().add<JsonObject>();outside["id"]="outside";outside["type"]="value.number";outside["parameters"]["value"]=42;
     auto other=graph["groups"].as<JsonArray>().add<JsonObject>();other["id"]="other";other["name"]="Other";other["color"]="#335577";other["mode"]="playing";other["nodes"].to<JsonArray>().add("outside");
     JsonDocument compiledOther;assert(ElmaLogic::validateEditable(graph,graph["devices"],compiledOther,error));

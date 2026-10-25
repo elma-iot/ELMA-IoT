@@ -3,6 +3,7 @@
 #include <Adafruit_GFX.h>
 #include <memory>
 #include "panel_geometry.h"
+#include "panel_update.h"
 #if APP_SUNTON_PANEL
 #include "sunton_panel.h"
 #else
@@ -25,6 +26,9 @@ public:
     bool readRawTouch(int16_t &x, int16_t &y);
     bool drawColor(int x,int y,int width,int height,uint8_t* colors);
     void brightness(uint8_t percent);
+    bool beginUpdate();
+    void updateProgress(unsigned percent,uint32_t now);
+    void endUpdate();
     void sleep(bool sleeping) {
 #if APP_SUNTON_PANEL == 3
         if(board_){if(sleeping)board_->sleep();else board_->wakeup();}
@@ -50,6 +54,7 @@ public:
 #endif
     }
 private:
+    std::unique_ptr<PanelUpdate> update_;
 #if APP_SUNTON_PANEL
     std::unique_ptr<SuntonPanel> board_;
 #else

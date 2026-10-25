@@ -180,6 +180,9 @@ void AppState::setFreeHeap(uint32_t freeHeap) {
     unlockAppState(mutex_);
 }
 
+uint8_t AppState::firmwareUpdatePercent() const {
+    ensureMutex();lockAppState(mutex_);const uint8_t value=state_.ota.progressPercent;unlockAppState(mutex_);return value;
+}
 AppStateSnapshot AppState::snapshot() const {
     if (!ensureMutex()) {
         return state_;

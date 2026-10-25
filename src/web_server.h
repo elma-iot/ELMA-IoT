@@ -79,6 +79,9 @@ class WebServerManager {
 #endif
 
   private:
+#ifndef APP_DISABLE_WEB_UI
+    bool gateFirmwareTransfer(AsyncWebServerRequest* request);
+#endif
 #if APP_SUNTON_PANEL == 3
     std::function<uint8_t()> presentationState_;SimpleHandler presentationWeb_;
 #ifndef APP_DISABLE_WEB_UI

@@ -5,6 +5,7 @@
 #include "shared_i2c.h"
 #include "storage_backend.h"
 #include "device_log.h"
+#include "update_screen.h"
 #if APP_HAS_ONBOARD_PANEL
 #include "rotary_hmi.h"
 #endif
@@ -383,6 +384,7 @@ void DisplayManager::quietForDiagnostics(bool dark) {
 }
 #endif
 void DisplayManager::loop(const AppStateSnapshot& state) {
+    if(firmwareUpdate_)return; // The dedicated update renderer owns the panel.
 #if APP_SUNTON_PANEL == 3
     if(diagnosticQuietUntil_){
         if(int32_t(diagnosticQuietUntil_-millis())>0)return;
@@ -498,6 +500,43 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
 }
 
 bool DisplayManager::available() const {return isEnabled();}
+bool DisplayManager::beginFirmwareUpdate(){
+    if(firmwareUpdate_)return true;
+    firmwareUpdate_=true;
+#if APP_HAS_ONBOARD_PANEL
+    RoundHmi::prepareForUpdate();dashboard_.reset();lv_mem_buf_free_all();
+    if(panel_){
+        panel_->sleep(false);panel_->brightness(settings_.brightness);
+        if(!panel_->beginUpdate())return false;
+    }
+#endif
+    lastSignature_="";lastDrawAt_=0;
+    return true;
+}
+void DisplayManager::firmwareUpdateProgress(uint8_t percent){
+    if(!firmwareUpdate_)return;
+#if APP_HAS_ONBOARD_PANEL
+    if(panel_){panel_->updateProgress(percent,millis());return;}
+#endif
+    if(!isEnabled() || millis()-lastDrawAt_<200)return;
+    lastDrawAt_=millis();auto* display=gfx();if(!display)return;
+    clearDisplay();display->setTextWrap(false);display->setTextColor(SSD1306_WHITE);display->setTextSize(1);
+    const char* title="Updating";display->setCursor((display->width()-48)/2,display->height()/2-12);display->print(title);
+    char value[8];snprintf(value,sizeof(value),"%u%%",UpdateScreen::percent(percent));
+    display->setCursor((display->width()-strlen(value)*6)/2,display->height()/2);display->print(value);
+    display->drawRect(4,display->height()-10,display->width()-8,7,1);
+    display->fillRect(5,display->height()-9,(display->width()-10)*UpdateScreen::percent(percent)/100,5,1);flushDisplay();
+}
+void DisplayManager::endFirmwareUpdate(){
+    if(!firmwareUpdate_)return;
+    firmwareUpdate_=false;
+#if APP_HAS_ONBOARD_PANEL
+    // A cancelled/failed update returns to the saved interface. RGB scanout was
+    // replaced, so recreate the driver before rebuilding the normal widgets.
+    if(panel_){panel_->endUpdate();panel_->brightness(0);panel_.reset();}
+#endif
+    applySettings(settings_);
+}
 bool DisplayManager::clearLogicText() {
     if(!isEnabled())return false;
 #if APP_ROTARY_HMI
@@ -521,4 +560,7 @@ bool DisplayManager::clearLogicText() { return false; }
 void DisplayManager::markActivity() {}
 void DisplayManager::powerOff() {}
 void DisplayManager::loop(const AppStateSnapshot&) {}
+bool DisplayManager::beginFirmwareUpdate(){return true;}
+void DisplayManager::firmwareUpdateProgress(uint8_t){}
+void DisplayManager::endFirmwareUpdate(){}
 #endif

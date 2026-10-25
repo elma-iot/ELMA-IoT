@@ -170,6 +170,7 @@ bool begin(PanelDisplay& p,uint8_t rotation,const String& configuration){Guard g
     decoder.reset(digitalRead(6),digitalRead(5));attachInterrupt(6,rotate,CHANGE);attachInterrupt(5,rotate,CHANGE);armed=digitalRead(0)==HIGH;buttonRaw=buttonDown=false;pendingClick=false;longSent=false;touchDown=false;tick=millis();active=true;dashboard.begin(screen,p,configuration);render();bootAnimationPending=true;DebugLog.printf("[hmi] ready items=%u rotation=%u\n",unsigned(model.items.size()),rotation);return true;
 }
 void end(){Guard guard;if(!guard)return;dashboard.end();detachInterrupt(6);detachInterrupt(5);active=false;if(pointer)lv_indev_delete(pointer);if(encoder)lv_indev_delete(encoder);if(group)lv_group_del(group);if(display)lv_disp_remove(display);if(pixels)heap_caps_free(pixels);pointer=encoder=nullptr;group=nullptr;display=nullptr;pixels=nullptr;panel=nullptr;buttons.clear();screen=center=ring=valueLabel=nullptr;}
+void prepareForUpdate(){end();if(failsafeTask){vTaskDelete(failsafeTask);failsafeTask=nullptr;}}
 void loop(){Guard guard;if(!guard||!active)return;uint32_t now=millis();if(overlayText.length()&&int32_t(now-overlayUntil)>=0){overlayText="";++model.revision;}lv_tick_inc(now-tick);tick=now;
     // Start on the first serviced LVGL tick; slow network/storage startup must
     // not consume the animation before the display loop can render its frames.
@@ -209,6 +210,7 @@ bool command(JsonVariantConst args,String& error){Guard guard;if(!guard){error="
 }
 #else
 namespace RoundHmi {
+void prepareForUpdate(){}
 bool available(){return false;}bool begin(PanelDisplay&,uint8_t,const String&){return false;}void end(){}void loop(){}void networkStatus(bool,bool){}bool takeActivity(){return false;}
 void temporaryText(const String&,uint32_t){}
 void systemState(const AppStateSnapshot&,const std::function<void(const String&,JsonObject)>&,const std::function<bool(const String&,JsonVariantConst,String&)>&){}

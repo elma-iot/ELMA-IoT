@@ -598,6 +598,11 @@ bool OtaManager::beginLocalUpload(const String& filename, size_t totalSize, Stri
     memset(localUploadHeader_, 0, sizeof(localUploadHeader_));
     busy_ = true;
 
+    releaseCache_.clear();releaseCache_.shrink_to_fit();releasesFetchedAtMs_=0;
+    syncAppState("updating");
+    if(prepareTransferCallback_ && !prepareTransferCallback_(error)){
+        abortLocalUpload(error);return false;
+    }
     const size_t updateSize = totalSize > 0 ? totalSize : UPDATE_SIZE_UNKNOWN;
     if (!Update.begin(updateSize, U_FLASH)) {
         error = String("Local firmware update failed: ") + Update.errorString();
@@ -733,6 +738,7 @@ bool OtaManager::finishLocalUpload(String& error, const String& sessionId) {
     localUploadHeaderBytes_ = 0;
     localUploadSessionId_ = "";
     localUploadFilename_ = "";
+    scheduleReboot(1500);
     busy_ = false;
     progressBytes_ = progressTotalBytes_;
     progressPercent_ = 100;
@@ -740,7 +746,6 @@ bool OtaManager::finishLocalUpload(String& error, const String& sessionId) {
     lastMessage_ = "Local firmware uploaded. Restarting...";
     syncAppState("installed");
     pumpProgressCallback();
-    scheduleReboot(1500);
     return true;
 }
 
@@ -1161,7 +1166,7 @@ bool OtaManager::isBusy() const {
 }
 
 bool OtaManager::isFirmwareTransferActive() const {
-    return localUploadStarted_ || pendingApply_ || installTaskHandle_ != nullptr || !pendingInstallVersion_.isEmpty() ||
+    return rebootPending_ || localUploadStarted_ || pendingApply_ || installTaskHandle_ != nullptr || !pendingInstallVersion_.isEmpty() ||
         (busy_ && (updatePhase_ == "Connecting" || updatePhase_ == "Downloading" ||
                    updatePhase_ == "Flashing" || updatePhase_ == "Verifying" || updatePhase_ == "Finalizing"));
 }
@@ -1466,7 +1471,9 @@ bool OtaManager::installNow(const CheckResult& result, String& message) {
     progressTotalBytes_ = 0;
     progressPercent_ = 0;
     lastMessage_ = result.assetName.isEmpty() ? "Connecting to firmware URL" : String("Connecting to ") + result.assetName;
+    releaseCache_.clear();releaseCache_.shrink_to_fit();releasesFetchedAtMs_=0;
     syncAppState("updating");
+    if(prepareTransferCallback_ && !prepareTransferCallback_(message))return false;
     pumpProgressCallback();
     WiFiClientSecure client;
     HTTPClient http;

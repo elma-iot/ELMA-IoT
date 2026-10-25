@@ -8,6 +8,7 @@ class AppStateSnapshot;
 namespace RoundHmi {
 bool available();bool begin(PanelDisplay&,uint8_t rotation,const String& configuration);
 void end();void loop();void networkStatus(bool wifi,bool mqtt);bool takeActivity();void snapshot(JsonObject);
+void prepareForUpdate();
 void systemState(const AppStateSnapshot&,const std::function<void(const String&,JsonObject)>&,
                  const std::function<bool(const String&,JsonVariantConst,String&)>&);
 void temporaryText(const String&,uint32_t durationMs);

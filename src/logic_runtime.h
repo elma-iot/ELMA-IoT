@@ -23,6 +23,8 @@ public:
     void restart();
     // Called under the device mutex before a graph edit; preserve scheduler/action state.
     void releaseEvaluationCache() { cache_.clear(); }
+    void releaseForUpdate();
+    void restoreAfterUpdate();
     bool controlGroup(const char* id, const char* mode, uint32_t now);
     void observe(JsonVariantConst status);
     void setLedBinding(JsonObjectConst binding);
@@ -61,7 +63,7 @@ private:
     std::string error_;
     uint32_t now_ = 0;
     unsigned budget_ = 0, depth_ = 0;
-    bool started_ = false, paused_ = false;
+    bool started_ = false, paused_ = false, updateSuspended_=false;
     uint32_t pausedAt_ = 0;
     // One physical built-in LED: only its last writer may refresh wired values.
     int ledOwner_ = -1;

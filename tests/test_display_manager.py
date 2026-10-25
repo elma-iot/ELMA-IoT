@@ -7,12 +7,16 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VCVARS = pathlib.Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvars64.bat')
+if not VCVARS.is_file():
+    VCVARS=pathlib.Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Auxiliary/Build/vcvars64.bat')
 
 SHIM = r'''
 #pragma once
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
+#include <cstdio>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -62,19 +66,20 @@ struct WireMock { void begin(int,int) {} };
 inline WireMock Wire;
 class Adafruit_SSD1306 : public Adafruit_GFX {
 public:
-    Adafruit_SSD1306(int,int,WireMock*,int) {}
+    Adafruit_SSD1306(int,int,WireMock*,int,int,int) {}
     bool begin(int,int) { return beginOk; }
     void dim(bool value) { ++contrastWrites; contrasts.push_back(value ? 0 : 255); }
     void ssd1306_command(int) {}
 };
 class Adafruit_SH1106G : public Adafruit_GFX {
 public:
-    Adafruit_SH1106G(int,int,WireMock*,int) {}
+    Adafruit_SH1106G(int,int,WireMock*,int,int,int) {}
     bool begin(int,bool) { return beginOk; }
     void setContrast(int value) { ++contrastWrites; contrasts.push_back(value); }
     void oled_command(int) {}
 };
 constexpr int SSD1306_WHITE=1, SSD1306_SWITCHCAPVCC=2, SSD1306_DISPLAYOFF=0xAE, SH110X_DISPLAYOFF=0xAE;
+namespace SharedI2c {struct Guard {Guard(int=0){} explicit operator bool()const{return true;}};inline bool begin(int,int){return true;}inline WireMock& wire(){return Wire;}}
 struct OledSettings {
     bool enabled=true;
     String displayType="oled", driver="ssd1306";
@@ -128,6 +133,12 @@ int main() {
         int before=flushes; clockMs+=300; display.loop(state);
         assert(flushes==before); // Failed initialization never uses an invalid buffer.
         beginOk=true;
+        settings.enabled=true;display.applySettings(settings);
+        assert(display.beginFirmwareUpdate());
+        printed.clear();clockMs+=400;display.firmwareUpdateProgress(42);
+        assert(printed.size()==2 && printed[0]=="Updating" && printed[1]=="42%");
+        const auto updateFlushes=flushes;clockMs+=300;display.loop(state);assert(flushes==updateFlushes);
+        display.endFirmwareUpdate();clockMs+=300;display.loop(state);assert(flushes>updateFlushes);
     }
 }
 '''
@@ -140,9 +151,12 @@ class DisplayManagerTests(unittest.TestCase):
             work = pathlib.Path(folder)
             for name in ('display_manager.h', 'display_manager.cpp'):
                 shutil.copyfile(ROOT / 'src' / name, work / name)
+            shutil.copyfile(ROOT/'include/update_screen.h',work/'update_screen.h')
+            shutil.copyfile(ROOT/'include/lcd_wake_gesture.h',work/'lcd_wake_gesture.h')
             (work / 'shim.h').write_text(SHIM)
             for name in ('Arduino.h', 'Wire.h', 'Adafruit_GFX.h', 'Adafruit_SSD1306.h',
-                         'Adafruit_SH110X.h', 'app_state.h', 'settings_schema.h'):
+                         'Adafruit_SH110X.h', 'app_state.h', 'settings_schema.h',
+                         'shared_i2c.h','storage_backend.h','device_log.h','panel_display.h','panel_dashboard.h'):
                 (work / name).write_text('#include "shim.h"\n')
             (work / 'main.cpp').write_text(MAIN)
             (work / 'build.cmd').write_text(

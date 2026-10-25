@@ -356,6 +356,7 @@ BatteryMonitor* batteryMonitor = nullptr;
 DisplayManager* displayManager = nullptr;
 AudioPlayerType* audioPlayer = nullptr;
 OtaManager* otaManager = nullptr;
+bool firmwareRestartScheduled=false;
 MqttManager* mqttManager = nullptr;
 WebServerManager* webServer = nullptr;
 SoundEffectsManager* soundEffects = nullptr;
@@ -2094,6 +2095,11 @@ void requestWebUiLockSequence() {
 }
 
 void requestRestartSequence(const String& reason, bool factoryResetAfterRestart) {
+    if(reason=="ota"){
+        // Keep the update screen and released audio/LVGL resources until reset.
+        // A shutdown melody would reallocate a decoder during finalization.
+        firmwareRestartScheduled=true;scheduleReboot(250);return;
+    }
     runtimeAudio.restartPending = true;
     runtimeAudio.restartFactoryReset = factoryResetAfterRestart;
     runtimeAudio.restartReason = reason;
@@ -2902,14 +2908,24 @@ void publishOtaStateIfNeeded(const AppStateSnapshot& snapshot) {
     mqttManager->publishState();
 }
 
-void pumpOtaDisplayProgress() {
-    if (appState == nullptr || displayManager == nullptr) {
-        return;
+#include "firmware_update_gate.h"
+FirmwareUpdateGate firmwareUpdateGate;
+bool firmwareResourcesHeld=false,firmwareMqttWasConnected=false;
+bool requestFirmwareUpdateResources(String& error){
+    if(storageWriteBlocked(StorageTarget::Sd)||storageWriteBlocked(StorageTarget::Flash)){
+        error="Finish the active storage transfer before updating firmware";return false;
     }
-    const AppStateSnapshot snapshot = appState->snapshot();
-    displayManager->loop(snapshot);
-    publishOtaStateIfNeeded(snapshot);
+    if(!firmwareUpdateGate.request()){error="Firmware update preparation is busy";return false;}
+    const uint32_t started=millis();
+    // AsyncTCP is watchdog monitored. Never block it for a long teardown.
+    while(firmwareUpdateGate.state()==FirmwareUpdateGate::Requested && millis()-started<3000)delay(5);
+    if(firmwareUpdateGate.state()==FirmwareUpdateGate::Ready)return true;
+    firmwareUpdateGate.cancel();
+    error="Unable to prepare firmware update resources; no flash write started";return false;
 }
+// Called from AsyncTCP/network workers. They must never enter LVGL or touch
+// panel memory while loopTask is drawing/tearing down its widgets.
+void pumpOtaDisplayProgress() {}
 
 bool initializeRuntimeObjects() {
     if (appState == nullptr) {
@@ -4364,6 +4380,7 @@ void setup() {
     soundEffects->begin(*settings);
     otaManager->begin(*settings, *appState);
     otaManager->setRestartHandler(handleOtaRestartRequest);
+    otaManager->setPrepareTransferCallback(requestFirmwareUpdateResources);
     refreshRollbackStateInOtaManager();
     otaManager->setProgressCallback(pumpOtaDisplayProgress);
 
@@ -4882,6 +4899,47 @@ void loop() {
     }
 
     const unsigned long now = millis();
+    if(!firmwareResourcesHeld && !otaManager->isFirmwareTransferActive() &&
+       (firmwareUpdateGate.state()==FirmwareUpdateGate::Cancelled || firmwareUpdateGate.state()==FirmwareUpdateGate::Failed))firmwareUpdateGate.reset();
+    if(otaManager->isFirmwareTransferActive() && firmwareUpdateGate.state()==FirmwareUpdateGate::Idle)firmwareUpdateGate.request();
+    if(firmwareUpdateGate.state()==FirmwareUpdateGate::Requested){
+        firmwareResourcesHeld=true;
+        applyCpuFrequencyPolicy();
+        // No saved Start/Stop modes are changed: suspension is exclusive to OTA.
+        const bool logicReady=logicDevice.prepareForUpdate();
+        motorController.prepareForRestart();buzzerMelody.stop();
+#if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO) && !defined(APP_DISABLE_WEB_UI)
+        stopSpkMediaForUpdate();
+#endif
+        audioPlayer->releaseResourcesForUpdate();
+#ifndef APP_DISABLE_AUDIO
+        if(LedMicrophone::commands())LedMicrophone::configure(LedMicrophone::Config{});
+#endif
+        firmwareMqttWasConnected=mqttManager->isConnected();
+        if(firmwareMqttWasConnected){String ignored;mqttManager->requestDisconnect(ignored);}
+#if APP_HAS_ONBOARD_PANEL && !defined(APP_DISABLE_WEB_UI)
+        webServer->releasePanelCaches();
+#endif
+        const bool displayReady=displayManager->beginFirmwareUpdate();
+        firmwareUpdateGate.acknowledge(logicReady && displayReady);
+        DebugLog.printf("[ota] exclusive update ready=%u heap=%u largest=%u\n",logicReady&&displayReady,ESP.getFreeHeap(),ESP.getMaxAllocHeap());
+    }
+    if(firmwareResourcesHeld){
+        // Keep the network transport, watchdog, status API and progress only.
+        // GPIO, storage scans, Logics, audio, LVGL, metrics and MQTT polling
+        // cannot compete with a partition write or recreate released buffers.
+        if(otaManager->isFirmwareTransferActive() || firmwareRestartScheduled){
+            displayManager->firmwareUpdateProgress(appState->firmwareUpdatePercent());
+            otaManager->loop();
+            if(firmwareRestartScheduled && rebootRequested && static_cast<long>(millis()-rebootAt)>=0){DebugLog.service(true);ESP.restart();}
+            delay(5);return;
+        }
+        displayManager->endFirmwareUpdate();logicDevice.resumeAfterUpdate();
+        audioPlayer->setEqualizer(settings->audio.equalizerPreset,settings->audio.equalizerLowDb,settings->audio.equalizerPresenceDb,settings->audio.equalizerHighDb);
+        if(firmwareMqttWasConnected){String ignored;mqttManager->requestConnect(ignored);}
+        firmwareResourcesHeld=false;firmwareUpdateGate.reset();runtimeStateSnapshotInitialized=false;
+        DebugLog.println("[ota] update ended without reboot; saved interface and Logics restored");
+    }
     uint32_t audioWorkAt = micros();
     static uint32_t lastAudioWorkReport=0;
     auto traceAudioWork = [&](const char* section) {

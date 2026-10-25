@@ -503,6 +503,17 @@ void LogicDevice::shuttingDown() {
     shutdown_=true;if(mode_=="playing")runtime_.lifecycle("shutting_down");runtime_.suspend();gpio_.reset();
     if(!LedArrays::shutdown())Serial.println("[led] Shutdown frame transmission timed out");
 }
+bool LogicDevice::prepareForUpdate(){
+    if(!mutex_||xSemaphoreTake(mutex_,pdMS_TO_TICKS(1000))!=pdTRUE)return false;
+    updating_=true;stopOwnedOutputs();gpio_.reset();runtime_.releaseForUpdate();polled_=false;
+    LedArrays::shutdown();
+    xSemaphoreGive(mutex_);return true;
+}
+void LogicDevice::resumeAfterUpdate(){
+    if(!mutex_||xSemaphoreTake(mutex_,pdMS_TO_TICKS(1000))!=pdTRUE)return;
+    runtime_.restoreAfterUpdate();updating_=false;polled_=false;arrayHelpers_="";
+    xSemaphoreGive(mutex_);
+}
 
 bool LogicDevice::persist(JsonVariantConst graph,const std::string& mode,String& error) {
     JsonDocument record;record["source"]=source_;record["mode"]=mode;

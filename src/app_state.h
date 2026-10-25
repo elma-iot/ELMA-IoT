@@ -109,6 +109,7 @@ class AppState {
     void setLastError(const String& lastError);
     void setFreeHeap(uint32_t freeHeap);
     AppStateSnapshot snapshot() const;
+    uint8_t firmwareUpdatePercent() const;
     void toJson(JsonObject root) const;
     bool appendPlaybackSummary(JsonObject root) const;
 

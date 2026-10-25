@@ -114,6 +114,40 @@ bool PanelDisplay::drawColor(int x,int y,int width,int height,uint8_t* colors) {
     return ok;
 }
 
+bool PanelDisplay::beginUpdate(){
+    if(update_)return true;
+    releaseTextBuffer();
+    update_.reset(new(std::nothrow) PanelUpdate());
+    if(!update_||!update_->allocate()){update_.reset();return false;}
+#if APP_ROTARY_HMI
+    update_->render(0,millis(),true);
+    // Preserve the fitted controller's working initialization and exact bus
+    // timing. Replace only scanout; no PSRAM framebuffer or flash ISR reads.
+    auto* lcd=board_->getLCD();
+    auto* bus=static_cast<esp_panel::drivers::BusRGB*>(lcd->getBus());
+    auto config=std::get<esp_panel::drivers::BusRGB::RefreshPanelFullConfig>(bus->getConfig().refresh_panel);
+    if(!lcd->del()||!update_->beginRgb(config)){update_.reset();return false;}
+#endif
+    return true;
+}
+void PanelDisplay::endUpdate(){update_.reset();}
+void PanelDisplay::updateProgress(unsigned percent,uint32_t now){
+    if(!update_||!update_->render(percent,now,APP_ROTARY_HMI))return;
+#if !APP_ROTARY_HMI
+    const uint8_t* pixels=update_->pixels();
+    for(int y=0;y<kPanelHeight;++y){
+        auto* row=reinterpret_cast<uint16_t*>(line_);
+        for(int x=0;x<kPanelWidth;++x){
+            const int sx=x/2,sy=y/2;
+            const bool lit=pixels[sy*((PanelUpdate::width+7)/8)+(sx>>3)]&(0x80>>(sx&7));
+            const uint16_t color=!lit?0:UpdateScreen::progressPixel(sx,sy,PanelUpdate::width,PanelUpdate::height)?UpdateScreen::blue:0xffff;
+            row[x]=(color>>8)|(color<<8); // SPI panel's LV_COLOR_16_SWAP wire order.
+        }
+        if(!drawColor(0,y,kPanelWidth,1,line_))break;
+    }
+#endif
+}
+
 bool PanelDisplay::readRawTouch(int16_t &x, int16_t &y) {
 #if APP_SUNTON_PANEL
     return board_ && board_->point(x,y);

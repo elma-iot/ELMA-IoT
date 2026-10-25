@@ -43,6 +43,9 @@ class DisplayManager {
     void markActivity();
     void powerOff();
     void loop(const AppStateSnapshot& state);
+    bool beginFirmwareUpdate();
+    void firmwareUpdateProgress(uint8_t percent);
+    void endFirmwareUpdate();
 #if APP_SUNTON_PANEL == 3
     void quietForDiagnostics(bool dark);
     uint8_t presentationState()const{return presentation_.load(std::memory_order_acquire);}
@@ -53,6 +56,7 @@ class DisplayManager {
 
   private:
     bool panelBootAnimationPending_=true;
+    bool firmwareUpdate_=false;
 #if APP_SUNTON_PANEL == 3
     std::atomic<uint8_t> presentation_{0}; // low bits: 0 web, 1 LCD, 2 LCD pending; bit 2 enabled.
     std::atomic<bool> webPresentationRequested_{false},lcdPresentationRequested_{false};

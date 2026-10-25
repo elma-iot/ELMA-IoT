@@ -17,6 +17,8 @@ public:
     bool configurePeripheralPins(const SettingsBundle& settings);
     void loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs = 100);
     void shuttingDown();
+    bool prepareForUpdate();
+    void resumeAfterUpdate();
     bool request(JsonVariantConst command, JsonDocument& response, String& error);
     void snapshot(JsonDocument& response, bool graph);
     void ledSnapshot(JsonObject response);

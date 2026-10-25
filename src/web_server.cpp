@@ -1077,6 +1077,7 @@ void WebServerManager::begin(
     // The route-level checks also cover streaming upload callbacks, which run
     // before middleware. Middleware protects future API handlers by default.
     server_.addMiddleware([this](AsyncWebServerRequest* request,ArMiddlewareNext next){
+        if(gateFirmwareTransfer(request))return;
 #if APP_SUNTON_PANEL == 3
         suntonWebBoost();
         if(gatePresentation(request))return;
@@ -1108,6 +1109,7 @@ void WebServerManager::begin(
 }
 
 bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
+    if(gateFirmwareTransfer(request))return false;
 #if APP_SUNTON_PANEL == 3
     suntonWebBoost();
     // Upload/body callbacks run before server middleware. Gate them before
@@ -1132,6 +1134,13 @@ bool WebServerManager::ensureAuthorized(AsyncWebServerRequest* request) {
     if(allowed)return true;
     request->requestAuthentication();
     return false;
+}
+
+bool WebServerManager::gateFirmwareTransfer(AsyncWebServerRequest* request){
+    if(!otaManager_||!otaManager_->isFirmwareTransferActive())return false;
+    const String path=request->url();
+    if(path=="/api/firmware/upload" || path.startsWith("/api/firmware/upload/") || (path=="/api/status" && request->method()==HTTP_GET))return false;
+    request->send(503,"application/json","{\"error\":\"Firmware update in progress; other operations are temporarily suspended.\",\"updating\":true}");return true;
 }
 
 bool WebServerManager::rejectIfWebUiLocked(AsyncWebServerRequest* request) {
@@ -1279,6 +1288,12 @@ void WebServerManager::registerApiRoutes() {
         }
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
+        if(otaManager_->isFirmwareTransferActive()){
+            root["firmware"]["version"]=APP_VERSION;
+            root["system"]["updating"]=true;
+            otaManager_->appendStatusJson(root["ota"].to<JsonObject>());
+            sendJson(request,doc);return;
+        }
         if(security_.locked()) {
             const auto state=appState_->snapshot();
             root["device"]["deviceName"]=state.device.deviceName;root["device"]["friendlyName"]=state.device.friendlyName;

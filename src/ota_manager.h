@@ -16,6 +16,7 @@ class OtaManager {
     void begin(const SettingsBundle& settings, AppState& appState);
     void applySettings(const SettingsBundle& settings);
     void setProgressCallback(void (*callback)());
+    void setPrepareTransferCallback(bool (*callback)(String&)){prepareTransferCallback_=callback;}
     void setRestartHandler(RestartHandler handler);
     void setRollbackState(bool pendingVerify, const String& pendingVersion, const String& rolledBackVersion, const String& rollbackReason);
     String pendingInstallVersion() const;
@@ -108,6 +109,7 @@ class OtaManager {
     std::vector<ReleaseInfo> releaseCache_;
     unsigned long releasesFetchedAtMs_ = 0;
     void (*progressCallback_)() = nullptr;
+    bool (*prepareTransferCallback_)(String&) = nullptr;
     RestartHandler restartHandler_ = nullptr;
     uint8_t localUploadHeader_[24] = {0};
 
