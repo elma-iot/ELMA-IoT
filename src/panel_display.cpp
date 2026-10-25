@@ -121,7 +121,7 @@ bool PanelDisplay::beginUpdate(){
     update_.reset(new(std::nothrow) PanelUpdate());
     if(!update_||!update_->allocate()){update_.reset();return false;}
 #if APP_ROTARY_HMI
-    update_->render(0,millis(),true);
+    update_->render(0,millis());
     // Preserve the fitted controller's working initialization and exact bus
     // timing. Replace only scanout; no PSRAM framebuffer or flash ISR reads.
     auto* lcd=board_->getLCD();
