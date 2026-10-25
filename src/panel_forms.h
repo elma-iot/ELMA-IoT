@@ -38,9 +38,8 @@ static const PanelFormField panelFormFields[]={
  {"oled","Backlight (%)","oled/brightness","slider","",0,100},
  {"oled","Rotation","oled/rotation","select","0\n90\n180\n270",0,0},
  {"oled","Dim timeout (s, 0=never)","oled/dimTimeoutSeconds","number","",0,3600},
-#if APP_SUNTON_PANEL == 3
+ {"oled","Enable display timeout","oled/timeoutEnabled","switch","",0,0},
  {"oled","Screen off (s, 0=never)","oled/screenTimeoutSeconds","number","",0,3600},
-#endif
  {"oled","Touchscreen enabled","oled/touchEnabled","switch","",0,0},
  {"oled","Interface","oled/interfaceMode","select","lvgl\ntext",0,0},
  {"playback","Remember last played","audio/rememberLastPlayed","switch","",0,0},

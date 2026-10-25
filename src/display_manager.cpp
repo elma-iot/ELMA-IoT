@@ -6,6 +6,9 @@
 #include "storage_backend.h"
 #include "device_log.h"
 #include "update_screen.h"
+#include "update_artwork.h"
+#include "display_idle_policy.h"
+#include "external_spi_displays.h"
 #if APP_HAS_ONBOARD_PANEL
 #include "rotary_hmi.h"
 #endif
@@ -49,6 +52,7 @@ void DisplayManager::begin(const OledSettings& settings) {
 
 void DisplayManager::applySettings(const OledSettings& settings) {
     SharedI2c::Guard bus; if(!bus)return;
+    setTimeoutSleeping(false);
 #if APP_SUNTON_PANEL == 3
     // Changing brightness/timers while the web owns the UI must not allocate LCD widgets.
     if(screenOff_ && panel_ && settings.enabled && settings_.enabled){
@@ -82,7 +86,7 @@ void DisplayManager::applySettings(const OledSettings& settings) {
     dimmed_ = false;
     scrollOffset_ = 0;
     lastActivityAt_ = millis();
-    if (!settings_.enabled || !isOledMode()) {
+    if (!settings_.enabled || !isOledMode() || settings_.displayType=="spi") {
 #if APP_SUNTON_PANEL == 3
         lv_mem_buf_free_all();presentation_.store(0,std::memory_order_release);
 #endif
@@ -159,6 +163,7 @@ void DisplayManager::setBootMessage(const String& message) {
 }
 
 void DisplayManager::showTemporaryCenterText(const String& message, unsigned long durationMs) {
+    ExternalDisplays::temporaryText(message,durationMs);
 #if APP_ROTARY_HMI
     if(RoundHmi::available())RoundHmi::temporaryText(message,durationMs);
 #endif
@@ -170,6 +175,7 @@ void DisplayManager::showTemporaryCenterText(const String& message, unsigned lon
 
 void DisplayManager::markActivity() {
     lastActivityAt_ = millis();
+    setTimeoutSleeping(false);
 #if APP_SUNTON_PANEL == 3
     setScreenOff(false);
 #endif
@@ -177,6 +183,7 @@ void DisplayManager::markActivity() {
 }
 
 void DisplayManager::powerOff() {
+    ExternalDisplays::powerOff();
     SharedI2c::Guard bus; if(!bus)return;
 #if APP_HAS_ONBOARD_PANEL
     if (panel_) panel_->brightness(0);
@@ -385,6 +392,7 @@ void DisplayManager::quietForDiagnostics(bool dark) {
 #endif
 void DisplayManager::loop(const AppStateSnapshot& state) {
     if(firmwareUpdate_)return; // The dedicated update renderer owns the panel.
+    ExternalDisplays::loop(state);
 #if APP_SUNTON_PANEL == 3
     if(diagnosticQuietUntil_){
         if(int32_t(diagnosticQuietUntil_-millis())>0)return;
@@ -393,6 +401,12 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     }
 #endif
     SharedI2c::Guard bus(0); if(!bus)return;
+    if(settings_.displayType=="oled"){
+        const String content=centerTextForState(state)+"|"+state.network.ip+"|"+String(state.battery.voltage,2)+"|"+String(state.network.mqttConnected)+"|"+state.system.lastError;
+        if(content!=observedDisplayContent_){observedDisplayContent_=content;markActivity();}
+        if(displayTimeoutDue(millis(),lastActivityAt_,settings_.timeoutEnabled,settings_.screenTimeoutSeconds))setTimeoutSleeping(true);
+        if(timeoutSleeping_)return;
+    }
 #if APP_SUNTON_PANEL == 3
     if(webPresentationRequested_.exchange(false))setScreenOff(true);
     if(lcdPresentationRequested_.exchange(false))lcdWakeRequested_=true;
@@ -409,7 +423,7 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
         }
         return; // A wake gesture must not activate the covered control.
     }
-    if(panel_ && settings_.screenTimeoutSeconds && millis()-lastActivityAt_>=settings_.screenTimeoutSeconds*1000UL){
+    if(panel_ && displayTimeoutDue(millis(),lastActivityAt_,settings_.timeoutEnabled,settings_.screenTimeoutSeconds)){
         setScreenOff(true);return;
     }
 #endif
@@ -417,12 +431,14 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     if(RoundHmi::available()) {
         RoundHmi::systemState(state,panelSnapshot_,panelCommand_);
         RoundHmi::networkStatus(state.network.wifiConnected,state.network.mqttConnected);RoundHmi::loop();if(RoundHmi::takeActivity())markActivity();
+        setTimeoutSleeping(displayTimeoutDue(millis(),lastActivityAt_,settings_.timeoutEnabled,settings_.screenTimeoutSeconds));
         setDimmed(settings_.dimTimeoutSeconds>0 && millis()-lastActivityAt_>settings_.dimTimeoutSeconds*1000UL);return;
     }
     if(dashboard_) {
         const bool temporary=temporaryCenterTextUntilMs_ && static_cast<int32_t>(temporaryCenterTextUntilMs_-millis())>0;
         dashboard_->loop(state,panelSnapshot_,panelCommand_,temporary?temporaryCenterText_:String(""));
         if(dashboard_->touched())markActivity();
+        setTimeoutSleeping(displayTimeoutDue(millis(),lastActivityAt_,settings_.timeoutEnabled,settings_.screenTimeoutSeconds));
         setDimmed(settings_.dimTimeoutSeconds>0 && millis()-lastActivityAt_>settings_.dimTimeoutSeconds*1000UL);
         return;
     }
@@ -444,11 +460,6 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     }
     lastDrawAt_ = now;
 
-#if APP_SUNTON_PANEL != 3
-    if (state.playback.state == "playing" || state.network.wifiConnected || state.network.apMode) {
-        lastActivityAt_ = now;
-    }
-#endif
     const bool shouldDim = settings_.dimTimeoutSeconds > 0 && (now - lastActivityAt_) > (settings_.dimTimeoutSeconds * 1000UL);
     setDimmed(shouldDim);
 
@@ -499,10 +510,12 @@ void DisplayManager::loop(const AppStateSnapshot& state) {
     flushDisplay();
 }
 
-bool DisplayManager::available() const {return isEnabled();}
+bool DisplayManager::available() const {return isEnabled()||ExternalDisplays::available();}
 bool DisplayManager::beginFirmwareUpdate(){
     if(firmwareUpdate_)return true;
     firmwareUpdate_=true;
+    setTimeoutSleeping(false);
+    if(!ExternalDisplays::prepareUpdate())return false;
 #if APP_HAS_ONBOARD_PANEL
     RoundHmi::prepareForUpdate();dashboard_.reset();lv_mem_buf_free_all();
     if(panel_){
@@ -515,21 +528,18 @@ bool DisplayManager::beginFirmwareUpdate(){
 }
 void DisplayManager::firmwareUpdateProgress(uint8_t percent){
     if(!firmwareUpdate_)return;
+    ExternalDisplays::progress(percent);
 #if APP_HAS_ONBOARD_PANEL
     if(panel_){panel_->updateProgress(percent,millis());return;}
 #endif
     if(!isEnabled() || millis()-lastDrawAt_<200)return;
     lastDrawAt_=millis();auto* display=gfx();if(!display)return;
-    clearDisplay();display->setTextWrap(false);display->setTextColor(SSD1306_WHITE);display->setTextSize(1);
-    const char* title="Updating";display->setCursor((display->width()-48)/2,display->height()/2-12);display->print(title);
-    char value[8];snprintf(value,sizeof(value),"%u%%",UpdateScreen::percent(percent));
-    display->setCursor((display->width()-strlen(value)*6)/2,display->height()/2);display->print(value);
-    display->drawRect(4,display->height()-10,display->width()-8,7,1);
-    display->fillRect(5,display->height()-9,(display->width()-10)*UpdateScreen::percent(percent)/100,5,1);flushDisplay();
+    UpdateScreen::artwork(*display,percent,millis(),false);flushDisplay();
 }
 void DisplayManager::endFirmwareUpdate(){
     if(!firmwareUpdate_)return;
     firmwareUpdate_=false;
+    ExternalDisplays::endUpdate();
 #if APP_HAS_ONBOARD_PANEL
     // A cancelled/failed update returns to the saved interface. RGB scanout was
     // replaced, so recreate the driver before rebuilding the normal widgets.
@@ -537,8 +547,19 @@ void DisplayManager::endFirmwareUpdate(){
 #endif
     applySettings(settings_);
 }
+void DisplayManager::configureExternalDisplays(const SettingsBundle& settings){ExternalDisplays::configure(settings);}
+void DisplayManager::setTimeoutSleeping(bool sleeping){
+    if(timeoutSleeping_==sleeping)return;timeoutSleeping_=sleeping;
+    if(ssd1306_)ssd1306_->ssd1306_command(sleeping?SSD1306_DISPLAYOFF:SSD1306_DISPLAYON);
+    if(sh1106_)sh1106_->oled_command(sleeping?SH110X_DISPLAYOFF:SH110X_DISPLAYON);
+#if APP_HAS_ONBOARD_PANEL
+    if(panel_){panel_->sleep(sleeping);panel_->brightness(sleeping?0:settings_.brightness);}
+#endif
+    if(!sleeping){lastSignature_="";lastDrawAt_=0;}
+}
 bool DisplayManager::clearLogicText() {
-    if(!isEnabled())return false;
+    ExternalDisplays::temporaryText("",0);
+    if(!isEnabled())return ExternalDisplays::available();
 #if APP_ROTARY_HMI
     if(RoundHmi::available()){RoundHmi::temporaryText("",0);markActivity();return true;}
 #endif
@@ -563,4 +584,6 @@ void DisplayManager::loop(const AppStateSnapshot&) {}
 bool DisplayManager::beginFirmwareUpdate(){return true;}
 void DisplayManager::firmwareUpdateProgress(uint8_t){}
 void DisplayManager::endFirmwareUpdate(){}
+void DisplayManager::configureExternalDisplays(const SettingsBundle&){}
+void DisplayManager::setTimeoutSleeping(bool){}
 #endif

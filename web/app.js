@@ -1,3 +1,5 @@
+import {BOARD_DEFAULTS} from './modules/board-defaults.js';
+import {createSpiDisplayControls} from './modules/spi-display-controls.js';
 import { fixedOnboardProfile } from "./modules/sunton-capabilities.js";
 import {fileCrc32, retryTransfer, storageChecksum} from './modules/storage-integrity.js';
 import {createRobotTab} from "./modules/robot-tab.js";
@@ -293,7 +295,7 @@ const PERIPHERAL_DISPLAY_PROFILE_OPTIONS = [
   { value: "viewe-onboard-lcd", label: "Onboard LCD + touch" },
   { value: "none", label: "None" },
   { value: "i2c-oled", label: "I2C OLED" },
-  { value: "spi-tft", label: "SPI TFT" },
+  { value: "spi-tft", label: "SPI LCD / OLED" },
   { value: "waveshare-screen", label: "Waveshare Screen" },
   { value: "custom", label: "Custom" },
 ];
@@ -7890,6 +7892,7 @@ function assignPeripheralDefaults(groupKey, profileValue, index, realDefinitions
       const current=peripheralHelperBindingValue(groupKey,index,signal);
       // BNO055 polling needs only SDA/SCL; do not invent an interrupt wire.
       if(groupKey==='sensor' && profileValue==='bno055' && signal==='INT' && current==='')continue;
+      if(groupKey==='display' && profileValue==='spi-tft' && ['RST','BL'].includes(signal) && current==='')continue;
       if(current!==''&&(previous===undefined||state.settingsLoading)){occupied.add(Number(current));continue;}
       const options=helperBindingSignalOptionsFor(groupKey,index,signal);
       const shared=peripheralGpioAssignments().find(a=>a.pin>=0&&shareI2cRoles(`ui.${groupKey}.${index}.${signal.toLowerCase()}`,a.key)&&options.some(o=>!o.disabled&&Number(o.value)===a.pin));
@@ -7951,6 +7954,10 @@ function renderPeripheralSelectionBindingGroup(container, groupKey, profileValue
   }
   for (const signalLabel of helperSignalsForProfile) {
     appendHelperPeripheralBindingControl(container, groupKey, index, signalLabel);
+  }
+  if(groupKey==='display'&&profileValue==='spi-tft'){
+    const values=state.peripheralHelperBindings['display:'+index] ||= {};
+    container.append(createSpiDisplayControls({values,onChange:patch=>{Object.assign(values,patch);queueSettingsSave(150);}}));
   }
   if(I2C_PROFILES[groupKey+':'+profileValue] && !(groupKey==='display'&&index===0&&profileValue==='i2c-oled'))
     appendHelperPeripheralBindingControl(container,groupKey,index,'I2C_ADDRESS');
@@ -8421,7 +8428,7 @@ function peripheralDiagramTemplatePins(groupKey, profileValue) {
         return ["CTRL", "VCC", "GND"];
       }
       if (profile.includes("spi-tft")) {
-        return ["SCK", "MOSI", "MISO", "CS", "DC", "RST", "BL", "VCC", "GND"];
+        return ["SCK", "MOSI", "CS", "DC", "RST", "BL", "VCC", "GND"];
       }
       return peripheralDiagramBindingPins("display").length ? peripheralDiagramBindingPins("display") : ["SDA", "SCL", "RST", "VCC", "GND"];
     case "storage":
@@ -9700,6 +9707,7 @@ function statusLedRoleLabel(settings = state.settings, status = state.status) {
 
 function boardDefaultStatusLedPin(boardProfile = activeGpioBoardProfile()) {
   const board=String(boardProfile || "").trim().toLowerCase();
+  if(BOARD_DEFAULTS[board]?.statusLedPin !== undefined)return BOARD_DEFAULTS[board].statusLedPin;
   if(board==="esp32-c3")return 8;
   return WS_STATUS_LED_BOARD_PROFILES.has(board) ? 48 : 22;
 }
@@ -9728,20 +9736,21 @@ function populateStatusLedPinOptions(settings = state.settings) {
   const boardProfile = activeGpioBoardProfile();
   const defaultBoardPin = boardDefaultStatusLedPin(boardProfile);
   const persistedPin = Number(settings?.device?.statusLedPin ?? NaN);
-  const currentPin = Number(elements.statusLedPin.value || persistedPin || NaN);
+  const currentPin = Number(elements.statusLedPin.value || (Number.isFinite(persistedPin) ? persistedPin : NaN));
   const shouldPreferBoardDefault =
     Boolean(elements.gpioBoardAutodetect?.checked ?? true)
     && WS_STATUS_LED_BOARD_PROFILES.has(boardProfile)
     && (!Number.isFinite(currentPin) || currentPin === 22 || currentPin === 10 || currentPin === 21);
-  const selectedPin = String(shouldPreferBoardDefault ? defaultBoardPin : (elements.statusLedPin.value || settings?.device?.statusLedPin || ""));
+  const selectedPin = String(shouldPreferBoardDefault ? defaultBoardPin : (elements.statusLedPin.value || (settings?.device?.statusLedPin ?? defaultBoardPin)));
   const reservedPins = new Set(currentI2sPins());
   for (const pin of currentSdPins(settings)) {
     reservedPins.add(pin);
   }
-  fillBoardPinSelect(elements.statusLedPin, selectedPin, true, reservedPins);
+  fillBoardPinSelect(elements.statusLedPin, selectedPin === '255' ? '-1' : selectedPin, true, reservedPins, -1);
+  const ledHelp=document.getElementById('statusLedPinHelp');if(ledHelp)ledHelp.textContent=boardProfile.startsWith('viewe-uedx48480021-md80et')?'The module power LED D1 is wired to 3.3 V and cannot be controlled. GPIO4 is exposed for an external status LED; Disabled is the default.':'Choose a valid status LED pin matching your wiring. Disabled turns off GPIO-controlled status indication.';
   const fallbackPins = activeChipFamily() === "esp32c3" ? [7, 6] : [23, 21];
-  fillBoardPinSelect(elements.statusLedGreenPin, String(elements.statusLedGreenPin?.value || settings?.device?.statusLedGreenPin || fallbackPins[0]), true, reservedPins);
-  fillBoardPinSelect(elements.statusLedBluePin, String(elements.statusLedBluePin?.value || settings?.device?.statusLedBluePin || fallbackPins[1]), true, reservedPins);
+  fillBoardPinSelect(elements.statusLedGreenPin, String(elements.statusLedGreenPin?.value || (settings?.device?.statusLedGreenPin ?? fallbackPins[0])), true, reservedPins, -1);
+  fillBoardPinSelect(elements.statusLedBluePin, String(elements.statusLedBluePin?.value || (settings?.device?.statusLedBluePin ?? fallbackPins[1])), true, reservedPins, -1);
   syncStatusLedTypeFields();
 }
 

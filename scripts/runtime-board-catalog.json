@@ -5185,16 +5185,36 @@
     },
     "gpio": [],
     "capabilities": {
-      "false:output": [],
-      "false:input": [],
-      "false:adc": [],
-      "false:touch": [],
-      "false:pull-input": [],
-      "true:output": [],
-      "true:input": [],
-      "true:adc": [],
-      "true:touch": [],
-      "true:pull-input": []
+      "false:output": [
+        4
+      ],
+      "false:input": [
+        4
+      ],
+      "false:adc": [
+        4
+      ],
+      "false:touch": [
+        4
+      ],
+      "false:pull-input": [
+        4
+      ],
+      "true:output": [
+        4
+      ],
+      "true:input": [
+        4
+      ],
+      "true:adc": [
+        4
+      ],
+      "true:touch": [
+        4
+      ],
+      "true:pull-input": [
+        4
+      ]
     }
   },
   "viewe-uedx48480021-md80et-st7701s": {
@@ -5213,16 +5233,36 @@
     },
     "gpio": [],
     "capabilities": {
-      "false:output": [],
-      "false:input": [],
-      "false:adc": [],
-      "false:touch": [],
-      "false:pull-input": [],
-      "true:output": [],
-      "true:input": [],
-      "true:adc": [],
-      "true:touch": [],
-      "true:pull-input": []
+      "false:output": [
+        4
+      ],
+      "false:input": [
+        4
+      ],
+      "false:adc": [
+        4
+      ],
+      "false:touch": [
+        4
+      ],
+      "false:pull-input": [
+        4
+      ],
+      "true:output": [
+        4
+      ],
+      "true:input": [
+        4
+      ],
+      "true:adc": [
+        4
+      ],
+      "true:touch": [
+        4
+      ],
+      "true:pull-input": [
+        4
+      ]
     }
   },
   "miniexco-v2": {

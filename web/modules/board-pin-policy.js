@@ -18,7 +18,9 @@ export function supportedBoard(board) {
 }
 export function chipPins(chip, output = false, board = "") {
   if(board==='esp32-3248s035c')return output?[21,22]:[21,22,35];
-  if (board.startsWith("viewe-uedx48480021-md80et")) return []; // Adapter GPIO mapping is unverified.
+  // Official MD80ET schematic: ADC-GPIO4 is exposed at J1/J2. Other pads
+  // belong to LCD/encoder/touch/USB/UART; the MD50 adapter mapping is separate.
+  if (board.startsWith("viewe-uedx48480021-md80et")) return [4];
   let pins = [];
   if (chip === "esp32") pins = [0,1,2,3,4,5,12,13,14,15,16,17,18,19,21,22,23,25,26,27,32,33,34,35,36,39];
   if (chip === "esp32s3") pins = [...Array.from({length:22}, (_,i)=>i), ...Array.from({length:16}, (_,i)=>i+33)];

@@ -46,6 +46,7 @@ class DisplayManager {
     bool beginFirmwareUpdate();
     void firmwareUpdateProgress(uint8_t percent);
     void endFirmwareUpdate();
+    void configureExternalDisplays(const SettingsBundle& settings);
 #if APP_SUNTON_PANEL == 3
     void quietForDiagnostics(bool dark);
     uint8_t presentationState()const{return presentation_.load(std::memory_order_acquire);}
@@ -57,6 +58,9 @@ class DisplayManager {
   private:
     bool panelBootAnimationPending_=true;
     bool firmwareUpdate_=false;
+    bool timeoutSleeping_=false;
+    String observedDisplayContent_;
+    void setTimeoutSleeping(bool sleeping);
 #if APP_SUNTON_PANEL == 3
     std::atomic<uint8_t> presentation_{0}; // low bits: 0 web, 1 LCD, 2 LCD pending; bit 2 enabled.
     std::atomic<bool> webPresentationRequested_{false},lcdPresentationRequested_{false};

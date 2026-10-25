@@ -7,7 +7,7 @@ function setup(raw=''){
   globalThis.document={getElementById:id=>controls.get(id),activeElement:null};
   const state={settings:{oled:{circularMenu:raw,brightness:83},wifi:{ssid:'private-network',password:'kept-private'},ui:{gpioBoardSelection:'viewe-uedx48480021-md80et'}}};
   let saves=0;
-  const tab=createDisplayTab({state,elements:{displayType:{value:'panel',addEventListener(){}}},namedField:()=>null,queueSettingsSave:()=>++saves});
+  const tab=createDisplayTab({state,elements:{displayType:{value:'panel',querySelector(){return null;},addEventListener(){}}},namedField:()=>null,queueSettingsSave:()=>++saves});
   tab.bindEvents();
   return {tab,state,controls,saves:()=>saves};
 }
@@ -26,4 +26,11 @@ test('fresh dashboard options create a valid bounded custom-menu fallback',()=>{
 test('round controls stay hidden for other board profiles',()=>{
   const {state,controls,tab}=setup();tab.updateDisplayModeUi();assert.equal(controls.get('roundSystemControls').hidden,false);
   state.settings.ui.gpioBoardSelection='esp32-s3-devkit-c1';tab.updateDisplayModeUi();assert.equal(controls.get('roundSystemControls').hidden,true);
+});
+
+test('zero keeps the round dashboard active',()=>{
+ const {state,controls,tab}=setup(JSON.stringify({schemaVersion:1,items:[{id:1}],systemTimeoutSeconds:0}));
+ tab.updateDisplayModeUi();assert.equal(controls.get('roundSystemTimeout').value,0);
+ controls.get('roundSystemTimeout').value='0';controls.get('roundSystemTimeout').events.change();
+ assert.equal(JSON.parse(state.settings.oled.circularMenu).systemTimeoutSeconds,0);
 });

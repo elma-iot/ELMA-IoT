@@ -146,13 +146,11 @@ void PanelDisplay::endUpdate(){update_.reset();}
 void PanelDisplay::updateProgress(unsigned percent,uint32_t now){
     if(!update_||!update_->render(percent,now,APP_ROTARY_HMI))return;
 #if !APP_ROTARY_HMI
-    const uint8_t* pixels=update_->pixels();
     for(int y=0;y<kPanelHeight;++y){
         auto* row=reinterpret_cast<uint16_t*>(line_);
+        update_->row(row,y);
         for(int x=0;x<kPanelWidth;++x){
-            const int sx=x/2,sy=y/2;
-            const bool lit=pixels[sy*((PanelUpdate::width+7)/8)+(sx>>3)]&(0x80>>(sx&7));
-            const uint16_t color=!lit?0:UpdateScreen::progressPixel(sx,sy,PanelUpdate::width,PanelUpdate::height)?UpdateScreen::blue:0xffff;
+            const uint16_t color=row[x];
             row[x]=(color>>8)|(color<<8); // SPI panel's LV_COLOR_16_SWAP wire order.
         }
         if(!drawColor(0,y,kPanelWidth,1,line_))break;

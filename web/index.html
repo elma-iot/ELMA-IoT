@@ -739,6 +739,7 @@
               <label>Display Type
                 <select id="displayType" form="settingsForm" name="oled.displayType">
                   <option value="oled">OLED</option>
+                  <option value="spi">SPI LCD / OLED</option>
                   <option value="wape">Wape Display</option>
                   <option value="panel">VIEWE onboard LCD</option>
                 </select>
@@ -747,13 +748,14 @@
             </div>
             <div id="oledModeSection">
             <label class="check"><input form="settingsForm" name="oled.enabled" type="checkbox"> Enable display</label>
+            <div id="spiDisplayControls" hidden></div>
             <div id="panelControls" hidden>
               <label>LCD interface<select form="settingsForm" name="oled.interfaceMode"><option value="lvgl">LVGL mobile interface</option><option value="text">Status / Logics text</option></select></label>
               <label>Backlight %<input form="settingsForm" name="oled.brightness" type="number" min="0" max="100"></label>
               <label class="check"><input form="settingsForm" name="oled.touchEnabled" type="checkbox"> CHSC6540 touchscreen</label>
               <div id="roundSystemControls" hidden>
                 <label class="check"><input id="roundSystemDashboard" type="checkbox"> Live round system dashboard</label>
-                <label>Return to UTC clock after seconds<input id="roundSystemTimeout" type="number" min="15" max="3600" value="60"></label>
+                <label>Return to UTC clock after seconds<input id="roundSystemTimeout" type="number" min="0" max="3600" value="60"></label>
                 <small>Turn to browse, press to enter, hold to go back. Hold the knob for 15 seconds to reboot.</small>
               </div>
               <p>240 x 320 pixels; rotation below also rotates touch. LCD controls share the live web settings.</p>
@@ -820,7 +822,8 @@
               <label>Dim Timeout (s)
                 <input form="settingsForm" name="oled.dimTimeoutSeconds" type="number" min="0" max="3600">
               </label>
-              <label id="panelScreenTimeoutLabel" hidden>Screen off timeout (s, 0 = never)<input form="settingsForm" name="oled.screenTimeoutSeconds" type="number" min="0" max="3600"><small>Dim uses 50% brightness. Screen off sleeps the LCD until touched.</small></label>
+              <label id="displayTimeoutEnabledLabel" class="check"><input form="settingsForm" name="oled.timeoutEnabled" type="checkbox" checked> Enable display timeout</label>
+              <label id="panelScreenTimeoutLabel">Screen off timeout (s, 0 = always on)<input form="settingsForm" name="oled.screenTimeoutSeconds" type="number" min="0" max="3600"><small>OLEDs wake on displayed-content changes or alerts. Zero keeps the display active.</small></label>
             </div>
             <div class="row gpio-remap-source">
               <label>SDA Pin
@@ -866,7 +869,7 @@
               <span class="gpio-controls-field-label">Status LED GPIO</span>
               <div class="gpio-controls-field-main">
                 <select id="statusLedPin" form="settingsForm" name="device.statusLedPin" aria-label="Status LED GPIO"></select>
-                <small>Saved status output, including assignments not shown on the board diagram. Choose a valid pin matching your wiring.</small>
+                <small id="statusLedPinHelp">Saved status output, including assignments not shown on the board diagram. Choose a valid pin matching your wiring.</small>
               </div>
 
             </label>

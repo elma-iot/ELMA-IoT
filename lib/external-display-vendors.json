@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "libraries": [
+    {
+      "name": "Adafruit-ST7735-Library",
+      "repository": "https://github.com/adafruit/Adafruit-ST7735-Library",
+      "commit": "d568339f957380ceb05dda57f6712c2704a6394f",
+      "sha256": {
+        "Adafruit_ST7735.cpp": "eea457fb4211a694400f1d6985785e52dda32869140c4171d47b9dd0c16e5e1f",
+        "Adafruit_ST7735.h": "12cfc1befc01a0bdf92952ca71b87bcaa9c75b1a5257f923505f66f09460cce6",
+        "Adafruit_ST7789.cpp": "6036da923e50ef41e7ef69bfa37037567fd677faa8cb721aad6f5591097177b1",
+        "Adafruit_ST7789.h": "c9c05f66905c590d6ff24f56c61f37e9fc09a1da9c489654ebbb436bea9b2347",
+        "Adafruit_ST7796S.cpp": "cfb8996c55d39ffc39221091dbe9c55ee3a5474aa801932d7d54682125144780",
+        "Adafruit_ST7796S.h": "8364d90cd8a0706c28d86dfbf05a6c91a695762cc4ff344b16aa688b74b5907f",
+        "Adafruit_ST77xx.cpp": "fee9c09974591cd4b081774589d76c767b25bb44952443bb83b6ff37ead7a5e9",
+        "Adafruit_ST77xx.h": "fc923d7c6e99a93a2d40102dfb0bff630a2e6fb95dcc646b06db79da015f0fc5",
+        "CMakeLists.txt": "b33fd0dd7546ac1dc8c420e1b469f90680495968b89047c199e3704395bfe4e7",
+        "README.txt": "750db5c0ae93f14a8cedd7be6c8cec22556b691e68417f51f55542bff30e2742",
+        "library.properties": "435e3eebc27f8e450fba01bb4107f767c0b190e87e07c1603214c677ee24d3a1"
+      }
+    },
+    {
+      "name": "Adafruit_ILI9341",
+      "repository": "https://github.com/adafruit/Adafruit_ILI9341",
+      "commit": "1871d9597f0d67cd15e3a331b8952c5dd3d3c418",
+      "sha256": {
+        "Adafruit_ILI9341.cpp": "aa3a6374d7bac6f9af225c88ea68909c9f2b9b4576c70af3e9c6aadd961d4722",
+        "Adafruit_ILI9341.h": "239ca241a6530dd570f63bf44959da44541c2034af436b72e02d8196ff06465a",
+        "README.md": "90474fd9527bfba450d5dc753693e050565789ea16287e38f3f143a7d6ae64c9",
+        "library.properties": "d11c35af9bda327986be56934c5c60a330bc45bbe21efacf42c3eccde0989c9c"
+      }
+    },
+    {
+      "name": "Adafruit_GC9A01A",
+      "repository": "https://github.com/adafruit/Adafruit_GC9A01A",
+      "commit": "e742c29db8d4b84e1bbca16005aa7bfd59cf0b3c",
+      "sha256": {
+        "Adafruit_GC9A01A.cpp": "f89d019c9f27cfd7f4f747bbe8175b9d5735d47f5fcf9cbcc2709160039d7734",
+        "Adafruit_GC9A01A.h": "7c3612f20c81a81a491cf63aa758aa1936acff1b725b25a1b88a44f27a5e498e",
+        "README.md": "c4f6368328e7836bf5eeb98723cf1acd806be13daca7f841d85c6193b488718d",
+        "library.properties": "98388095813767d0710191c3ea78958f602ef9094a06138ab89f4efb753a14dd"
+      }
+    },
+    {
+      "name": "Adafruit-SSD1331-OLED-Driver-Library-for-Arduino",
+      "repository": "https://github.com/adafruit/Adafruit-SSD1331-OLED-Driver-Library-for-Arduino",
+      "commit": "b549bd95e4c707f2f961c64767c789de55606553",
+      "sha256": {
+        "Adafruit_SSD1331.cpp": "d68746979276e3c749a94274ef0b276148961c347531b00b0ea9793875e93922",
+        "Adafruit_SSD1331.h": "811bdd5bc1b1619349275ae946ccd32e9434c916e0da116292a6e50f42ca7a1c",
+        "README.md": "6b45cd9fdbf933ee3e24b1bf31158ef407dc196ea5239ebb8f5476c5ddcb58ad",
+        "library.properties": "81020b7bab27cb6708d13a37a1ac4cc369519517d96fbcc08ec859b61eb41a92",
+        "license.txt": "4b6bb6d827e9da638841bf575c6068b83aaaf0d9508e892d3ea27e2525b070e8"
+      }
+    },
+    {
+      "name": "Adafruit-SSD1351-library",
+      "repository": "https://github.com/adafruit/Adafruit-SSD1351-library",
+      "commit": "6105e64057d8022d3fdd42a8438a4564f8873bc0",
+      "sha256": {
+        "Adafruit_SSD1351.cpp": "e0d004beb44d44eac7fa3b85db0b00aa644fe6087c536263106e59b4ae381bad",
+        "Adafruit_SSD1351.h": "fd0a33109ea5fdedfecaae77485019ae401960f87d64e15a14134472c983cae9",
+        "README.md": "60ef471f6e9ecc653e1c639951fc648fa46228e564d1811168af3c93416f0008",
+        "library.properties": "d4e7f73e0eabc700d62df535453215fd1ebf79e2741fc34b30ce9008c02ad618",
+        "license.txt": "4b6bb6d827e9da638841bf575c6068b83aaaf0d9508e892d3ea27e2525b070e8"
+      }
+    }
+  ]
+}

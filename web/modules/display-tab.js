@@ -1,4 +1,5 @@
 import {ONBOARD_BOARDS} from "./onboard-boards.js";
+import {createSpiDisplayControls} from './spi-display-controls.js';
 export function createDisplayTab({
   state,
   elements,
@@ -85,17 +86,25 @@ export function createDisplayTab({
     const displayType = String(elements.displayType?.value || state.settings?.oled?.displayType || "oled").toLowerCase();
     const oledSelected = displayType !== "wape";
     const panelSelected=displayType==='panel';
+    const spiSelected=displayType==='spi';
+    const spiControls=document.getElementById('spiDisplayControls');
+    if(spiControls){
+      spiControls.hidden=!spiSelected;spiControls.replaceChildren();
+      if(spiSelected){const values=state.peripheralHelperBindings['display:0'] ||= {};spiControls.append(createSpiDisplayControls({values,onChange:patch=>{Object.assign(values,patch);queueSettingsSave(150);}}));}
+    }
     const panelControls=document.getElementById('panelControls');if(panelControls)panelControls.hidden=!panelSelected;
     const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
     if(board?.externalPins&&elements.displayType){
       elements.displayType.value='panel';elements.displayType.disabled=true;
       const label=elements.displayType.closest('label');if(label)label.hidden=true;
     }
-    const screenTimeout=document.getElementById('panelScreenTimeoutLabel');if(screenTimeout)screenTimeout.hidden=!panelSelected||!board?.externalPins;
+    const screenTimeout=document.getElementById('panelScreenTimeoutLabel');if(screenTimeout)screenTimeout.hidden=spiSelected;
+    const timerLabel=document.getElementById('displayTimeoutEnabledLabel');if(timerLabel)timerLabel.hidden=spiSelected;
+    const timer=namedField('oled.timeoutEnabled');if(timer)timer.checked=state.settings?.oled?.timeoutEnabled!==false;
     const roundControls=document.getElementById('roundSystemControls');if(roundControls)roundControls.hidden=!panelSelected||!board?.roundHmi;
     let roundOptions={};try{roundOptions=JSON.parse(state.settings?.oled?.circularMenu||'{}');}catch{}
     const dashboard=document.getElementById('roundSystemDashboard');if(dashboard)dashboard.checked=roundOptions.systemDashboard!==false;
-    const timeout=document.getElementById('roundSystemTimeout');if(timeout&&document.activeElement!==timeout)timeout.value=roundOptions.systemTimeoutSeconds||60;
+    const timeout=document.getElementById('roundSystemTimeout');if(timeout&&document.activeElement!==timeout)timeout.value=roundOptions.systemTimeoutSeconds??60;
     const wiringHelp=document.getElementById('displayWiringHelp');if(wiringHelp)wiringHelp.hidden=panelSelected;
     if(panelControls&&board){
       const touch=namedField('oled.touchEnabled');const text=touch?.parentElement?.lastChild;
@@ -104,10 +113,10 @@ export function createDisplayTab({
       const mode=namedField('oled.interfaceMode');const option=mode?.querySelector('option[value="lvgl"]');if(option)option.textContent=board.roundHmi?'Circular menu':'LVGL mobile interface';
     }
 
-    for(const key of ['driver','i2cAddress','width','height','sdaPin','sclPin','resetPin']){const field=namedField('oled.'+key);if(field)field.disabled=panelSelected;}
-    for(const key of ['driver','i2cAddress']){const field=namedField('oled.'+key);const label=field?.closest('label');if(label){label.hidden=panelSelected;label.style.display=panelSelected?'none':'';}}
+    for(const key of ['driver','i2cAddress','width','height','sdaPin','sclPin','resetPin']){const field=namedField('oled.'+key);if(field)field.disabled=panelSelected||spiSelected;const label=field?.closest('label');if(spiSelected&&label)label.hidden=true;else if(label&&!['driver','i2cAddress'].includes(key))label.hidden=false;}
+    for(const key of ['driver','i2cAddress']){const field=namedField('oled.'+key);const label=field?.closest('label');if(label){label.hidden=panelSelected||spiSelected;label.style.display=panelSelected||spiSelected?'none':'';}}
     const panelOption=elements.displayType?.querySelector('option[value="panel"]');if(panelOption)panelOption.textContent=board?.externalPins?'Sunton onboard LCD':'VIEWE onboard LCD';
-    if(elements.oledPreviewCard)elements.oledPreviewCard.hidden=panelSelected;
+    if(elements.oledPreviewCard)elements.oledPreviewCard.hidden=panelSelected||spiSelected;
     const oledEnabledField = namedField("oled.enabled");
     if (elements.oledModeSection) {
       elements.oledModeSection.hidden = !oledSelected;
@@ -201,7 +210,7 @@ export function createDisplayTab({
       return;
     }
 
-    if (["wape", "panel"].includes(String(elements.displayType?.value || state.settings?.oled?.displayType || "oled").toLowerCase())) {
+    if (["wape", "panel","spi"].includes(String(elements.displayType?.value || state.settings?.oled?.displayType || "oled").toLowerCase())) {
       if (elements.oledPreviewCard) {
         elements.oledPreviewCard.hidden = true;
       }
@@ -293,7 +302,7 @@ export function createDisplayTab({
       let config;try{config=JSON.parse(state.settings?.oled?.circularMenu||'{}');}catch{config={};}
       if(!Array.isArray(config.items)){config.schemaVersion=1;config.items=[{id:1,title:'Home',kind:'text'}];}
       config.systemDashboard=document.getElementById('roundSystemDashboard').checked;
-      config.systemTimeoutSeconds=Math.max(15,Math.min(3600,Number(document.getElementById('roundSystemTimeout').value)||60));
+      config.systemTimeoutSeconds=Math.max(0,Math.min(3600,Number(document.getElementById('roundSystemTimeout').value)||0));
       state.settings.oled.circularMenu=JSON.stringify(config);queueSettingsSave();
     };
     document.getElementById('roundSystemDashboard')?.addEventListener('change',saveRoundOptions);
@@ -315,6 +324,10 @@ export function createDisplayTab({
     elements.peripheralDisplayProfile?.addEventListener("change", () => {
       state.peripheralDisplayProfiles = normalizedPeripheralDisplayProfiles();
       state.peripheralDisplayProfiles[0] = String(elements.peripheralDisplayProfile?.value || "none");
+      if(state.peripheralDisplayProfiles[0]==='spi-tft'){
+        const enabled=namedField('oled.enabled');if(enabled)enabled.checked=true;
+        if(elements.displayType)elements.displayType.value='spi';
+      }
       renderPeripheralDisplayControls();
       // The profile select still owns focus during this event. Force the GPIO
       // binding refresh so I2C OLED fields appear immediately.
@@ -383,6 +396,10 @@ export function createDisplayTab({
     });
 
     elements.displayType?.addEventListener("change", () => {
+      if(elements.displayType.value==='spi'){
+        state.peripheralDisplayProfiles=normalizedPeripheralDisplayProfiles();state.peripheralDisplayProfiles[0]='spi-tft';
+        if(elements.peripheralDisplayProfile)elements.peripheralDisplayProfile.value='spi-tft';savePeripheralProfileSelections();renderPeripheralDisplayControls();syncPeripheralBindingGroups({force:true});queueSettingsSave(150);
+      }
       updateDisplayModeUi();
       populateOledPinOptions();
       populateWapeTriggerPinOptions();

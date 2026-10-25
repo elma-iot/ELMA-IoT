@@ -2987,6 +2987,7 @@ bool applyRuntimeSettings() {
     wifiManager->applySettings(*settings);
     batteryMonitor->applySettings(settings->battery, settings->battery.adcPin);
     displayManager->applySettings(settings->oled);
+    displayManager->configureExternalDisplays(*settings);
     Bno055::configure(*settings);
     CanBus::configure(*settings);
     if (!settings->audio.enabled) {
@@ -4258,6 +4259,7 @@ void setup() {
     initializeWapeTriggerPin();
 
     displayManager->begin(settings->oled);
+    displayManager->configureExternalDisplays(*settings);
     displayManager->setBootMessage("Booting");
 
     appState->setDevice(settings->device.deviceName, settings->device.friendlyName, settings->usingSavedSettings, settings->device.clockUtcOffsetMinutes);
@@ -4536,6 +4538,7 @@ void flushPendingSettingsNow() {
     *settings = deferredActions->pendingSettings; // Already validated; avoid nested defaults/load on loopTask.
     if (deferredActions->settingsApplyDisplayOnly) {
         displayManager->applySettings(settings->oled);
+        displayManager->configureExternalDisplays(*settings);
     } else if (deferredActions->settingsApplyWifiPowerOnly) {
         wifiManager->applySettings(*settings);
     } else {

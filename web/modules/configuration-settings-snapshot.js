@@ -58,6 +58,8 @@ export function createConfigurationSettingsSnapshotModule({
     } else if (displayProfile === "i2c-oled") {
       snapshot.oled.enabled = true;
       snapshot.oled.displayType = "oled";
+    } else if(displayProfile === "spi-tft"){
+      snapshot.oled.enabled=snapshot.oled.enabled!==false;snapshot.oled.displayType="spi";
     }
 
     const storageProfiles = normalizedPeripheralStorageProfiles();

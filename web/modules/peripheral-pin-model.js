@@ -145,7 +145,7 @@ export function defaultPeripheralPins(groupKey, profileValue, bindingPins = []) 
   if (group === "sensor" && profile.includes("ds18b20")) return ["DQ", "VCC", "GND"];
   if (group === "sensor" && profile === "ds3231-rtc") return ["SDA", "SCL", "VCC", "GND"];
   if (group === "sensor" && (profile.includes("bno") || profile.includes("mpu"))) return ["SDA", "SCL", "INT", "VCC", "GND"];
-  if (group === "display" && profile.includes("spi-tft")) return ["SCK", "MOSI", "MISO", "CS", "DC", "RST", "BL", "VCC", "GND"];
+  if (group === "display" && profile.includes("spi-tft")) return ["SCK", "MOSI", "CS", "DC", "RST", "BL", "VCC", "GND"];
   if (group === "display") return profile.includes("waveshare") ? ["CTRL", "VCC", "GND"] : ["SDA", "SCL", "RST", "VCC", "GND"];
   if (group === "storage") return profile.includes("sdmmc")
     ? ["CLK", "CMD", "D0", "D1", "D2", "D3", "VCC", "GND"]

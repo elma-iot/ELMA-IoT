@@ -45,11 +45,13 @@ inline int flushes = 0, contrastWrites = 0;
 inline bool beginOk = true;
 inline std::vector<int> colors;
 inline std::vector<int> contrasts;
+inline std::vector<int> commands;
 inline std::vector<String> printed;
 class Adafruit_GFX {
 public:
     int16_t width() { return 128; }
     int16_t height() { return 64; }
+    void fillScreen(int) {}
     void setRotation(int) {}
     void setTextWrap(bool wrap) { assert(!wrap); }
     void setTextSize(int) {}
@@ -69,22 +71,24 @@ public:
     Adafruit_SSD1306(int,int,WireMock*,int,int,int) {}
     bool begin(int,int) { return beginOk; }
     void dim(bool value) { ++contrastWrites; contrasts.push_back(value ? 0 : 255); }
-    void ssd1306_command(int) {}
+    void ssd1306_command(int command) {commands.push_back(command);}
 };
 class Adafruit_SH1106G : public Adafruit_GFX {
 public:
     Adafruit_SH1106G(int,int,WireMock*,int,int,int) {}
     bool begin(int,bool) { return beginOk; }
     void setContrast(int value) { ++contrastWrites; contrasts.push_back(value); }
-    void oled_command(int) {}
+    void oled_command(int command) {commands.push_back(command);}
 };
-constexpr int SSD1306_WHITE=1, SSD1306_SWITCHCAPVCC=2, SSD1306_DISPLAYOFF=0xAE, SH110X_DISPLAYOFF=0xAE;
+constexpr int SSD1306_WHITE=1, SSD1306_SWITCHCAPVCC=2, SSD1306_DISPLAYOFF=0xAE, SH110X_DISPLAYOFF=0xAE, SSD1306_DISPLAYON=0xAF,SH110X_DISPLAYON=0xAF;
 namespace SharedI2c {struct Guard {Guard(int=0){} explicit operator bool()const{return true;}};inline bool begin(int,int){return true;}inline WireMock& wire(){return Wire;}}
 struct OledSettings {
     bool enabled=true;
     String displayType="oled", driver="ssd1306";
     int rotation=0, sdaPin=23, sclPin=19, resetPin=-1, width=128, height=64, i2cAddress=60;
     uint16_t dimTimeoutSeconds=0;
+    bool timeoutEnabled=true;
+    uint16_t screenTimeoutSeconds=0;
 };
 struct AppStateSnapshot {
     struct { bool busy=false; String phase; uint8_t progressPercent=0; } ota;
@@ -93,11 +97,13 @@ struct AppStateSnapshot {
     struct { bool wifiConnected=true, apMode=false, mqttConnected=true; String ip="192.168.1.2", apSsid; } network;
     struct { float voltage=4.0f; } battery;
 };
+struct SettingsBundle {};
+namespace ExternalDisplays {inline void configure(const SettingsBundle&){}inline void loop(const AppStateSnapshot&){}inline bool prepareUpdate(){return true;}inline void progress(uint8_t){}inline void endUpdate(){}inline void temporaryText(const String&,uint32_t){}inline bool available(){return false;}inline void powerOff(){}}
 '''
 
 MAIN = r'''
 #include "display_manager.h"
-void reset() { clockMs=0; flushes=0; contrastWrites=0; colors.clear(); contrasts.clear(); printed.clear(); }
+void reset() { clockMs=0; flushes=0; contrastWrites=0; colors.clear(); contrasts.clear(); printed.clear();commands.clear(); }
 int main() {
     for (const auto driver : {"ssd1306", "sh1106"}) {
         reset();
@@ -136,9 +142,20 @@ int main() {
         settings.enabled=true;display.applySettings(settings);
         assert(display.beginFirmwareUpdate());
         printed.clear();clockMs+=400;display.firmwareUpdateProgress(42);
-        assert(printed.size()==2 && printed[0]=="Updating" && printed[1]=="42%");
+        assert(printed.size()>=2 && printed.front()=="Updating" && printed.back()=="42%");
         const auto updateFlushes=flushes;clockMs+=300;display.loop(state);assert(flushes==updateFlushes);
         display.endFirmwareUpdate();clockMs+=300;display.loop(state);assert(flushes>updateFlushes);
+        settings.dimTimeoutSeconds=0;settings.screenTimeoutSeconds=1;display.applySettings(settings);
+        clockMs+=300;display.loop(state);clockMs+=1200;display.loop(state);
+        assert(commands.back()==SSD1306_DISPLAYOFF);
+        const auto asleepFlushes=flushes;clockMs+=500;display.loop(state);assert(flushes==asleepFlushes);
+        state.playback.title="Changed hidden title";clockMs+=300;display.loop(state);assert(commands.back()==SSD1306_DISPLAYOFF);
+        state.playback.state="playing";state.playback.title="Changed displayed title";clockMs+=300;display.loop(state);
+        assert(commands.back()==SSD1306_DISPLAYON && flushes>asleepFlushes);
+        clockMs+=1200;display.loop(state);assert(commands.back()==SSD1306_DISPLAYOFF);
+        display.showTemporaryCenterText("Alert",1000);assert(commands.back()==SSD1306_DISPLAYON);
+        settings.screenTimeoutSeconds=0;display.applySettings(settings);const auto beforeZero=commands.size();clockMs+=500000;display.loop(state);assert(commands.size()==beforeZero);
+        settings.screenTimeoutSeconds=1;settings.timeoutEnabled=false;display.applySettings(settings);const auto beforeDisabled=commands.size();clockMs+=10000;display.loop(state);assert(commands.size()==beforeDisabled);
     }
 }
 '''
@@ -152,11 +169,13 @@ class DisplayManagerTests(unittest.TestCase):
             for name in ('display_manager.h', 'display_manager.cpp'):
                 shutil.copyfile(ROOT / 'src' / name, work / name)
             shutil.copyfile(ROOT/'include/update_screen.h',work/'update_screen.h')
+            shutil.copyfile(ROOT/'include/update_artwork.h',work/'update_artwork.h')
+            shutil.copyfile(ROOT/'include/display_idle_policy.h',work/'display_idle_policy.h')
             shutil.copyfile(ROOT/'include/lcd_wake_gesture.h',work/'lcd_wake_gesture.h')
             (work / 'shim.h').write_text(SHIM)
             for name in ('Arduino.h', 'Wire.h', 'Adafruit_GFX.h', 'Adafruit_SSD1306.h',
                          'Adafruit_SH110X.h', 'app_state.h', 'settings_schema.h',
-                         'shared_i2c.h','storage_backend.h','device_log.h','panel_display.h','panel_dashboard.h'):
+                         'shared_i2c.h','storage_backend.h','device_log.h','panel_display.h','panel_dashboard.h','external_spi_displays.h'):
                 (work / name).write_text('#include "shim.h"\n')
             (work / 'main.cpp').write_text(MAIN)
             (work / 'build.cmd').write_text(

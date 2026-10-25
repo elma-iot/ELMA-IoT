@@ -33,7 +33,7 @@ void glow(void* object,int32_t opacity){lv_obj_set_style_shadow_opa(static_cast<
 
 void RoundSystemDashboard::begin(lv_obj_t* screen,PanelDisplay& panel,const String& raw){
     screen_=screen;panel_=&panel;JsonDocument options;deserializeJson(options,raw);
-    customBackground_=!(options["systemDashboard"]|true);timeout_=constrain(options["systemTimeoutSeconds"]|60U,15U,3600U);
+    customBackground_=!(options["systemDashboard"]|true);timeout_=min(options["systemTimeoutSeconds"]|60U,3600U);
     security_.begin();enabled_=!customBackground_||security_.locked();view_=Clock;lastInput_=millis();refresh_=0;clockSecond_=UINT32_MAX;dirty_=true;
     if(enabled_)draw();
 }
@@ -150,7 +150,9 @@ void RoundSystemDashboard::refreshRows(){
         row("Last error",live_.system.lastError.length()?live_.system.lastError:"None");break;
     case 5:
         if(!brightnessPending_)brightness_=config["oled"]["brightness"]|brightness_;
-        row("Auto screen off",String(config["oled"]["dimTimeoutSeconds"]|0)+" seconds");break;
+        row("Dim after",String(config["oled"]["dimTimeoutSeconds"]|0)+" seconds");
+        row("Display timeout",(config["oled"]["timeoutEnabled"]|true)?"Enabled":"Disabled");
+        row("Screen off",(config["oled"]["screenTimeoutSeconds"]|0U)==0?"Always on":String(config["oled"]["screenTimeoutSeconds"].as<unsigned>())+" seconds");break;
     case 7:
         row("Internal RAM",bytes(metrics.sram.freeBytes)+" free");
         if(metrics.psram.available)row("PSRAM",bytes(metrics.psram.freeBytes)+" free");
@@ -278,7 +280,7 @@ void RoundSystemDashboard::loop(const AppStateSnapshot& live,const PanelDashboar
     if(brightnessPending_&&now-brightnessChanged_>=250){JsonDocument v;v.set(brightness_);brightnessPending_=false;patch("oled/brightness",v.as<JsonVariantConst>());}
     if(security_.locked()&&view_!=Clock&&view_!=Locked&&view_!=Pin){view_=Clock;dirty_=true;pinDraft_="";firstPin_="";}
     if(security_.locked()&&(view_==Locked||(view_==Pin&&pinAction_=="unlock"))&&now-lastInput_>=10000){pinDraft_="";firstPin_="";view_=Clock;dirty_=true;}
-    if(view_!=Clock&&view_!=Locked&&!live_.ota.busy&&now-lastInput_>=timeout_*1000UL){
+    if(timeout_ && view_!=Clock&&view_!=Locked&&!live_.ota.busy&&now-lastInput_>=timeout_*1000UL){
         // Brightness is committed as it is adjusted; PIN drafts are discarded.
         editBrightness_=false;pinDraft_="";firstPin_="";oldTicket_="";view_=Clock;selected_=0;dirty_=true;
     }

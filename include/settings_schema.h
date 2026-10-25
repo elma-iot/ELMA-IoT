@@ -169,6 +169,7 @@ struct OledSettings {
     uint8_t sclPin = 19;
     int8_t resetPin = -1;
     uint16_t dimTimeoutSeconds = 0;
+    bool timeoutEnabled = true;
     uint16_t screenTimeoutSeconds = 0;
     uint8_t wapeTriggerPin = 0;
     String wapeTriggerEvent = "play_start";

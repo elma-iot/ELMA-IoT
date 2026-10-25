@@ -1,0 +1,19 @@
+[
+  {"id":"gc9a01","label":"GC9A01 · 240×240 round LCD","driver":"gc9a01","width":240,"height":240,"round":true},
+  {"id":"st7789-240","label":"ST7789 · 240×240 square LCD","driver":"st7789","width":240,"height":240},
+  {"id":"st7789-280","label":"ST7789 · 240×280 LCD","driver":"st7789","width":240,"height":280},
+  {"id":"st7789-320","label":"ST7789 · 240×320 LCD","driver":"st7789","width":240,"height":320},
+  {"id":"st7789-135","label":"ST7789 · 135×240 LCD","driver":"st7789","width":135,"height":240},
+  {"id":"st7735-black","label":"ST7735R · 128×160 LCD (black tab)","driver":"st7735","width":128,"height":160,"variant":2},
+  {"id":"st7735-red","label":"ST7735R · 128×160 LCD (red tab)","driver":"st7735","width":128,"height":160,"variant":3},
+  {"id":"st7735-green","label":"ST7735R · 128×160 LCD (green tab)","driver":"st7735","width":128,"height":160,"variant":0},
+  {"id":"st7735-square","label":"ST7735R · 128×128 square LCD","driver":"st7735","width":128,"height":128,"variant":1},
+  {"id":"ili9341","label":"ILI9341 · 240×320 LCD","driver":"ili9341","width":240,"height":320},
+  {"id":"st7796s","label":"ST7796S · 320×480 LCD","driver":"st7796s","width":320,"height":480},
+  {"id":"ssd1331","label":"SSD1331 · 96×64 color OLED","driver":"ssd1331","width":96,"height":64},
+  {"id":"ssd1351","label":"SSD1351 · 128×128 color OLED","driver":"ssd1351","width":128,"height":128},
+  {"id":"ssd1351-96","label":"SSD1351 · 128×96 color OLED","driver":"ssd1351","width":128,"height":96},
+  {"id":"ssd1306-spi","label":"SSD1306 · 128×64 SPI OLED","driver":"ssd1306","width":128,"height":64,"monochrome":true},
+  {"id":"ssd1306-spi-32","label":"SSD1306 · 128×32 SPI OLED","driver":"ssd1306","width":128,"height":32,"monochrome":true},
+  {"id":"sh1106-spi","label":"SH1106 · 128×64 SPI OLED","driver":"sh1106","width":128,"height":64,"monochrome":true}
+]

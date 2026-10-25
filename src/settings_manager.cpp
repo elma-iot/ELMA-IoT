@@ -236,7 +236,7 @@ bool oledPinConflicts(const OledSettings& oled, const AudioSettings& audio, cons
     String displayType = oled.displayType;
     displayType.trim();
     displayType.toLowerCase();
-    if (!oled.enabled || displayType == "wape" || displayType == "panel") {
+    if (!oled.enabled || displayType == "wape" || displayType == "panel" || displayType=="spi") {
         return false;
     }
 
@@ -287,6 +287,7 @@ bool sdPinConflictsWithRequiredFunctions(const SdSettings& sd, const AudioSettin
 String normalizeDisplayType(String value) {
     value.trim();
     value.toLowerCase();
+    if(value=="spi")return value;
     #if APP_HAS_ONBOARD_PANEL
     if (value == "panel") return value;
 #endif
@@ -721,6 +722,11 @@ SettingsBundle SettingsManager::defaults() const {
     settings.oled.sclPin = DefaultConfig::OLED_SCL_PIN;
     settings.oled.resetPin = DefaultConfig::OLED_RESET_PIN;
     settings.oled.dimTimeoutSeconds = DefaultConfig::OLED_DIM_TIMEOUT_SECONDS;
+    settings.oled.timeoutEnabled=true;
+    settings.oled.screenTimeoutSeconds=60;
+#if APP_HAS_ONBOARD_PANEL
+    settings.oled.screenTimeoutSeconds=0;
+#endif
 #if APP_SUNTON_PANEL == 3
     settings.oled.screenTimeoutSeconds=180;
 #endif
@@ -1090,7 +1096,7 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     }
     settings.oled.dimTimeoutSeconds = clampValue<uint16_t>(settings.oled.dimTimeoutSeconds, static_cast<uint16_t>(0), static_cast<uint16_t>(3600));
     settings.oled.screenTimeoutSeconds=min<uint16_t>(settings.oled.screenTimeoutSeconds,3600);
-    if (!panel && (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
+    if (!panel && settings.oled.displayType!="spi" && (!safeOutputPin(settings.oled.sdaPin) || !safeOutputPin(settings.oled.sclPin) ||
         (settings.oled.resetPin >= 0 && !safeOutputPin(settings.oled.resetPin)) ||
         oledPinConflicts(settings.oled, settings.audio, settings.battery, settings.device, settings.sd, settings.ui))) {
         settings.oled.enabled = false;
@@ -1219,6 +1225,7 @@ SettingsBundle SettingsManager::load() {
     settings.oled.resetPin = readInt("oled_rst", settings.oled.resetPin);
     settings.oled.dimTimeoutSeconds = readUInt("oled_dim", settings.oled.dimTimeoutSeconds);
     settings.oled.screenTimeoutSeconds=readUInt("oled_off",settings.oled.screenTimeoutSeconds);
+    settings.oled.timeoutEnabled=readBool("oled_time_on",settings.oled.timeoutEnabled);
     settings.oled.wapeTriggerPin = readUInt("oled_wape_pin", settings.oled.wapeTriggerPin);
     settings.oled.wapeTriggerEvent = readString("oled_wape_evt", settings.oled.wapeTriggerEvent);
 
@@ -1519,6 +1526,7 @@ bool SettingsManager::save(const SettingsBundle& settings) {
         changed |= storeUInt("oled_rot", sanitized.oled.rotation, baseline.oled.rotation);
         changed |= storeUInt("oled_dim",sanitized.oled.dimTimeoutSeconds,baseline.oled.dimTimeoutSeconds);
         changed |= storeUInt("oled_off",sanitized.oled.screenTimeoutSeconds,baseline.oled.screenTimeoutSeconds);
+        changed |= storeBool("oled_time_on",sanitized.oled.timeoutEnabled,baseline.oled.timeoutEnabled);
         changed |= storeUInt("oled_sda", sanitized.oled.sdaPin, baseline.oled.sdaPin);
         changed |= storeUInt("oled_scl", sanitized.oled.sclPin, baseline.oled.sclPin);
         changed |= storeInt("oled_rst", sanitized.oled.resetPin, baseline.oled.resetPin);
@@ -1745,6 +1753,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
     oled["resetPin"] = settings.oled.resetPin;
     oled["dimTimeoutSeconds"] = settings.oled.dimTimeoutSeconds;
     oled["screenTimeoutSeconds"]=settings.oled.screenTimeoutSeconds;
+    oled["timeoutEnabled"]=settings.oled.timeoutEnabled;
     oled["wapeTriggerPin"] = settings.oled.wapeTriggerPin;
     oled["wapeTriggerEvent"] = settings.oled.wapeTriggerEvent;
 
@@ -1978,6 +1987,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
         if (oled["resetPin"].is<int8_t>()) settings.oled.resetPin = oled["resetPin"].as<int8_t>();
         if (oled["dimTimeoutSeconds"].is<uint16_t>()) settings.oled.dimTimeoutSeconds = oled["dimTimeoutSeconds"].as<uint16_t>();
         if(oled["screenTimeoutSeconds"].is<uint16_t>())settings.oled.screenTimeoutSeconds=oled["screenTimeoutSeconds"].as<uint16_t>();
+        if(oled["timeoutEnabled"].is<bool>())settings.oled.timeoutEnabled=oled["timeoutEnabled"].as<bool>();
         if (oled["wapeTriggerPin"].is<uint8_t>()) settings.oled.wapeTriggerPin = oled["wapeTriggerPin"].as<uint8_t>();
         copyString(oled, "wapeTriggerEvent", settings.oled.wapeTriggerEvent);
     }

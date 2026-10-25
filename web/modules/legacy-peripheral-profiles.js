@@ -12,7 +12,7 @@ export function restoreLegacyPeripheralProfiles(settings) {
   }
   primary("audioProfiles", "audioProfile", settings?.audio?.enabled === true && !ONBOARD_BOARDS[settings?.ui?.gpioBoardSelection]?.requiresExternalAudio ? "max98357a-i2s-amp" : "none");
   primary("displayProfiles", "displayProfile", settings?.oled?.enabled === true
-    ? (settings.oled.displayType === "panel" ? "viewe-onboard-lcd" : settings.oled.displayType === "wape" ? "waveshare-screen" : "i2c-oled") : "none");
+    ? (settings.oled.displayType === "panel" ? "viewe-onboard-lcd" : settings.oled.displayType === "spi" ? "spi-tft" : settings.oled.displayType === "wape" ? "waveshare-screen" : "i2c-oled") : "none");
   if (!Array.isArray(profiles.storage) || !profiles.storage.length) {
     profiles.storage = [settings?.sd?.enabled === true ? "microsd-spi" : "none"];
   }
