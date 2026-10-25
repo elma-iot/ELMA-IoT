@@ -17,7 +17,7 @@ public:
     static constexpr size_t pageBytes=((width+7)/8)*height;
     class Canvas:public GFXcanvas1 {
     public:
-        Canvas():GFXcanvas1(width,height,false){}
+        Canvas():GFXcanvas1(PanelUpdate::width,PanelUpdate::height,false){}
         void page(uint8_t* pixels){buffer=pixels;buffer_owned=false;}
     };
     struct Scanout {

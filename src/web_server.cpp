@@ -1292,6 +1292,10 @@ void WebServerManager::registerApiRoutes() {
             root["firmware"]["version"]=APP_VERSION;
             root["system"]["updating"]=true;
             otaManager_->appendStatusJson(root["ota"].to<JsonObject>());
+            auto transfer=root["ota"].as<JsonObject>();
+            // Retain the normal /api/status contract for existing web clients.
+            transfer["progressPercent"]=transfer["updateProgress"];
+            transfer["phase"]=transfer["updatePhase"];transfer["lastResult"]="updating";
             sendJson(request,doc);return;
         }
         if(security_.locked()) {
