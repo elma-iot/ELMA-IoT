@@ -9747,7 +9747,7 @@ function populateStatusLedPinOptions(settings = state.settings) {
     reservedPins.add(pin);
   }
   fillBoardPinSelect(elements.statusLedPin, selectedPin === '255' ? '-1' : selectedPin, true, reservedPins, -1);
-  const ledHelp=document.getElementById('statusLedPinHelp');if(ledHelp)ledHelp.textContent=boardProfile.startsWith('viewe-uedx48480021-md80et')?'The module power LED D1 is wired to 3.3 V and cannot be controlled. GPIO4 is exposed for an external status LED; Disabled is the default.':'Choose a valid status LED pin matching your wiring. Disabled turns off GPIO-controlled status indication.';
+  const ledHelp=document.getElementById('statusLedPinHelp');if(ledHelp)ledHelp.textContent=ONBOARD_BOARDS[boardProfile]?.roundHmi?'The module power LED D1 is wired to 3.3 V and cannot be controlled. GPIO4 is exposed for an external status LED; Disabled is the default.':'Choose a valid status LED pin matching your wiring. Disabled turns off GPIO-controlled status indication.';
   const fallbackPins = activeChipFamily() === "esp32c3" ? [7, 6] : [23, 21];
   fillBoardPinSelect(elements.statusLedGreenPin, String(elements.statusLedGreenPin?.value || (settings?.device?.statusLedGreenPin ?? fallbackPins[0])), true, reservedPins, -1);
   fillBoardPinSelect(elements.statusLedBluePin, String(elements.statusLedBluePin?.value || (settings?.device?.statusLedBluePin ?? fallbackPins[1])), true, reservedPins, -1);

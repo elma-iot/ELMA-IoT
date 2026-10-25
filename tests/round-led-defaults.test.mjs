@@ -15,7 +15,7 @@ test('round power indicator remains disabled; external GPIO4 is selectable',()=>
     for(const pin of [-1,255,4]){
       const field=()=>({value:'',options:[],set innerHTML(v){this.options=[];},append(option){this.options.push(option);}});
       const elements={statusLedPin:field(),statusLedGreenPin:field(),statusLedBluePin:field()};
-      const context={BOARD_DEFAULTS,elements,state:{settings:{}},activeGpioBoardProfile:()=>board,
+      const context={BOARD_DEFAULTS,ONBOARD_BOARDS:{[board]:{roundHmi:true}},elements,state:{settings:{}},activeGpioBoardProfile:()=>board,
         WS_STATUS_LED_BOARD_PROFILES:new Set(),validBoardPins:()=>[4],pinChoices,
         currentI2sPins:()=>[],currentSdPins:()=>[],activeChipFamily:()=> 'esp32s3',statusLedDefaultRgbPins:()=>[-1,-1],
         syncStatusLedTypeFields(){},document:{getElementById:()=>null},
