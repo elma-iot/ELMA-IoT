@@ -4,6 +4,7 @@
 #include "panel_boot.h"
 #if APP_ROTARY_HMI
 #include <Wire.h>
+#include <driver/gpio.h>
 #endif
 
 bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
@@ -126,7 +127,18 @@ bool PanelDisplay::beginUpdate(){
     auto* lcd=board_->getLCD();
     auto* bus=static_cast<esp_panel::drivers::BusRGB*>(lcd->getBus());
     auto config=std::get<esp_panel::drivers::BusRGB::RefreshPanelFullConfig>(bus->getConfig().refresh_panel);
-    if(!lcd->del()||!update_->beginRgb(config)){update_.reset();return false;}
+    const auto* device=lcd->getConfig().getDeviceFullConfig();
+    const int reset=device->reset_gpio_num,inactive=!device->flags.reset_active_high;
+    // The vendor wrapper releases its reset GPIO on del(). Hold the pad across
+    // that release so changing the RGB scanout cannot reset the fitted LCD.
+    if(reset>=0)gpio_hold_en(static_cast<gpio_num_t>(reset));
+    const bool stopped=lcd->del();
+    if(reset>=0){
+        gpio_set_level(static_cast<gpio_num_t>(reset),inactive);
+        gpio_set_direction(static_cast<gpio_num_t>(reset),GPIO_MODE_OUTPUT);
+        gpio_hold_dis(static_cast<gpio_num_t>(reset));
+    }
+    if(!stopped||!update_->beginRgb(config)){update_.reset();return false;}
 #endif
     return true;
 }
