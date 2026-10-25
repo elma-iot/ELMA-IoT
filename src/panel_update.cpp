@@ -8,9 +8,14 @@ PanelUpdate::~PanelUpdate(){
 }
 bool PanelUpdate::allocate(){
     graphics_.reset(new(std::nothrow) UpdateGraphics());
-    return graphics_&&graphics_->begin(kPanelWidth,kPanelHeight,APP_ROTARY_HMI);
+#if APP_ROTARY_HMI
+    constexpr bool round=true;
+#else
+    constexpr bool round=false;
+#endif
+    return graphics_&&graphics_->begin(kPanelWidth,kPanelHeight,round);
 }
-bool PanelUpdate::render(unsigned value,uint32_t now,bool){return graphics_&&graphics_->render(value,now);}
+bool PanelUpdate::render(unsigned value,uint32_t now){return graphics_&&graphics_->render(value,now);}
 #if APP_ROTARY_HMI
 bool IRAM_ATTR PanelUpdate::fill(esp_lcd_panel_handle_t,void* output,int position,int length,void* context){
     UpdateGraphics::fill(context,output,position,length);return false;

@@ -144,7 +144,7 @@ bool PanelDisplay::beginUpdate(){
 }
 void PanelDisplay::endUpdate(){update_.reset();}
 void PanelDisplay::updateProgress(unsigned percent,uint32_t now){
-    if(!update_||!update_->render(percent,now,APP_ROTARY_HMI))return;
+    if(!update_||!update_->render(percent,now))return;
 #if !APP_ROTARY_HMI
     for(int y=0;y<kPanelHeight;++y){
         auto* row=reinterpret_cast<uint16_t*>(line_);

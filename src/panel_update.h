@@ -11,7 +11,7 @@ class PanelUpdate {
 public:
     ~PanelUpdate();
     bool allocate();
-    bool render(unsigned percent,uint32_t now,bool round);
+    bool render(unsigned percent,uint32_t now);
     void row(uint16_t* output,int y){graphics_->row(output,y);}
 #if APP_ROTARY_HMI
     bool beginRgb(esp_lcd_rgb_panel_config_t configuration);
