@@ -2587,7 +2587,7 @@ void WebServerManager::registerWebRoutes() {
         "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
         "<title>ELMA Legacy OTA</title><style>body{font:16px system-ui;max-width:680px;margin:40px auto;padding:20px}"
         "a{color:#b65f00}</style><h1>ELMA IoT</h1><p>This legacy-partition build keeps audio, MQTT, GPIO, display, "
-        "controls and OTA services. Use ELMA IoT РІР‚вЂњ ESP32 Toolkit on the same LAN for configuration and firmware updates.</p>"
+        "controls and OTA services. Use ELMA IoT – ESP32 Toolkit on the same LAN for configuration and firmware updates.</p>"
         "<p><a href='/api/status'>Device status (JSON)</a></p>";
     auto serveLegacyPage = [this](AsyncWebServerRequest* request) {
         if (redirectCaptivePortalIfNeeded(request) || !ensureAuthorized(request)) return;

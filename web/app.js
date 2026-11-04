@@ -336,7 +336,7 @@ const PERIPHERAL_INPUT_PROFILE_OPTIONS = [
 ];
 const PERIPHERAL_STORAGE_PROFILE_OPTIONS = [
   { value: "waveshare-amoled-sdmmc", label: "Onboard Waveshare AMOLED MicroSD" },
-  {value:"viewe-sdmmc",label:"Onboard microSD Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· 4-bit SDMMC"},
+  {value:"viewe-sdmmc",label:"Onboard microSD · 4-bit SDMMC"},
 {"value": "camera-sdmmc", "label": "Onboard microSD \u00b7 1-bit SDMMC"},
   { value: "none", label: "None" },
   { value: "microsd-spi", label: "MicroSD SPI" },
@@ -475,7 +475,7 @@ const GPIO_BOARD_PRESENTATION = {
   "viewe-uedx24320028e-wb-a": {
     "rotation": "none",
     "rank": "Touch display board",
-    "recommendation": "VIEWE 240Р В Р’В Р Р†Р вЂљРЎС™Р В Р вЂ Р В РІР‚С™Р Р†Р вЂљРЎСљ320 LCD with CHSC6540 touch.",
+    "recommendation": "VIEWE 240×320 LCD with CHSC6540 touch.",
     "tone": "featured"
   },
   "esp32-s3-super-mini": {
@@ -641,19 +641,19 @@ const GPIO_BOARD_ASSETS = {
   },
   "esp32-2432s028r": {
     "src": "/esp32-2432s028r.svg",
-    "alt": "ESP32-2432S028R Р’В· 2.8-inch resistive"
+    "alt": "ESP32-2432S028R · 2.8-inch resistive"
   },
   "esp32-2432s028c": {
     "src": "/esp32-2432s028c.svg",
-    "alt": "ESP32-2432S028C Р’В· 2.8-inch capacitive"
+    "alt": "ESP32-2432S028C · 2.8-inch capacitive"
   },
   "esp32-3248s035c": {
     "src": "/esp32-3248s035c.svg",
-    "alt": "ESP32-48S035 / ESP32-3248S035C Р’В· 3.5-inch capacitive"
+    "alt": "ESP32-48S035 / ESP32-3248S035C · 3.5-inch capacitive"
   },
   "esp32-cam": {
     "src": "/esp32-cam.svg",
-    "alt": "ESP32-CAM Р’В· AI-Thinker / OV2640"
+    "alt": "ESP32-CAM · AI-Thinker / OV2640"
   },
   "viewe-uedx24320028e-wb-a": {
     "src": "/viewe-uedx24320028e-wb-a.svg",
@@ -753,7 +753,7 @@ const GPIO_BOARD_ASSETS = {
   },
   "viewe-uedx32480035e-wb-a": {
     "src": "/viewe-uedx32480035e-wb-a.svg",
-    "alt": "VIEWE 3.5-inch 320x480 Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· UEDX32480035E-WB-A"
+    "alt": "VIEWE 3.5-inch 320x480 · UEDX32480035E-WB-A"
   },
   "miniexco-v2": {
     "src": "/miniexco-v2.svg",
@@ -7055,16 +7055,16 @@ function peripheralHelperBindingValue(groupKey, index, signalLabel) {
 }
 
 function helperBindingDisplayLabel(groupKey, signalLabel) {
-  if(signalLabel==="I2C_ADDRESS")return "IР’Р†C address";
+  if(signalLabel==="I2C_ADDRESS")return "I²C address";
   const normalizedSignal = String(signalLabel || "").trim().toUpperCase();
   if (groupKey === "sensor" && normalizedSignal === "SIGNAL") {
     return "ADC Output";
   }
   if (groupKey === "communication" && normalizedSignal === "TX") {
-    return "TX Р В Р’В Р В РІР‚В Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РЎС› RX (ESP)";
+    return "TX → RX (ESP)";
   }
   if (groupKey === "communication" && normalizedSignal === "RX") {
-    return "RX Р В Р’В Р В РІР‚В Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІвЂћСћ TX (ESP)";
+    return "RX ← TX (ESP)";
   }
   if (groupKey === "input" && normalizedSignal === "SIG") {
     return "GPIO";
@@ -7463,7 +7463,7 @@ function helperBindingSignalOptionsFor(groupKey, index, signalLabel) {
 
   const board=ONBOARD_BOARDS[elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection];
   const fixed=board?.bindings?.[groupKey+':'+profileValue]?.[normalizedSignal];
-  if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return [{value:String(fixed),label:`GPIO${fixed} Р В РІР‚в„ўР вЂ™Р’В· onboard`}];
+  if((index===0||isBuiltinPeripheral(groupKey,profileValue,index))&&fixed!==undefined)return [{value:String(fixed),label:`GPIO${fixed} · onboard`}];
 
   if (groupKey === "power") {
     if (normalizedSignal === "INPUT_VOLTAGE") {
@@ -7847,7 +7847,7 @@ function appendHelperPeripheralBindingControl(container, groupKey, index, signal
   }
   select.disabled = noPinsAvailable;
   if (selectedValue && ![...select.options].some(option => option.value === selectedValue)) {
-    const invalid = new Option(`GPIO${selectedValue} Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ invalid/reserved for this board (reassign)`, selectedValue);
+    const invalid = new Option(`GPIO${selectedValue} — invalid/reserved for this board (reassign)`, selectedValue);
     invalid.disabled = true;
     select.prepend(invalid);
   }
@@ -9565,16 +9565,20 @@ async function stepRadioStationSelection(delta) {
   await playbackStatusModule?.stepRadioStationSelection(delta);
 }
 
-function populateAudioI2sPinOptions(settings = state.settings) {
+function populateAudioI2sPinOptions(settings = state.settings, preferSaved = false) {
   const audioFields = [elements.audioWsPin, elements.audioBclkPin, elements.audioDoutPin];
   if (audioFields.some((field) => !field)) {
     return;
   }
 
+  const selectedPin = (field, key, fallback) => {
+    const saved = settings?.audio?.[key];
+    return String(preferSaved && saved != null ? saved : field.value || (saved ?? fallback));
+  };
   const selectedPins = {
-    ws: String(elements.audioWsPin.value || settings?.audio?.wsPin || DEFAULT_ESP32S3_AUDIO_PINS.ws),
-    bclk: String(elements.audioBclkPin.value || settings?.audio?.bclkPin || DEFAULT_ESP32S3_AUDIO_PINS.bclk),
-    dout: String(elements.audioDoutPin.value || settings?.audio?.doutPin || DEFAULT_ESP32S3_AUDIO_PINS.dout),
+    ws: selectedPin(elements.audioWsPin, 'wsPin', DEFAULT_ESP32S3_AUDIO_PINS.ws),
+    bclk: selectedPin(elements.audioBclkPin, 'bclkPin', DEFAULT_ESP32S3_AUDIO_PINS.bclk),
+    dout: selectedPin(elements.audioDoutPin, 'doutPin', DEFAULT_ESP32S3_AUDIO_PINS.dout),
   };
 
   for (const [field, selected] of [[elements.audioWsPin, selectedPins.ws], [elements.audioBclkPin, selectedPins.bclk], [elements.audioDoutPin, selectedPins.dout]]) {
@@ -9606,7 +9610,7 @@ function boardPinAssignmentIssues(settings = state.settings) {
   const outputs = new Set(validBoardPins(true));
   const issues = [];
   for (const [pin, roles] of gpioRoleMap(settings, state.status)) {
-    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ invalid or reserved on the selected board`);
+    if (!inputs.has(pin)) issues.push(`GPIO${pin}: ${roles.join(" / ")} — invalid or reserved on the selected board`);
   }
   const roleState = gpioConfigRoleState(settings);
   for (const definition of roleState.definitions) {
@@ -10323,7 +10327,7 @@ function firmwareReleaseNote(release) {
     return "HACS build: best choice for Home Assistant MQTT Media Player integration and media-player style control.";
   }
 
-  return "Standard build: general notifier firmware with the local web UI and the projectР В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р Р†Р вЂљРЎвЂєР РЋРЎвЂєs default MQTT control model.";
+  return "Standard build: general notifier firmware with the local web UI and the project’s default MQTT control model.";
 }
 
 function beginFirmwareReconnectReload(initialDelayMs = 12000) {
@@ -10336,7 +10340,7 @@ function beginFirmwareReconnectReload(initialDelayMs = 12000) {
     state.firmwareReloadTimer = null;
   }
   state.rebootOverlayArmed = true;
-  showRebootOverlay("Firmware installed Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ rebooting device...", 30);
+  showRebootOverlay("Firmware installed — rebooting device...", 30);
   // A GitHub OTA may acknowledge completion several seconds before the
   // scheduled reboot. Do not mistake the still-running old firmware for the
   // restarted device, while still allowing an observed disconnect to reconnect
@@ -11035,7 +11039,7 @@ function updateStoragePreviewProgressUi() {
   const position = fileManagerActive ? Math.min(duration, Math.max(0, Number(state.status?.playback?.positionSeconds || 0))) : 0;
   const trackName = currentStoragePlayingEntry()?.name || selectedStoragePlaybackEntry()?.name || state.storagePreviewItem?.name || "Select a song";
   const clockLabel = `${formatPlaybackClock(position)} / ${formatPlaybackClock(duration)}`;
-  const label = `${trackName} Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· ${clockLabel}`;
+  const label = `${trackName} · ${clockLabel}`;
   const progressPercent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
   for (const slider of [elements.storageInlineSeekSlider, elements.storagePreviewSeekSlider]) {
     if (!slider) continue;
@@ -12382,7 +12386,7 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
   const uploadDirectory = state.currentStoragePathByTarget[uploadTarget] || "/";
   const controller=new AbortController();
   const cancelButton=document.getElementById('storageCancelUploadButton');let activeRequest=null;
-  const cancel=()=>{controller.abort();activeRequest?.abort();if(cancelButton)cancelButton.disabled=true;setStorageStatus('Cancelling uploadРІР‚В¦');};
+  const cancel=()=>{controller.abort();activeRequest?.abort();if(cancelButton)cancelButton.disabled=true;setStorageStatus('Cancelling upload…');};
   cancelButton?.addEventListener('click',cancel);if(cancelButton)cancelButton.disabled=false;
   state.storageUploadInProgress = true;
   if(elements.storageStatus)elements.storageStatus.hidden=true;
@@ -12411,14 +12415,14 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
       formData.append("file", file, file.name);
       const caption=`${file.name} (${index+1}/${files.length})`;
       const show=(text,percent)=>{elements.storageProgressLabel.textContent=text;elements.storageProgressFill.style.width=`${percent}%`;};
-      const checksum = await fileCrc32(file,controller.signal,(done,total)=>show(`Preparing checksum: ${caption} Р’В· ${Math.round(done*100/total)}%`,0));
+      const checksum = await fileCrc32(file,controller.signal,(done,total)=>show(`Preparing checksum: ${caption} · ${Math.round(done*100/total)}%`,0));
       const payload = await retryTransfer(async (attempt) => {
-       const uploadStartedAt=performance.now();show(`Uploading ${caption} Р’В· attempt ${attempt+1}/3`,0);
+       const uploadStartedAt=performance.now();show(`Uploading ${caption} · attempt ${attempt+1}/3`,0);
        if(controller.signal.aborted)throw new DOMException('Upload cancelled','AbortError');
        const result = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();activeRequest=xhr;let waitingTimer=0;
         xhr.addEventListener("loadend",()=>clearInterval(waitingTimer));
-        xhr.upload.addEventListener("load",()=>{const sentAt=performance.now();show(`Sent ${caption}; waiting for device write and checksum acknowledgementРІР‚В¦`,90);waitingTimer=setInterval(()=>show(`Sent ${caption}; waiting for device acknowledgement (${Math.round((performance.now()-sentAt)/1000)}s)РІР‚В¦`,90),1000);});
+        xhr.upload.addEventListener("load",()=>{const sentAt=performance.now();show(`Sent ${caption}; waiting for device write and checksum acknowledgement…`,90);waitingTimer=setInterval(()=>show(`Sent ${caption}; waiting for device acknowledgement (${Math.round((performance.now()-sentAt)/1000)}s)…`,90),1000);});
         xhr.open("POST", `/api/storage/upload?target=${encodeURIComponent(uploadTarget)}&dir=${encodeURIComponent(uploadDirectory)}`);
 
         xhr.setRequestHeader("X-File-CRC32", checksum);
@@ -12434,7 +12438,7 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
           const percent = Math.max(0, Math.min(100, Math.round((event.loaded * 100) / event.total)));
           const elapsedSeconds = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
           const rate = event.loaded / elapsedSeconds;
-          show(`Uploading ${caption} Р’В· attempt ${attempt+1}/3 Р’В· ${percent}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)} at ${formatTransferRate(rate)})`,percent*.9);
+          show(`Uploading ${caption} · attempt ${attempt+1}/3 · ${percent}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)} at ${formatTransferRate(rate)})`,percent*.9);
         });
 
         xhr.addEventListener("load", () => {
@@ -12457,11 +12461,11 @@ async function uploadStorageFiles(selectedFiles = [...(elements.storageFileInput
         xhr.send(formData);
        });
        if(result.sizeBytes!==file.size || result.crc32!==checksum)throw new Error("Upload acknowledgement checksum/length mismatch");
-       show(`Verifying saved file: ${caption} Р’В· 0%`,90);
-       const stored=await storageChecksum(uploadTarget,result.path,controller.signal,progress=>{if(progress.waiting){show(`Verifying ${caption}: waiting for storage (${progress.status})РІР‚В¦`,90);return;}const total=Number(progress.totalBytes)||file.size,done=Number(progress.processedBytes)||0,percent=Math.min(100,Math.round(done*100/total));show(`Verifying saved file: ${caption} Р’В· ${percent}% (${formatBytes(done)} / ${formatBytes(total)})`,90+percent*.1);});
+       show(`Verifying saved file: ${caption} · 0%`,90);
+       const stored=await storageChecksum(uploadTarget,result.path,controller.signal,progress=>{if(progress.waiting){show(`Verifying ${caption}: waiting for storage (${progress.status})…`,90);return;}const total=Number(progress.totalBytes)||file.size,done=Number(progress.processedBytes)||0,percent=Math.min(100,Math.round(done*100/total));show(`Verifying saved file: ${caption} · ${percent}% (${formatBytes(done)} / ${formatBytes(total)})`,90+percent*.1);});
        if(stored.sizeBytes!==file.size || stored.crc32!==checksum)throw new Error("Stored file checksum/length mismatch");
        return result;
-      },(attempt,error)=>show(`Retry ${attempt}/3: restarting ${caption} from the beginning Р’В· ${error.message}`,0));
+      },(attempt,error)=>show(`Retry ${attempt}/3: restarting ${caption} from the beginning · ${error.message}`,0));
 
       activeRequest=null;
       renderStorageManager({...payload,target:uploadTarget,currentPath:uploadDirectory,append:true});
@@ -13136,7 +13140,7 @@ async function request(path, options = {}) {
     await response.text();
     const waitingSince = options.storageWaitingSince || Date.now();
     if (Date.now() - waitingSince < 120000) {
-      setStorageStatus("Waiting for storage � background indexing paused; retrying deletion...");
+      setStorageStatus("Waiting for storage — background indexing paused; retrying deletion...");
       await new Promise(resolve => setTimeout(resolve, 300));
       return request(path, { ...options, storageWaitingSince: waitingSince });
     }
@@ -14682,7 +14686,7 @@ window.elmaRefreshFlashSettings = async () => {
   if (!desktopFlashView) return;
   try {
     await loadSettings();
-    elements.localBuilderProgressLabel.textContent = "Designer configuration synchronized Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р вЂ Р В РІР‚С™Р РЋРЎС™ ready to compile and flash";
+    elements.localBuilderProgressLabel.textContent = "Designer configuration synchronized — ready to compile and flash";
   } finally {
     elements.localBuilderCompileFlash.disabled = false;
   }

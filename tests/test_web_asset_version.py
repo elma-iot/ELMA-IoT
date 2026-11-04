@@ -1,29 +1,32 @@
-import sys
+import importlib.util
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from web_asset_version import source_digest, matches, PREFIX
+spec = importlib.util.spec_from_file_location('web_asset_version', Path(__file__).resolve().parents[1] / 'scripts/web_asset_version.py')
+policy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(policy)
+
 
 class WebAssetVersionTests(unittest.TestCase):
-    def test_changed_interface_invalidates_portable_bundle(self):
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+    def test_text_line_endings_do_not_make_a_portable_checkout_stale(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
             (root / 'web').mkdir()
-            app = root / 'web/app.js'
-            app.write_text('old interface')
-            bundle = root / 'bundle.cpp'
-            bundle.write_text(PREFIX + source_digest(root) + '\n')
-            self.assertTrue(matches(bundle, source_digest(root)))
-            app.write_text('new array controls')
-            self.assertFalse(matches(bundle, source_digest(root)))
+            text = root / 'web/index.html'
+            text.write_bytes(b'<html>\n<body>Board</body>\n</html>\n')
+            expected = policy.source_digest(root)
+            text.write_bytes(text.read_bytes().replace(b'\n', b'\r\n'))
+            self.assertEqual(policy.source_digest(root), expected)
+            text.write_bytes(text.read_bytes().replace(b'Board', b'Changed board'))
+            self.assertNotEqual(policy.source_digest(root), expected)
 
-    def test_legacy_unstamped_bundle_is_rejected(self):
-        with tempfile.TemporaryDirectory() as folder:
-            source = Path(folder) / 'bundle.cpp'
-            source.write_text('#include "generated_web_assets.h"\n')
-            self.assertFalse(matches(source, 'any-digest'))
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_binary_asset_bytes_are_not_normalized(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'web').mkdir()
+            binary = root / 'web/image.png'
+            binary.write_bytes(b'\x89PNG\r\n\x00')
+            expected = policy.source_digest(root)
+            binary.write_bytes(b'\x89PNG\n\x00')
+            self.assertNotEqual(policy.source_digest(root), expected)

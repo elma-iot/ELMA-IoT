@@ -19,7 +19,12 @@ def source_digest(root):
         if path.is_file():
             digest.update(path.relative_to(root).as_posix().encode())
             digest.update(b'\0')
-            digest.update(path.read_bytes())
+            content = path.read_bytes()
+            # Git checkouts can use CRLF on Windows. Text line endings do not
+            # change the generated UI and must not invalidate a portable bundle.
+            if path.suffix.lower() in {'.html', '.js', '.mjs', '.json', '.css', '.svg', '.py'}:
+                content = content.replace(b'\r\n', b'\n')
+            digest.update(content)
     return digest.hexdigest()
 
 def matches(source, digest):

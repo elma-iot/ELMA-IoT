@@ -4099,7 +4099,7 @@
     "chip": "esp32s3",
     "asset": {
       "src": "/viewe-uedx24320028e-wb-a.svg",
-      "alt": "VIEWE 2.8-inch 240x320 В· UEDX24320028E-WB-A V1.1 board"
+      "alt": "VIEWE 2.8-inch 240x320 · UEDX24320028E-WB-A V1.1 board"
     },
     "gpio": [
       5,
@@ -4470,7 +4470,7 @@
     "chip": "esp32s3",
     "asset": {
       "src": "/viewe-uedx32480035e-wb-a.svg",
-      "alt": "VIEWE 3.5-inch 320x480 В· UEDX32480035E-WB-A board"
+      "alt": "VIEWE 3.5-inch 320x480 · UEDX32480035E-WB-A board"
     },
     "defaults": {
       "statusLedPin": -1,
@@ -4742,7 +4742,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028r.svg",
-      "alt": "ESP32-2432S028R Ð’Â· 2.8-inch resistive"
+      "alt": "ESP32-2432S028R · 2.8-inch resistive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4814,7 +4814,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028c.svg",
-      "alt": "ESP32-2432S028C Ð’Â· 2.8-inch capacitive"
+      "alt": "ESP32-2432S028C · 2.8-inch capacitive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -5083,7 +5083,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-cam.svg",
-      "alt": "ESP32-CAM Ð’Â· AI-Thinker / OV2640"
+      "alt": "ESP32-CAM · AI-Thinker / OV2640"
     },
     "defaults": {
       "statusLedPin": 33,
@@ -5275,7 +5275,7 @@
     "chip": "esp32s3",
     "asset": {
       "src": "/miniexco-v2.svg",
-      "alt": "MiniExco v2 Â· ESP32-S3-SPK N16R8"
+      "alt": "MiniExco v2 · ESP32-S3-SPK N16R8"
     },
     "gpio": [
       6,

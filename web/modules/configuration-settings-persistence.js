@@ -169,8 +169,9 @@ export function createConfigurationSettingsPersistenceModule({
     if (data.audio.enabled === undefined) {
       data.audio.enabled = true;
     }
-    populateAudioI2sPinOptions(data);
-    populateSdPinOptions(data);
+    populateAudioI2sPinOptions(data, true);
+    // Do not rebuild peripheral groups until their saved selections are loaded.
+    populateSdPinOptions(data, false);
     populateStatusLedPinOptions(data);
     // Loading a saved project must win over stale values left in the live DOM.
     // Later interactive refreshes preserve the user's current selections.
