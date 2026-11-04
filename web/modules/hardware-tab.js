@@ -7,6 +7,13 @@ export function createHardwareTab({
   updateResourceCard,
 }) {
   function renderHardwareSummary(status) {
+    const host=elements.deviceHardwareBoard?.parentElement;
+    let imu=document.getElementById('onboardImuReadings');
+    if(status?.onboardImu?.supported && host){
+      if(!imu){imu=document.createElement('p');imu.id='onboardImuReadings';host.append(imu);}
+      const reading=status.onboardImu;
+      imu.textContent=reading.valid?`QMI8658 · acceleration X/Y/Z: ${reading.acceleration.map(v=>Number(v).toFixed(3)).join(' / ')} g · gyro X/Y/Z: ${reading.gyroscope.map(v=>Number(v).toFixed(2)).join(' / ')} deg/s`:'QMI8658 · waiting for a valid sample';
+    }else if(imu)imu.remove();
     const hardware = status?.hardware || {};
     const system = status?.system || {};
     const settings = state.settings || {};

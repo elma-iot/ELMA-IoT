@@ -3,7 +3,7 @@
 #include "robot_service.h"
 #include "spk_media.h"
 #include "motion_capture.h"
-#if APP_ROTARY_HMI
+#if APP_ROTARY_HMI || APP_WAVESHARE_AMOLED
 #include "legacy_ledc_compat.h"
 #endif
 #include "buzzer_melody.h"
@@ -15,6 +15,7 @@
 #include "logic_audio_dispatch.h"
 #include "led_microphone.h"
 #include "bno055_service.h"
+#include "amoled_sensors.h"
 #include "can_service.h"
 #include "rs485_service.h"
 #include "generated_project_defaults.h"
@@ -5069,6 +5070,7 @@ void loop() {
         if (activeAudioOutputEnabled) audioPlayer->loop();
         audioWorkAt=micros();
         Bno055::tick();
+        AmoledSensors::tick();
         traceAudioWork("telemetry");
         if (activeAudioOutputEnabled) audioPlayer->loop();
         audioWorkAt=micros();

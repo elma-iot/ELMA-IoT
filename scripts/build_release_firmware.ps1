@@ -8,6 +8,7 @@ $releaseVersion = $Matches[1]
 $releaseRoot = Join-Path $projectRoot "release-assets/v$releaseVersion"
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 $profiles = @(
+    @('waveshare_amoled_191', 'elma-esp32s3-board33', 9, 33, 0x400000),
     @('esp32_notifier', 'esp32-notifier', 0, 8),
     @('esp32_notifier_hacs', 'esp32-notifier-hacs', 0, 8),
     @('esp32_notifier_hacs_slim', 'esp32-notifier-hacs-slim', 0, 8),

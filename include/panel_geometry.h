@@ -1,7 +1,13 @@
 #pragma once
+#ifndef APP_WAVESHARE_AMOLED
+#define APP_WAVESHARE_AMOLED 0
+#endif
 
 // The VIEWE PCB marking is shared by different fitted LCD panels.
-#if APP_ROTARY_HMI
+#if APP_WAVESHARE_AMOLED
+constexpr int kPanelWidth = 536;
+constexpr int kPanelHeight = 240;
+#elif APP_ROTARY_HMI
 constexpr int kPanelWidth = 480;
 constexpr int kPanelHeight = 480;
 #elif defined(BOARD_VIEWE_UEDX32480035E_WB_A) || APP_SUNTON_PANEL == 3
@@ -12,7 +18,9 @@ constexpr int kPanelWidth = 240;
 constexpr int kPanelHeight = 320;
 #endif
 
-#if APP_ROTARY_HMI
+#if APP_WAVESHARE_AMOLED
+constexpr const char* kPanelTouchName="FT3168";
+#elif APP_ROTARY_HMI
 constexpr const char* kPanelTouchName="CST826 (CST820-compatible vendor driver)";
 #elif APP_SUNTON_PANEL == 1
 constexpr const char* kPanelTouchName="XPT2046";

@@ -82,7 +82,9 @@ int main(){
  assert(head._contentLength==expected.size());
 }
 ''')
-   json_include=ROOT/'.pio/libdeps/sunton_3248s035c/ArduinoJson/src'
+   json_header=next(iter(sorted((ROOT/'.pio/libdeps').glob('*/ArduinoJson/src/ArduinoJson.h'))),None)
+   if json_header is None:self.skipTest('Build a firmware environment to install ArduinoJson')
+   json_include=json_header.parent
    (work/'build.cmd').write_text(f'@call "{VCVARS}" >nul\ncl /nologo /std:c++17 /EHsc /I. /I"{json_include}" main.cpp /Fe:response-test.exe\nif errorlevel 1 exit /b 1\nresponse-test.exe\n')
    r=subprocess.run(['cmd.exe','/c',str(work/'build.cmd')],cwd=work,capture_output=True,text=True)
    self.assertEqual(r.returncode,0,r.stdout+r.stderr)

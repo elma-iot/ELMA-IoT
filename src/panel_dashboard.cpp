@@ -45,6 +45,9 @@ bool PanelDashboard::begin(uint8_t rotation,bool bootAnimation){
  if(!pixels_)return false;
  lv_disp_draw_buf_init(&drawBuffer_,pixels_,nullptr,kPanelWidth*rows);lv_disp_drv_init(&displayDriver_);
  displayDriver_.hor_res=kPanelWidth;displayDriver_.ver_res=kPanelHeight;displayDriver_.draw_buf=&drawBuffer_;displayDriver_.flush_cb=flush;displayDriver_.user_data=this;displayDriver_.sw_rotate=1;
+#if APP_WAVESHARE_AMOLED
+ displayDriver_.rounder_cb=[](lv_disp_drv_t*,lv_area_t* area){area->x1&=~1;area->y1&=~1;area->x2|=1;area->y2|=1;};
+#endif
  display_=lv_disp_drv_register(&displayDriver_);if(!display_)return false;lv_disp_set_theme(display_,elmaPanelTheme(display_));lv_disp_set_rotation(display_,static_cast<lv_disp_rot_t>(rotation));
  lv_indev_drv_init(&inputDriver_);inputDriver_.type=LV_INDEV_TYPE_POINTER;inputDriver_.read_cb=touch;inputDriver_.user_data=this;inputDriver_.disp=display_;inputDriver_.scroll_limit=8;inputDriver_.scroll_throw=12;input_=lv_indev_drv_register(&inputDriver_);
  screen_=lv_disp_get_scr_act(display_);lv_obj_set_style_bg_color(screen_,lv_color_hex(0x111827),0);lv_obj_set_style_text_color(screen_,lv_color_hex(0xf3f4f6),0);lv_obj_set_style_pad_all(screen_,6,0);lv_obj_set_style_pad_row(screen_,5,0);lv_obj_set_flex_flow(screen_,LV_FLEX_FLOW_COLUMN);lv_obj_clear_flag(screen_,LV_OBJ_FLAG_SCROLLABLE);
@@ -309,6 +312,9 @@ void PanelDashboard::page(const String& key){
  if(key=="oled")label(String(kPanelWidth)+" x "+String(kPanelHeight)+" / "+kPanelTouchName);
  if(key=="hardware"){
   labels_["hardware"]=label("");
+#if APP_WAVESHARE_AMOLED
+  labels_["onboardImu"]=label("");
+#endif
   for(const char* key:{"cpu","core0","core1","sram","psram","spiffs","sd","temperature"}){
    labels_[String("meter:")+key]=label("");auto* bar=lv_bar_create(body_);lv_obj_set_size(bar,LV_PCT(100),16);lv_bar_set_range(bar,0,100);lv_obj_set_style_min_height(bar,16,0);lv_obj_set_style_pad_all(bar,0,LV_PART_MAIN);lv_obj_set_style_border_width(bar,0,LV_PART_MAIN);lv_obj_set_style_bg_color(bar,lv_color_hex(0x475569),LV_PART_MAIN);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_MAIN);lv_obj_set_style_bg_color(bar,lv_color_hex(0x22c55e),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(bar,LV_OPA_COVER,LV_PART_INDICATOR);meters_[key]=bar;
   }
@@ -488,6 +494,14 @@ void PanelDashboard::update(){
  }
 
  set("info",String("Device: ")+(live["name"]|"ELMA IoT")+"\nFirmware: "+(state_["version"]|"unknown")+"\nBuilt: "+(state_["build"]|"")+"\nBoard: "+(hardware["boardProfile"]|"")+"\nChip: "+(hardware["chipModel"]|"")+" rev "+String(hardware["chipRevision"]|0)+"\nCPU: "+String(hardware["cpuCores"]|0)+" cores / "+String(hardware["cpuFreqMHz"]|0)+" MHz\nFlash: "+String((hardware["flashSizeBytes"]|0)/1024)+" KB\nFirmware size: "+String((hardware["sketchSizeBytes"]|0)/1024)+" KB\nFree heap: "+String(system["freeHeap"]|0)+" B\nUptime: "+String(millis()/1000)+" s\nIP: "+(live["ip"]|"")+"\nMAC: "+(state_["mac"]|"")+"\nDisplay: "+String(kPanelWidth)+" x "+String(kPanelHeight)+"\nTouch: "+kPanelTouchName+(panel_.spiClock()?"\nLCD SPI: "+String(panel_.spiClock()/1000000)+" MHz":""));
+#if APP_WAVESHARE_AMOLED
+ auto imu=state_["onboardImu"];
+ String motion="QMI8658: waiting for valid samples";
+ if(imu["valid"]==true){motion="QMI8658\nAcceleration (g) X/Y/Z: ";
+  for(int axis=0;axis<3;++axis)motion+=String(imu["acceleration"][axis].as<float>(),3)+(axis<2?" / ":"\nGyroscope (deg/s) X/Y/Z: ");
+  for(int axis=0;axis<3;++axis)motion+=String(imu["gyroscope"][axis].as<float>(),2)+(axis<2?" / ":"");}
+ set("onboardImu",motion);
+#endif
  set("firmware",String("Installed: ")+(state_["version"]|"")+"\nRepository: "+(state_["ota"]["repository"]|"")+"\nLatest for this board: "+(String(state_["ota"]["latestVersion"]|"").isEmpty()?String("Not available"):String(state_["ota"]["latestVersion"]|""))+"\n"+(state_["ota"]["message"]|"")+"\n"+(live["otaPhase"]|"idle")+" "+String(live["otaProgress"]|0)+"%\n"+(live["lastError"]|""));
  set("storage",String(state_["storage"]["busy"]==true?"Loading folder...\n":"")+String(state_["storage"]["mounted"]==true?"Mounted":"Unavailable")+"\nFree: "+valueText(state_["storage"]["free"])+" / "+valueText(state_["storage"]["total"])+" bytes");
  set("logs",state_["logText"]|"No log entries");

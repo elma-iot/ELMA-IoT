@@ -24,6 +24,14 @@
 void serviceStorageBackends();
 
 namespace {
+FRESULT formatFatFilesystem(const TCHAR* name,void* work,UINT size){
+#if ESP_IDF_VERSION_MAJOR >= 5
+    MKFS_PARM options{};options.fmt=FM_FAT32;
+    return f_mkfs(name,&options,work,size);
+#else
+    return f_mkfs(name,FM_FAT32,0,work,size);
+#endif
+}
 // Arduino ESP32 2.x sd_diskio caps transfers at 25 MHz. Do not report requested 80 MHz as actual speed.
 // The SPK board shares sustained SD writes with camera DMA and PDM capture.
 // Its onboard SPI wiring was unstable at 25 MHz under that load.
@@ -118,6 +126,9 @@ bool sdSettingsUsePin(const SdSettings& settings, uint8_t pin) {
     }
 #if APP_HAS_CAMERA
     if (settings.sdmmc) return pin == 14 || pin == 15 || pin == 2;
+#endif
+#if APP_WAVESHARE_AMOLED
+    if(settings.sdmmc)return pin==9||pin==42||pin==8;
 #endif
     return settings.csPin == pin || settings.sckPin == pin || settings.mosiPin == pin || settings.misoPin == pin || (settings.sdmmc && (pin == 15 || pin == 18));
 }
@@ -348,7 +359,7 @@ bool spiCardNeedsFormat(const SdSettings& settings, bool format=false) {
     bool ok=result==FR_NO_FILESYSTEM;
     if(format){
         std::unique_ptr<BYTE[]> work(new(std::nothrow) BYTE[FF_MAX_SS]);
-        ok=work && (result==FR_OK||result==FR_NO_FILESYSTEM) && f_mkfs(name,FM_FAT32,0,work.get(),FF_MAX_SS)==FR_OK;
+        ok=work && (result==FR_OK||result==FR_NO_FILESYSTEM) && formatFatFilesystem(name,work.get(),FF_MAX_SS)==FR_OK;
     }
     sdcard_uninit(drive);return ok;
 }
@@ -366,8 +377,16 @@ bool mmcCardNeedsFormat(bool format=false) {
 #endif
 #else
     host.flags=SDMMC_HOST_FLAG_4BIT;slot.width=4;
+#if APP_WAVESHARE_AMOLED
+    host.flags=SDMMC_HOST_FLAG_1BIT;slot.width=1;slot.clk=GPIO_NUM_9;slot.cmd=GPIO_NUM_42;slot.d0=GPIO_NUM_8;
+#else
     slot.clk=GPIO_NUM_14;slot.cmd=GPIO_NUM_17;slot.d0=GPIO_NUM_16;
+#endif
+#if !APP_WAVESHARE_AMOLED
+#if !APP_WAVESHARE_AMOLED
     slot.d1=GPIO_NUM_18;slot.d2=GPIO_NUM_15;slot.d3=GPIO_NUM_21;
+#endif
+#endif
 #endif
     if(sdmmc_host_init()!=ESP_OK)return false;
     sdmmc_card_t card{};bool needsFormat=false;
@@ -388,7 +407,7 @@ bool mmcCardNeedsFormat(bool format=false) {
             if(format){
                 f_mount(nullptr,name,0);
                 std::unique_ptr<BYTE[]> work(new(std::nothrow) BYTE[FF_MAX_SS]);
-                needsFormat=work && (result==FR_OK||result==FR_NO_FILESYSTEM) && f_mkfs(name,FM_FAT32,0,work.get(),FF_MAX_SS)==FR_OK;
+                needsFormat=work && (result==FR_OK||result==FR_NO_FILESYSTEM) && formatFatFilesystem(name,work.get(),FF_MAX_SS)==FR_OK;
             }
             f_mount(nullptr,name,0);ff_diskio_unregister(drive);
         }
@@ -423,8 +442,13 @@ bool mountSdStorage(const SdSettings& settings, bool allowFormat=false) {
 #if APP_HAS_CAMERA
         sdMounted = SD_MMC.begin("/sd", true, false, 20000, 5);
 #else
+#if APP_WAVESHARE_AMOLED
+        SD_MMC.setPins(9,42,8);
+        sdMounted = SD_MMC.begin("/sd", true, false, 20000, 5);
+#else
         SD_MMC.setPins(14, 17, 16, 18, 15, 21);
         sdMounted = SD_MMC.begin("/sd", false, false, 20000, 5);
+#endif
 #endif
         if (sdMounted) {
             resetSdMountRetryState();

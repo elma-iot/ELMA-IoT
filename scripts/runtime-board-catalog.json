@@ -4742,7 +4742,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028r.svg",
-      "alt": "ESP32-2432S028R В· 2.8-inch resistive"
+      "alt": "ESP32-2432S028R Ð’Â· 2.8-inch resistive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4814,7 +4814,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-2432s028c.svg",
-      "alt": "ESP32-2432S028C В· 2.8-inch capacitive"
+      "alt": "ESP32-2432S028C Ð’Â· 2.8-inch capacitive"
     },
     "defaults": {
       "statusLedPin": 4,
@@ -4967,6 +4967,12 @@
       "mainboard.device.board",
       "mainboard.device.chip",
       "mainboard.device.error",
+      "mainboard.imu.acceleration_x",
+      "mainboard.imu.gyroscope_x",
+      "mainboard.imu.acceleration_y",
+      "mainboard.imu.gyroscope_y",
+      "mainboard.imu.acceleration_z",
+      "mainboard.imu.gyroscope_z",
       "mainboard.esp8266.vcc",
       "mainboard.esp8266.sketch_free",
       "mainboard.esp8266.uptime",
@@ -5077,7 +5083,7 @@
     "chip": "esp32",
     "asset": {
       "src": "/esp32-cam.svg",
-      "alt": "ESP32-CAM В· AI-Thinker / OV2640"
+      "alt": "ESP32-CAM Ð’Â· AI-Thinker / OV2640"
     },
     "defaults": {
       "statusLedPin": 33,
@@ -5269,7 +5275,7 @@
     "chip": "esp32s3",
     "asset": {
       "src": "/miniexco-v2.svg",
-      "alt": "MiniExco v2 · ESP32-S3-SPK N16R8"
+      "alt": "MiniExco v2 Â· ESP32-S3-SPK N16R8"
     },
     "gpio": [
       6,
@@ -5588,6 +5594,199 @@
         21,
         13,
         1
+      ]
+    }
+  },
+  "esp32-s3-amoled-1.91": {
+    "chip": "esp32s3",
+    "asset": {
+      "src": "/esp32-s3-amoled-1.91.svg",
+      "alt": "Waveshare ESP32-S3 Touch AMOLED 1.91, 536 x 240"
+    },
+    "defaults": {
+      "statusLedPin": -1,
+      "statusLedGreenPin": -1,
+      "statusLedBluePin": -1,
+      "statusLedType": "regular"
+    },
+    "gpio": [
+      17,
+      16,
+      10,
+      4,
+      40,
+      39,
+      38,
+      37,
+      36,
+      35,
+      34,
+      43,
+      44,
+      0,
+      1,
+      2,
+      3,
+      11,
+      12,
+      13,
+      14,
+      15,
+      19,
+      20,
+      21,
+      26,
+      33
+    ],
+    "capabilities": {
+      "false:output": [
+        2,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        21,
+        38
+      ],
+      "false:input": [
+        2,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        21,
+        38
+      ],
+      "false:adc": [
+        2,
+        4,
+        10
+      ],
+      "false:touch": [
+        2,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "false:pull-input": [
+        2,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        21,
+        38
+      ],
+      "true:output": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        20,
+        21,
+        38,
+        39,
+        40,
+        43,
+        44
+      ],
+      "true:input": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        20,
+        21,
+        38,
+        39,
+        40,
+        43,
+        44
+      ],
+      "true:adc": [
+        1,
+        2,
+        3,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        20
+      ],
+      "true:touch": [
+        1,
+        2,
+        3,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "true:pull-input": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        20,
+        21,
+        38,
+        39,
+        40,
+        43,
+        44
       ]
     }
   }

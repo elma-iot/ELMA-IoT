@@ -41,7 +41,10 @@
       "+<drivers/lcd/port/esp_lcd_st7701_rgb.c>",
       "+<drivers/touch/esp_panel_touch_cst820.cpp>",
       "+<drivers/touch/port/esp_lcd_touch_cst820.c>",
-      "+<drivers/bus/port/esp_lcd_panel_io_3wire_spi.c>"
+      "+<drivers/bus/port/esp_lcd_panel_io_3wire_spi.c>",
+      "+<drivers/bus/esp_panel_bus_qspi.cpp>",
+      "+<drivers/lcd/esp_panel_lcd_sh8601.cpp>",
+      "+<drivers/lcd/port/esp_lcd_sh8601.c>"
     ]
   }
 }

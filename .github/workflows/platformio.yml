@@ -52,6 +52,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - env: waveshare_amoled_191
+            boardId: '33'
+            asset: elma-esp32s3-board33-${{ github.event.release.tag_name }}.bin
           - env: esp32_notifier
             asset: esp32-notifier-${{ github.event.release.tag_name }}.bin
           - env: esp32_notifier_hacs
@@ -89,7 +92,7 @@ jobs:
         run: python scripts/project_version.py --tag "${{ github.event.release.tag_name }}"
       - name: Build release firmware
         env:
-          ELMA_SELECTED_BOARD_PROFILE_ID: ${{ startsWith(matrix.env, 'esp32c3') && '11' || startsWith(matrix.env, 'esp32s3') && '1' || '8' }}
+          ELMA_SELECTED_BOARD_PROFILE_ID: ${{ matrix.boardId || startsWith(matrix.env, 'esp32c3') && '11' || startsWith(matrix.env, 'esp32s3') && '1' || '8' }}
         run: pio run -e ${{ matrix.env }}
       - name: Stage OTA asset
         run: |

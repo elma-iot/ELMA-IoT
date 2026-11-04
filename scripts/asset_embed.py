@@ -11,7 +11,7 @@ import json
 Import("env")
 
 ROOT = Path(env["PROJECT_DIR"])
-if env.get("PIOENV", "").startswith("viewe_rotary_"):
+if env.get("PIOENV", "").startswith(("viewe_rotary_", "waveshare_amoled_")):
     # Compatibility headers in project/include are visible to every library.
     # Arduino 3 networking headers must therefore be visible there as well.
     framework = Path(env.PioPlatform().get_package_dir("framework-arduinoespressif32"))
@@ -74,6 +74,7 @@ def audit_board_assets(source, target, env):
     print("[size-fit] Mainboard SVG audit passed for board " + str(selected_board_id))
 
 default_board_ids = {
+    "waveshare_amoled_191": "33",
     "miniexco_v2": "32",
     "viewe_rotary_gc9503": "30", "viewe_rotary_st7701s": "31",
     "viewe_rotary_gc9503_uart":"30", "viewe_rotary_st7701s_uart":"31",

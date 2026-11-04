@@ -1,4 +1,4 @@
-#if APP_ROTARY_HMI
+#if APP_ROTARY_HMI || APP_WAVESHARE_AMOLED
 #include "legacy_ledc_compat.h"
 #endif
 #include "logic_gpio.h"

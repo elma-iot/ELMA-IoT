@@ -2,7 +2,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <mbedtls/sha256.h>
-#if APP_ROTARY_HMI
+#if APP_ROTARY_HMI || APP_WAVESHARE_AMOLED
 #define mbedtls_sha256_ret mbedtls_sha256
 #endif
 

@@ -2,6 +2,10 @@
 #if APP_HAS_ONBOARD_PANEL
 #include "device_log.h"
 #include "panel_boot.h"
+#if APP_WAVESHARE_AMOLED
+#include "amoled_sensors.h"
+#include <esp_lcd_panel_io.h>
+#endif
 #if APP_ROTARY_HMI
 #include <Wire.h>
 #include <driver/gpio.h>
@@ -59,6 +63,7 @@ bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
 #endif
     }
 #endif
+    amoledTouchEnabled_=touchEnabled;
     setRotation(rotation);
 #if APP_ROTARY_HMI
     if (board_->getTouch()) {
@@ -75,7 +80,10 @@ bool PanelDisplay::begin(bool touchEnabled, uint8_t rotation, uint8_t percent) {
 }
 
 void PanelDisplay::brightness(uint8_t percent) {
-#if APP_SUNTON_PANEL
+#if APP_WAVESHARE_AMOLED
+    if(board_){uint8_t level=min<uint8_t>(percent,100)*255/100;
+        esp_lcd_panel_io_tx_param(board_->getLCD()->getBus()->getControlPanelHandle(),0x02005100,&level,1);}
+#elif APP_SUNTON_PANEL
     if(board_)board_->setBrightness(min<uint8_t>(percent,100)*255/100);
 #else
     if (board_ && board_->getBacklight()) board_->getBacklight()->setBrightness(min<uint8_t>(percent, 100));
@@ -87,12 +95,15 @@ void PanelDisplay::flush() {
     // One bounded transfer at a time: never change the DMA source while in use.
     // RGB565 black/white is byte-order invariant.
     const uint8_t *pixels = getBuffer();
-    for (int y = 0; y < kPanelHeight; ++y) {
+    constexpr int rows=APP_WAVESHARE_AMOLED?2:1;
+    for (int y = 0; y < kPanelHeight; y+=rows) {
+      for(int row=0;row<rows;++row){
         for (int x = 0; x < kPanelWidth; ++x) {
-            uint8_t color = pixels[y * ((kPanelWidth + 7) / 8) + x / 8] & (0x80 >> (x & 7)) ? 255 : 0;
-            line_[x * 2] = line_[x * 2 + 1] = color;
+            uint8_t color = pixels[(y+row) * ((kPanelWidth + 7) / 8) + x / 8] & (0x80 >> (x & 7)) ? 255 : 0;
+            line_[(row*kPanelWidth+x) * 2] = line_[(row*kPanelWidth+x) * 2 + 1] = color;
         }
-        if (!drawColor(0, y, kPanelWidth, 1, line_)) break;
+      }
+        if (!drawColor(0, y, kPanelWidth, rows, line_)) break;
     }
 }
 
@@ -146,20 +157,25 @@ void PanelDisplay::endUpdate(){update_.reset();}
 void PanelDisplay::updateProgress(unsigned percent,uint32_t now){
     if(!update_||!update_->render(percent,now))return;
 #if !APP_ROTARY_HMI
-    for(int y=0;y<kPanelHeight;++y){
-        auto* row=reinterpret_cast<uint16_t*>(line_);
-        update_->row(row,y);
+    constexpr int rows=APP_WAVESHARE_AMOLED?2:1;
+    for(int y=0;y<kPanelHeight;y+=rows){
+      for(int n=0;n<rows;++n){
+        auto* row=reinterpret_cast<uint16_t*>(line_)+n*kPanelWidth;
+        update_->row(row,y+n);
         for(int x=0;x<kPanelWidth;++x){
             const uint16_t color=row[x];
             row[x]=(color>>8)|(color<<8); // SPI panel's LV_COLOR_16_SWAP wire order.
         }
-        if(!drawColor(0,y,kPanelWidth,1,line_))break;
+      }
+        if(!drawColor(0,y,kPanelWidth,rows,line_))break;
     }
 #endif
 }
 
 bool PanelDisplay::readRawTouch(int16_t &x, int16_t &y) {
-#if APP_SUNTON_PANEL
+#if APP_WAVESHARE_AMOLED
+    return amoledTouchEnabled_ && AmoledSensors::touch(x,y);
+#elif APP_SUNTON_PANEL
     return board_ && board_->point(x,y);
 #else
     if (!board_ || !board_->getTouch()) return false;

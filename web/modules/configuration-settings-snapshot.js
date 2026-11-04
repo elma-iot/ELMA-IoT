@@ -64,7 +64,7 @@ export function createConfigurationSettingsSnapshotModule({
 
     const storageProfiles = normalizedPeripheralStorageProfiles();
     snapshot.sd.enabled = String(storageProfiles[0] || "none").trim().toLowerCase() !== "none";
-    snapshot.sd.sdmmc=['viewe-sdmmc','camera-sdmmc'].includes(storageProfiles[0]);
+    snapshot.sd.sdmmc=['viewe-sdmmc','camera-sdmmc','waveshare-amoled-sdmmc'].includes(storageProfiles[0]);
     if(board?.defaults?.sd&&snapshot.sd.enabled){
       const fixed=board.bindings?.['storage:'+storageProfiles[0]];
       if(fixed)Object.assign(snapshot.sd,{csPin:fixed.CS??board.defaults.sd.csPin,sckPin:fixed.SCK??board.defaults.sd.sckPin,mosiPin:fixed.MOSI??board.defaults.sd.mosiPin,misoPin:fixed.MISO??board.defaults.sd.misoPin});

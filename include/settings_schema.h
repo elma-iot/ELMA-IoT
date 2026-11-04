@@ -1,4 +1,7 @@
 #pragma once
+#ifndef APP_WAVESHARE_AMOLED
+#define APP_WAVESHARE_AMOLED 0
+#endif
 
 #include <Arduino.h>
 #include <IPAddress.h>

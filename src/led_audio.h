@@ -1,4 +1,7 @@
 #pragma once
+#ifndef APP_WAVESHARE_AMOLED
+#define APP_WAVESHARE_AMOLED 0
+#endif
 #include <atomic>
 #include <cstdint>
 #include <cmath>
@@ -11,6 +14,12 @@ struct Tap {
  std::atomic<unsigned> ready{0},enabled{0};
  int16_t samples[sampleCount]{};unsigned used=0,rate=44100;
  void push(int16_t left,int16_t right,unsigned sampleRate){
+#if APP_WAVESHARE_AMOLED && ATOMIC_INT_LOCK_FREE != 2
+  // GCC 13 advertises only runtime lock-free guarantees. Audio callbacks
+  // must never enter a library lock: skip visual capture if alignment/target
+  // cannot provide native atomic words. Other board behavior stays unchanged.
+  if(!ready.is_lock_free()||!enabled.is_lock_free())return;
+#endif
   if(!enabled.load(std::memory_order_relaxed)){used=0;return;}
   if(ready.load(std::memory_order_acquire))return;
   if(!used)rate=std::max(1u,sampleRate);
@@ -18,7 +27,7 @@ struct Tap {
   if(used==sampleCount){used=0;ready.store(1,std::memory_order_release);}
  }
 };
-static_assert(ATOMIC_INT_LOCK_FREE==2,"Audio visual mailbox requires lock-free atomics");
+static_assert(ATOMIC_INT_LOCK_FREE==2 || APP_WAVESHARE_AMOLED,"Audio visual mailbox requires lock-free atomics");
 inline Tap& playback(){static Tap tap;return tap;}
 inline Tap& microphone(){static Tap tap;return tap;}
 struct Spectrum {float bands[bandCount]{},level=0;uint32_t updated=0;};

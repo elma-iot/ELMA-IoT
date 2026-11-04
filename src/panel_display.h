@@ -30,7 +30,9 @@ public:
     void updateProgress(unsigned percent,uint32_t now);
     void endUpdate();
     void sleep(bool sleeping) {
-#if APP_SUNTON_PANEL == 3
+#if APP_WAVESHARE_AMOLED
+        if(board_)board_->getLCD()->setDisplayOnOff(!sleeping);
+#elif APP_SUNTON_PANEL == 3
         if(board_){if(sleeping)board_->sleep();else board_->wakeup();}
 #else
         (void)sleeping;
@@ -60,7 +62,8 @@ private:
 #else
     std::unique_ptr<esp_panel::board::Board> board_;
 #endif
-    uint8_t line_[kPanelWidth * 2] __attribute__((aligned(4)));
+    uint8_t line_[kPanelWidth * 2 * (APP_WAVESHARE_AMOLED ? 2 : 1)] __attribute__((aligned(4)));
+    bool amoledTouchEnabled_ = false;
     bool transferReported_ = false;
     bool transferFailed_ = false;
 };

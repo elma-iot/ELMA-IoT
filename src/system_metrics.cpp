@@ -28,7 +28,9 @@ bool tickHookRegistered[portNUM_PROCESSORS] = {false};
 #endif
 
 const char* compiledBoardProfile() {
-#if APP_COMPILED_BOARD_PROFILE_ID == 30
+#if APP_COMPILED_BOARD_PROFILE_ID == 33
+    return "esp32-s3-amoled-1.91";
+#elif APP_COMPILED_BOARD_PROFILE_ID == 30
     return "viewe-uedx48480021-md80et";
 #elif APP_COMPILED_BOARD_PROFILE_ID == 31
     return "viewe-uedx48480021-md80et-st7701s";

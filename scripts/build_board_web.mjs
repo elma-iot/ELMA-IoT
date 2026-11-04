@@ -7,7 +7,7 @@ import { build } from "esbuild";
 
 const root = fs.realpathSync(path.resolve(process.argv[2]));
 const output = path.resolve(process.argv[3]);
-const boards = ["miniexco-v2","esp32-2432s028r","esp32-2432s028c","esp32-3248s035c","esp32-cam","esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32-spk-n16r8",
+const boards = ["esp32-s3-amoled-1.91","miniexco-v2","esp32-2432s028r","esp32-2432s028c","esp32-3248s035c","esp32-cam","esp32-s3-super-mini", "esp32-s3-zero", "esp32-s3-psram", "esp32-spk-n16r8",
   "esp32-s3-devkit-c1", "esp32-s3-cam-module", "esp32-wrover", "esp32-wroom", "esp32-mini",
   "wemos-lolin32-mini", "esp32-c3", "esp32-s2-psram", "esp32-c6", "wemos-d1-mini-esp32", "esp32-s2-wemos-mini", "viewe-uedx24320028e-wb-a", "viewe-uedx32480035e-wb-a",
   "viewe-uedx48480021-md80et", "viewe-uedx48480021-md80et-st7701s"];
@@ -64,7 +64,7 @@ for (const [index, board] of boards.entries()) {
       `const PERIPHERAL_${name}_PROFILE_OPTIONS = ${JSON.stringify(evaluate(literal).filter(option=>allowed[names[name]]?.includes(option.value)))};`);
     narrowedApp=narrowedApp.replace('if (status.firmware?.touchscreen &&','if (!["playing","buffering"].includes(status.playback?.state) && status.firmware?.touchscreen &&');
   }
-  if (!board.startsWith("viewe-") && !board.startsWith("esp32-2432") && board!=="esp32-3248s035c") {
+  if (board !== "esp32-s3-amoled-1.91" && !board.startsWith("viewe-") && !board.startsWith("esp32-2432") && board!=="esp32-3248s035c") {
     narrowedApp = narrowedApp.replace(/^  \{ value: "viewe-onboard-lcd",[^\n]*\n/m, "");
   }
   let maps = 0;
@@ -144,7 +144,7 @@ for (const [index, board] of boards.entries()) {
   let narrowedHtml = html.replace(/(<select\b[^>]*id="gpioBoardSelector"[^>]*>)([^]*?)(<\/select>)/,
     (_, open, options, close) => open + options.replace(/<option\b[^>]*value="([^"]+)"[^>]*>[^<]*<\/option>/g,
       (tag, value) => value === board ? tag.replace(/ selected\b/, "").replace(">", " selected>") : "") + close);
-  if (!board.startsWith("viewe-") && !board.startsWith("esp32-2432") && board!=="esp32-3248s035c") narrowedHtml = narrowedHtml.replace(/<option value="viewe-onboard-lcd">[^<]*<\/option>/g, "");
+  if (board !== "esp32-s3-amoled-1.91" && !board.startsWith("viewe-") && !board.startsWith("esp32-2432") && board!=="esp32-3248s035c") narrowedHtml = narrowedHtml.replace(/<option value="viewe-onboard-lcd">[^<]*<\/option>/g, "");
   if(compactMultimedia){
     for(const name of ['camera','microphones','robot','storage-internal','logs']){
       narrowedHtml=narrowedHtml.replace(new RegExp('<button\\b(?=[^>]*\\bdata-tab="'+name+'")[^>]*>[\\s\\S]*?<\\/button>','g'),'');

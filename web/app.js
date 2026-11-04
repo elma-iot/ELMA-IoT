@@ -300,6 +300,7 @@ const PERIPHERAL_DISPLAY_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_SENSOR_PROFILE_OPTIONS = [
+  { value: "qmi8658", label: "Onboard QMI8658 accelerometer / gyroscope" },
   { value: "ldr", label: "Onboard light sensor" },
   { value: "none", label: "None" },
   { value: "ds3231-rtc", label: "DS3231 RTC" },
@@ -334,6 +335,7 @@ const PERIPHERAL_INPUT_PROFILE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 const PERIPHERAL_STORAGE_PROFILE_OPTIONS = [
+  { value: "waveshare-amoled-sdmmc", label: "Onboard Waveshare AMOLED MicroSD" },
   {value:"viewe-sdmmc",label:"Onboard microSD Р В Р’В Р Р†Р вЂљРІвЂћСћР В РІР‚в„ўР вЂ™Р’В· 4-bit SDMMC"},
 {"value": "camera-sdmmc", "label": "Onboard microSD \u00b7 1-bit SDMMC"},
   { value: "none", label: "None" },
@@ -457,6 +459,7 @@ const EFFECT_SELECT_CONFIG = [
 ];
 const STORAGE_PREVIEW_EMBEDDED_SCAN_MAX_BYTES = 256 * 1024;
 const GPIO_BOARD_PRESENTATION = {
+  "esp32-s3-amoled-1.91": {"rotation": "none", "rank": "AMOLED touch + IMU", "recommendation": "Waveshare SH8601 536x240, FT3168 touch, QMI8658, 16 MB flash / 8 MB OPI PSRAM. Hardware unverified.", "tone": "featured"},
   "viewe-uedx48480021-md80et": {
     "rotation": "none",
     "rank": "Round rotary display",
@@ -627,6 +630,7 @@ const GPIO_BOARD_PRESENTATION = {
   }
 };
 const GPIO_BOARD_ASSETS = {
+  "esp32-s3-amoled-1.91": {"src": "/esp32-s3-amoled-1.91.svg", "alt": "Waveshare ESP32-S3 Touch AMOLED 1.91, 536 x 240"},
   "viewe-uedx48480021-md80et": {
     "src": "/viewe-uedx48480021-md80et.svg",
     "alt": "VIEWE 2.1-inch rotary touch display - GC9503"
@@ -774,6 +778,7 @@ const DEFAULT_SD_GPIO_PINS = {
 };
 const DOCUMENTED_BUZZER_PIN = 7;
 const GPIO_BOARD_LAYOUTS = {
+  "esp32-s3-amoled-1.91": {"left": [{"pin": null, "label": "VBUS"}, {"pin": null, "label": "VSYS"}, {"pin": null, "label": "GND"}, {"pin": null, "label": "3V3_EN"}, {"pin": null, "label": "3V3"}, {"pin": 17, "label": "GPIO17"}, {"pin": 16, "label": "GPIO16"}, {"pin": null, "label": "GND"}, {"pin": 10, "label": "GPIO10"}, {"pin": 4, "label": "GPIO4"}, {"pin": null, "label": "CHIP_UP"}, {"pin": 40, "label": "GPIO40"}, {"pin": null, "label": "GND"}, {"pin": 39, "label": "GPIO39"}, {"pin": 38, "label": "GPIO38"}, {"pin": 37, "label": "GPIO37"}, {"pin": 36, "label": "GPIO36"}, {"pin": null, "label": "GND"}, {"pin": 35, "label": "GPIO35"}, {"pin": 34, "label": "GPIO34"}], "right": [{"pin": 43, "label": "GPIO43"}, {"pin": 44, "label": "GPIO44"}, {"pin": null, "label": "GND"}, {"pin": 0, "label": "GPIO0"}, {"pin": 1, "label": "GPIO1"}, {"pin": 2, "label": "GPIO2"}, {"pin": 3, "label": "GPIO3"}, {"pin": null, "label": "GND"}, {"pin": 11, "label": "GPIO11"}, {"pin": 12, "label": "GPIO12"}, {"pin": 13, "label": "GPIO13"}, {"pin": 14, "label": "GPIO14"}, {"pin": null, "label": "GND"}, {"pin": 15, "label": "GPIO15"}, {"pin": 19, "label": "GPIO19"}, {"pin": 20, "label": "GPIO20"}, {"pin": 21, "label": "GPIO21"}, {"pin": null, "label": "GND"}, {"pin": 26, "label": "GPIO26"}, {"pin": 33, "label": "GPIO33"}]},
   "viewe-uedx48480021-md80et": {
     "left": [],
     "right": []
@@ -3755,6 +3760,7 @@ const GPIO_BOARD_LAYOUTS = {
   }
 };
 const GPIO_BOARD_EXTRA_LAYOUTS = {
+  "esp32-s3-amoled-1.91": {"left": [], "right": []},
   "viewe-uedx48480021-md80et": {
     "left": [],
     "right": []
@@ -4074,6 +4080,7 @@ const GPIO_BOARD_EXTRA_LAYOUTS = {
   }
 };
 const GPIO_BOARD_RESERVED_PINS = {
+  "esp32-s3-amoled-1.91": {"5": {"label": "SH8601 onboard QSPI display", "warning": "GPIO5: SH8601 onboard QSPI display.", "kind": "onboard"}, "6": {"label": "SH8601 onboard QSPI display", "warning": "GPIO6: SH8601 onboard QSPI display.", "kind": "onboard"}, "7": {"label": "SH8601 onboard QSPI display", "warning": "GPIO7: SH8601 onboard QSPI display.", "kind": "onboard"}, "17": {"label": "SH8601 onboard QSPI display", "warning": "GPIO17: SH8601 onboard QSPI display.", "kind": "onboard"}, "18": {"label": "SH8601 onboard QSPI display", "warning": "GPIO18: SH8601 onboard QSPI display.", "kind": "onboard"}, "47": {"label": "SH8601 onboard QSPI display", "warning": "GPIO47: SH8601 onboard QSPI display.", "kind": "onboard"}, "48": {"label": "SH8601 onboard QSPI display", "warning": "GPIO48: SH8601 onboard QSPI display.", "kind": "onboard"}, "39": {"label": "FT3168 / QMI8658 I2C and touch interrupt", "warning": "GPIO39: FT3168 / QMI8658 I2C and touch interrupt.", "kind": "onboard"}, "40": {"label": "FT3168 / QMI8658 I2C and touch interrupt", "warning": "GPIO40: FT3168 / QMI8658 I2C and touch interrupt.", "kind": "onboard"}, "41": {"label": "FT3168 / QMI8658 I2C and touch interrupt", "warning": "GPIO41: FT3168 / QMI8658 I2C and touch interrupt.", "kind": "onboard"}, "45": {"label": "QMI8658 interrupts / boot strap", "warning": "GPIO45: QMI8658 interrupts / boot strap.", "kind": "onboard"}, "46": {"label": "QMI8658 interrupts / boot strap", "warning": "GPIO46: QMI8658 interrupts / boot strap.", "kind": "onboard"}, "8": {"label": "Onboard SD (current SDMMC revision)", "warning": "GPIO8: Onboard SD (current SDMMC revision).", "kind": "onboard"}, "9": {"label": "Onboard SD (current SDMMC revision)", "warning": "GPIO9: Onboard SD (current SDMMC revision).", "kind": "onboard"}, "42": {"label": "Onboard SD (current SDMMC revision)", "warning": "GPIO42: Onboard SD (current SDMMC revision).", "kind": "onboard"}, "26": {"label": "Flash / OPI PSRAM; unavailable on ESP32-S3R8", "warning": "GPIO26: Flash / OPI PSRAM; unavailable on ESP32-S3R8.", "kind": "onboard"}, "33": {"label": "Flash / OPI PSRAM; unavailable on ESP32-S3R8", "warning": "GPIO33: Flash / OPI PSRAM; unavailable on ESP32-S3R8.", "kind": "onboard"}, "34": {"label": "Flash / OPI PSRAM; unavailable on ESP32-S3R8", "warning": "GPIO34: Flash / OPI PSRAM; unavailable on ESP32-S3R8.", "kind": "onboard"}, "35": {"label": "Flash / OPI PSRAM; unavailable on ESP32-S3R8", "warning": "GPIO35: Flash / OPI PSRAM; unavailable on ESP32-S3R8.", "kind": "onboard"}, "36": {"label": "Flash / OPI PSRAM; unavailable on ESP32-S3R8", "warning": "GPIO36: Flash / OPI PSRAM; unavailable on ESP32-S3R8.", "kind": "onboard"}, "37": {"label": "Flash / OPI PSRAM; unavailable on ESP32-S3R8", "warning": "GPIO37: Flash / OPI PSRAM; unavailable on ESP32-S3R8.", "kind": "onboard"}, "19": {"label": "Native USB", "warning": "GPIO19: Native USB.", "kind": "onboard"}, "20": {"label": "Native USB", "warning": "GPIO20: Native USB.", "kind": "onboard"}, "1": {"label": "Battery ADC", "warning": "GPIO1: Battery ADC.", "kind": "onboard"}, "0": {"label": "BOOT strap", "warning": "GPIO0: BOOT strap.", "kind": "onboard"}},
   "viewe-uedx48480021-md80et": {
     "0": {
       "kind": "onboard",
@@ -6887,6 +6894,7 @@ function appendPeripheralOptions(select, options, selectedValue) {
   if(limited)options=options.filter(option=>limited.includes(option.value));
   const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
   options=options.filter(o=>o.value!=="mcp2551"||["esp32","esp32s2","esp32s3","esp32c3"].includes(boardChipFamily(board))).filter(o=>!['spk-ns4168','spk-dual-mic'].includes(o.value)||ONBOARD_BOARDS[board]?.audioProfile==='spk-ns4168').filter(o=>o.value!=='sunton-speaker'||ONBOARD_BOARDS[board]?.audioProfile==='sunton-speaker').filter(o=>o.value!=='camera-sdmmc'||!!(ONBOARD_BOARDS[board]?.cameraPins&&ONBOARD_BOARDS[board]?.sdmmcPins)).filter(o=>o.value!=='viewe-sdmmc'||!!ONBOARD_BOARDS[board]?.sdmmcPins).filter(o=>o.value!=='viewe-ms1285'||!!ONBOARD_BOARDS[board]?.rs485).filter(o=>!['viewe-onboard-lcd','viewe-rotary-onboard-lcd'].includes(o.value)||ONBOARD_BOARDS[board]?.displayProfile===o.value);
+  options=options.filter(o=>!["qmi8658","waveshare-amoled-sdmmc"].includes(o.value)||!!ONBOARD_BOARDS[board]?.imu);
   options=options.filter(o=>o.value!=="ldr"||ONBOARD_BOARDS[board]?.builtinProfiles?.sensor==="ldr");
   for (const optionConfig of options) {
     const option = document.createElement("option");

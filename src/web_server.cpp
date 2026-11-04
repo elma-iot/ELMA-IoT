@@ -14,6 +14,7 @@
 #include "web_server.h"
 #include "web_access.h"
 #include "bno055_service.h"
+#include "amoled_sensors.h"
 #include "rs485_service.h"
 #include "microphone_service.h"
 #include "spk_media.h"
@@ -1251,6 +1252,10 @@ void WebServerManager::registerApiRoutes() {
         String data;serializeJson(result,data);request->send(ok?202:400,"application/json",data);
     });rsHandler->setMaxContentLength(512);rsHandler->setMethod(HTTP_POST);server_.addHandler(rsHandler);
 
+    server_.on("/api/onboard-imu",HTTP_GET,[this](AsyncWebServerRequest* request){
+        if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
+        JsonDocument doc;AmoledSensors::snapshot(doc.to<JsonObject>());sendJson(request,doc);
+    });
     server_.on("/api/bno055",HTTP_GET,[this](AsyncWebServerRequest* request){
         if(redirectCaptivePortalIfNeeded(request)||!ensureAuthorized(request))return;
         JsonDocument doc;Bno055::snapshot(doc.to<JsonObject>());sendJson(request,doc);
@@ -1324,6 +1329,9 @@ void WebServerManager::registerApiRoutes() {
         root["sdFormat"]["ejected"]=sdStorageEjected();
         JsonObject firmware = doc["firmware"].to<JsonObject>();
         firmware["version"] = APP_VERSION;
+#if APP_WAVESHARE_AMOLED
+        AmoledSensors::snapshot(doc["onboardImu"].to<JsonObject>());
+#endif
 #if defined(APP_SPK_BOARD) && !defined(APP_DISABLE_AUDIO)
         firmware["microphones"] = true;
 #endif

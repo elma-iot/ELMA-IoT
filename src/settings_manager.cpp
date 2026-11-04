@@ -184,6 +184,10 @@ bool sdUsesPin(const SdSettings& sd, int pin) {
 #if APP_HAS_CAMERA
     if (sd.sdmmc) return pin == 14 || pin == 15 || pin == 2;
 #endif
+
+#if APP_WAVESHARE_AMOLED
+    if(sd.sdmmc)return pin==9||pin==42||pin==8;
+#endif
     return sd.csPin == pin || sd.sckPin == pin || sd.mosiPin == pin || sd.misoPin == pin || (sd.sdmmc && (pin == 15 || pin == 18));
 }
 
@@ -279,7 +283,7 @@ bool sdPinConflictsWithRequiredFunctions(const SdSettings& sd, const AudioSettin
         return false;
     }
 
-    return (sd.sdmmc && (audioUsesPin(audio, 15) || audioUsesPin(audio, 18))) || audioUsesPin(audio, sd.csPin) || audioUsesPin(audio, sd.sckPin) || audioUsesPin(audio, sd.mosiPin) || audioUsesPin(audio, sd.misoPin) ||
+    return (sd.sdmmc && !APP_WAVESHARE_AMOLED && (audioUsesPin(audio, 15) || audioUsesPin(audio, 18))) || audioUsesPin(audio, sd.csPin) || audioUsesPin(audio, sd.sckPin) || audioUsesPin(audio, sd.mosiPin) || audioUsesPin(audio, sd.misoPin) ||
         sdUsesPin(sd, battery.adcPin) || sdUsesPin(sd, battery.chargingSensePin) || sdUsesPin(sd, device.statusLedPin) ||
         (device.statusLedPin != 255 && device.statusLedType == "rgb" && (sdUsesPin(sd, device.statusLedGreenPin) || sdUsesPin(sd, device.statusLedBluePin)));
 }
@@ -794,6 +798,16 @@ SettingsBundle SettingsManager::defaults() const {
     settings.ui.peripheralHelperBindings = defaultPeripheralHelperBindings();
     settings.ui.peripheralProfileSelections = defaultPeripheralProfileSelections();
     settings.ui.motorRuntimeConfig = defaultMotorRuntimeConfig();
+#if APP_WAVESHARE_AMOLED
+    settings.ui.gpioBoardSelection="esp32-s3-amoled-1.91";
+    settings.ui.gpioBoardAutodetect=false;
+    settings.oled.touchEnabled=true;settings.oled.brightness=80;
+    settings.audio.enabled=false;
+    settings.sd.enabled=true;settings.sd.sdmmc=true;
+    settings.sd.csPin=255;settings.sd.sckPin=9;settings.sd.mosiPin=42;settings.sd.misoPin=8;
+    settings.battery.adcPin=1;settings.battery.dividerR1Ohms=100000;settings.battery.dividerR2Ohms=100000;settings.battery.calibrationMultiplier=2.0f;settings.battery.dividerMaxVin=4.2f;
+    settings.ui.peripheralProfileSelections=R"({"audioProfiles":["none"],"displayProfiles":["viewe-onboard-lcd"],"storage":["waveshare-amoled-sdmmc"],"sensors":["qmi8658"]})";
+#endif
 #if defined(APP_ROBOT_BOARD)
     settings.ui.gpioBoardSelection="miniexco-v2";
     settings.ui.gpioBoardAutodetect=false;
@@ -864,7 +878,7 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
     settings.ui.peripheralHelperBindings="";serializeJson(bindings,settings.ui.peripheralHelperBindings);
 #endif
 
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI && !APP_WAVESHARE_AMOLED
     // The VIEWE slot is soldered to this board; migrate old optional/disabled settings.
     settings.sd.enabled=true;settings.sd.sdmmc=true;
     settings.sd.csPin=21;settings.sd.sckPin=14;settings.sd.mosiPin=17;settings.sd.misoPin=16;
@@ -1052,8 +1066,11 @@ void SettingsManager::sanitizeInPlace(SettingsBundle& settings) const {
 #if !APP_HAS_ONBOARD_PANEL && !APP_HAS_CAMERA
     settings.sd.sdmmc = false;
 #endif
-    if (!isValidSdPin(settings.sd.csPin) || !isValidSdPin(settings.sd.sckPin) || !isValidSdPin(settings.sd.mosiPin) ||
-        !isValidSdPin(settings.sd.misoPin) || !hasDistinctSdPins(settings.sd)) {
+#if APP_WAVESHARE_AMOLED
+    if(settings.sd.sdmmc){settings.sd.csPin=255;settings.sd.sckPin=9;settings.sd.mosiPin=42;settings.sd.misoPin=8;}
+#endif
+    if (!(APP_WAVESHARE_AMOLED && settings.sd.sdmmc) && (!isValidSdPin(settings.sd.csPin) || !isValidSdPin(settings.sd.sckPin) || !isValidSdPin(settings.sd.mosiPin) ||
+        !isValidSdPin(settings.sd.misoPin) || !hasDistinctSdPins(settings.sd))) {
         settings.sd = SdSettings();
     }
     if (sdPinConflictsWithRequiredFunctions(settings.sd, settings.audio, settings.battery, settings.device)) {
@@ -2062,7 +2079,7 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     }
 
     sanitizeInPlace(settings);
-#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI
+#if APP_HAS_ONBOARD_PANEL && !APP_SUNTON_PANEL && !APP_ROTARY_HMI && !APP_WAVESHARE_AMOLED
     // GPIO38 is physically tied to BZ1. Safety override cannot repurpose it.
     bool buzzerConflict=settings.device.statusLedPin==38||settings.device.statusLedGreenPin==38||settings.device.statusLedBluePin==38;
     if(settings.audio.enabled)buzzerConflict|=settings.audio.wsPin==38||settings.audio.bclkPin==38||settings.audio.doutPin==38;

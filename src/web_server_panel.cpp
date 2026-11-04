@@ -9,6 +9,7 @@
 #include "version.h"
 #include "panel_radio.h"
 #include "bno055_service.h"
+#include "amoled_sensors.h"
 #include "rs485_service.h"
 #include <memory>
 namespace {
@@ -100,6 +101,9 @@ void WebServerManager::panelSnapshotWithSettings(const String& requestedPage,Jso
  if(page=="wled"&&ledStatusAppender_)ledStatusAppender_(root);
  if(page=="motor"&&motorStatusAppender_)motorStatusAppender_(root);
  if(page=="hardware"||page=="info")appendSystemMetricsJson(root);
+#if APP_WAVESHARE_AMOLED
+ if(page=="hardware")AmoledSensors::snapshot(root["onboardImu"].to<JsonObject>());
+#endif
  // The wiring page needs the board name, not a second copy of all metrics.
  if(page=="gpio")root["hardware"]["boardProfile"]=settings.ui.gpioBoardSelection;
  if(page=="firmware")otaManager_->appendStatusJson(root);

@@ -10,6 +10,7 @@
 #include "storage_backend.h"
 #include "logic_validation.h"
 #include "rs485_service.h"
+#include "amoled_sensors.h"
 #include "can_service.h"
 #include "logic_catalog.h"
 #include "logic_storage.h"
@@ -434,6 +435,9 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
     root["system"]["lastError"]=state_->snapshot().system.lastError;
     if(status_)status_(root);
     RoundHmi::snapshot(root["hmi"].to<JsonObject>());
+#if APP_WAVESHARE_AMOLED
+    AmoledSensors::snapshot(root["onboardImu"].to<JsonObject>());
+#endif
     for(JsonObjectConst n:runtime_.nodes())if(String(n["type"]|"").startsWith("hardware.can.")){CanBus::snapshot(root["can"].to<JsonObject>());break;}
     for(JsonObjectConst n:runtime_.nodes())if(String(n["type"]|"").startsWith("hardware.modbus.")){Rs485::snapshot(root["rs485"].to<JsonObject>(),false);break;}
     for(JsonObjectConst n:runtime_.nodes()) {
@@ -559,6 +563,7 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     response["groups"].set(runtime_.graph()["groups"]);
     bool hasPlots=false;for(JsonObjectConst node:runtime_.graph()["nodes"].as<JsonArrayConst>())if(node["type"]=="mainboard.plot"){hasPlots=true;break;}response["hasPlots"]=hasPlots;
     response["ledBinding"].set(ledBinding_);
+    response["onboardImu"]=bool(APP_WAVESHARE_AMOLED);
 #ifdef APP_DISABLE_AUDIO
     response["audioEnabled"]=false;
 #else
