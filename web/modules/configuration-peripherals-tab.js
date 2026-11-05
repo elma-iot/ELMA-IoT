@@ -316,7 +316,7 @@ export function createConfigurationPeripheralsTab({
       select.dataset.peripheralControlIndex = String(index);
       select.setAttribute("aria-label", `Controls ${index + 1} peripheral profile`);
       const isLed=['ws2812-neopixel-led-strip','led-pwm-dimmer'].includes(selectedValue);
-      appendPeripheralOptions(select, isLed ? peripheralControlProfileOptions.filter(option=>['none','ws2812-neopixel-led-strip','led-pwm-dimmer'].includes(option.value)) : peripheralControlProfileOptions, selectedValue);
+      appendPeripheralOptions(select, isLed ? peripheralControlProfileOptions.filter(option=>['none','ws2812-neopixel-led-strip','led-pwm-dimmer'].includes(option.value)) : peripheralControlProfileOptions, selectedValue, 'control', index);
       row.appendChild(buildPeripheralProfileComposite("control", selectedValue, index, select, peripheralProfileInstanceLabel("Control", index, total)));
       row.appendChild(buildPeripheralActionButton({
         addDatasetKey: "peripheralControlAdd",

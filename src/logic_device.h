@@ -5,16 +5,19 @@
 #include <freertos/semphr.h>
 #include "settings_schema.h"
 #include <map>
+#include <array>
 #include "logic_request_guard.h"
 
 // Adapter owns polling/physical GPIO. Main supplies existing subsystem actions.
 class LogicDevice {
 public:
     using StatusWriter = std::function<void(JsonObject)>;
-    bool begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const DeviceSettings& device);
+    bool begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const SettingsBundle& settings);
     void configureStatusLed(const DeviceSettings& device);
     void configureLedArrays(const String& helpers);
     bool configurePeripheralPins(const SettingsBundle& settings);
+    void configureRuntimePeripherals(const SettingsBundle& settings);
+    bool validatePeripheralConfiguration(SettingsBundle& settings,String& error);
     void loop(uint32_t now, bool updating, uint32_t minimumPollIntervalMs = 100);
     void shuttingDown();
     bool prepareForUpdate();
@@ -36,7 +39,14 @@ private:
     std::string reportedError_;
     SemaphoreHandle_t mutex_ = nullptr;
     JsonDocument devices_;
+    JsonDocument physicalPins_;
+    std::string peripheralError_;
+    uint32_t peripheralRevision_=0;
     String arrayHelpers_;
+    String runtimeProfiles_,runtimeHelpers_;
+    std::array<int,19> runtimeHardware_{};
+    bool peripheralsReady_=false;
+    uint32_t peripheralRetryAt_=0;
     JsonDocument ledBinding_;
     std::string mode_ = "playing";
     uint32_t source_ = 0;
@@ -57,6 +67,8 @@ private:
     bool persist(JsonVariantConst graph, const std::string& mode, String& error);
     void applyMode(const std::string& mode);
     bool action(JsonObjectConst node, JsonVariantConst args, std::string& error);
+    bool buildPeripheralDevices(const SettingsBundle& settings,JsonDocument& next,String& error);
+    bool peripheralNodeAvailable(JsonObjectConst node) const;
     void loadRecoveryState(JsonDocument& graph);
     void clearRecoveryState();
     std::string groupForNode(const char* nodeId) const;

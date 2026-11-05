@@ -3181,6 +3181,8 @@ bool saveSettingsFromJson(JsonVariantConst root, String& error) {
     if (!settingsManager->updateFromJson(updated, root, error)) {
         return false;
     }
+    const bool peripheralEdit=!root["ui"]["peripheralProfiles"].isNull()||!root["ui"]["peripheralHelperBindings"].isNull()||!root["ui"]["gpioSafetyOverride"].isNull()||root["audio"].is<JsonObjectConst>()||root["oled"].is<JsonObjectConst>()||root["sd"].is<JsonObjectConst>()||root["battery"].is<JsonObjectConst>()||!root["device"]["statusLedPin"].isNull()||!root["device"]["statusLedGreenPin"].isNull()||!root["device"]["statusLedBluePin"].isNull();
+    if(peripheralEdit&&!logicDevice.validatePeripheralConfiguration(updated,error))return false;
     if (hasPostedMotorRuntimeConfig) {
         updated.ui.motorRuntimeConfig = postedMotorRuntimeConfig.isEmpty() ? String("{}") : postedMotorRuntimeConfig;
     } else {
@@ -4364,7 +4366,7 @@ void setup() {
         else if(type=="mainboard.device.reboot"){requestRestartSequence("logics",false);ok=true;}
         if(!ok)message=error.isEmpty()?"Unsupported or failed Logics action":error.c_str();
         return ok;
-    },settings->device);
+    },*settings);
     // Audio recovery uses the boot counter; Logics owns its own three-attempt
     // counter so the audio guard cannot stop an automation before retry #3.
 
@@ -4987,7 +4989,10 @@ void loop() {
     const String playbackStateBeforeLogic = audioPlayer->currentState();
     const bool audioLatencySensitive = playbackStateBeforeLogic == "playing" || playbackStateBeforeLogic == "buffering";
     logicDevice.configureStatusLed(settings->device);
-    logicDevice.configureLedArrays(settings->ui.peripheralHelperBindings);
+    {
+        SettingsApplyGuard guard(0);
+        if(guard){logicDevice.configureRuntimePeripherals(*settings);logicDevice.configureLedArrays(settings->ui.peripheralHelperBindings);}
+    }
 #ifndef APP_DISABLE_AUDIO
     static String micProfiles,micBindings;static bool micPlayback=false;
     if(micProfiles!=settings->ui.peripheralProfileSelections||micBindings!=settings->ui.peripheralHelperBindings||micPlayback!=activeAudioOutputEnabled){

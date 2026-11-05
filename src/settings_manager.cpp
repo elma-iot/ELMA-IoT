@@ -5,6 +5,7 @@
 #include "can_contract.h"
 #include <driver/gpio.h>
 #include "settings_manager.h"
+#include "runtime_peripherals.h"
 #if APP_SUNTON_PANEL == 3
 #include "sunton_peripheral_policy.h"
 #endif
@@ -1830,6 +1831,7 @@ void SettingsManager::toJson(const SettingsBundle& settings, JsonObject root, co
 }
 
 bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst root, String& error) const {
+    const String previousProfiles=settings.ui.peripheralProfileSelections;
     if (!root.is<JsonObjectConst>()) {
         error = "Expected JSON object";
         return false;
@@ -2107,6 +2109,22 @@ bool SettingsManager::updateFromJson(SettingsBundle& settings, JsonVariantConst 
     }
 #if APP_ROTARY_HMI
     if(!RoundHmi::configure(settings.oled.circularMenu,error,true))return false;
+#endif
+    {
+        JsonDocument profiles,previous;
+        if(deserializeJson(profiles,settings.ui.peripheralProfileSelections)||deserializeJson(previous,previousProfiles)){
+            error="Invalid peripheral profile configuration";return false;
+        }
+        if(!RuntimePeripherals::validate(profiles.as<JsonObjectConst>(),previous.as<JsonObjectConst>(),error))return false;
+    }
+#ifdef APP_DISABLE_AUDIO
+    if(root["audio"]["enabled"]==true){error="Audio driver was excluded from this firmware";return false;}
+#endif
+#ifdef APP_DISABLE_DISPLAY
+    if(root["oled"]["enabled"]==true){error="Display driver was excluded from this firmware";return false;}
+#endif
+#ifdef APP_DISABLE_SD
+    if(root["sd"]["enabled"]==true){error="SD driver was excluded from this firmware";return false;}
 #endif
     if(!validateI2cConfiguration(settings,error))return false;
     return true;

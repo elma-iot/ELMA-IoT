@@ -1,4 +1,5 @@
 import {bindCompactGpioAutosave} from '../modules/compact-gpio-autosave.js';
+import {renderCompactPeripherals} from '../modules/compact-peripherals.js';
 import {animateArray} from '../modules/led-effects.js';
 import {arrayOptions,arraySvg,arrayDefaults,arrayControls} from '../modules/led-array.js';
 import {createLogicsTab} from '../modules/logic-editor.js';
@@ -46,6 +47,7 @@ function loadConfiguration(){return Promise.resolve().then(async()=>[await reque
  $('#board-name').textContent=board.name||board.id;
  const parse=v=>typeof v==='string'?JSON.parse(v):v||{};
  const profiles=parse(s.ui?.peripheralProfiles),bindings=parse(s.ui?.peripheralHelperBindings);
+ renderCompactPeripherals({host:$('#tab-gpio'),board,settings:s,profiles,bindings,save,reload:loadConfiguration,onError:showError});
  const wledTab=$('[data-tab="wled"]');wledTab.hidden=!(profiles.controls||[]).includes('ws2812-neopixel-led-strip');
  if(wledTab.hidden&&wledTab.getAttribute('aria-selected')==='true')selectTab(tabs.find(tab=>tab.dataset.tab==='gpio'));
 

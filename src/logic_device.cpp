@@ -5,6 +5,8 @@
 #include "led_array.h"
 #include "portable_peripherals.h"
 #include "peripheral_pin_binding.h"
+#include "runtime_peripherals.h"
+#include "runtime_board_pins.h"
 #include "system_metrics.h"
 #include "device_log.h"
 #include "storage_backend.h"
@@ -19,6 +21,7 @@
 #include <Preferences.h>
 #include <esp_attr.h>
 #include <esp_system.h>
+#include <esp_random.h>
 #include <cstring>
 
 namespace {
@@ -192,6 +195,112 @@ void LogicDevice::loadRecoveryState(JsonDocument& graph) {
     if(!groupStopped){quarantinedGroup_.clear();mode_="stopped";graph["mode"]="stopped";}
 }
 
+bool LogicDevice::buildPeripheralDevices(const SettingsBundle& settings,JsonDocument& next,String& error){
+ JsonDocument profiles,helpers,config;
+ const String selections=settings.ui.peripheralProfileSelections,bindings=settings.ui.peripheralHelperBindings;
+ bool ok=!deserializeJson(profiles,selections)&&!deserializeJson(helpers,bindings);
+ config["audio"]["wsPin"]=settings.audio.wsPin;config["audio"]["bclkPin"]=settings.audio.bclkPin;config["audio"]["doutPin"]=settings.audio.doutPin;
+ config["oled"]["sdaPin"]=settings.oled.sdaPin;config["oled"]["sclPin"]=settings.oled.sclPin;config["oled"]["resetPin"]=settings.oled.resetPin;
+ config["sd"]["csPin"]=settings.sd.csPin;config["sd"]["sckPin"]=settings.sd.sckPin;config["sd"]["mosiPin"]=settings.sd.mosiPin;config["sd"]["misoPin"]=settings.sd.misoPin;
+ config["battery"]["adcPin"]=settings.battery.adcPin;config["_firstDivider"]=0;
+ config["device"]["statusLedPin"]=settings.device.statusLedPin;config["device"]["statusLedType"]=settings.device.statusLedType;
+ if(ok)ok=RuntimePeripherals::validateResources(profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config["device"],error,RuntimePeripherals::graphPwm(runtime_.nodes()));
+ if(ok)ok=RuntimePeripherals::reconcile(next,devices_.as<JsonArrayConst>(),profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error);
+ if(!ok){if(error.isEmpty())error="Cannot read peripheral settings";return false;}
+ {
+  JsonArray entries=next.as<JsonArray>();
+  for(size_t i=entries.size();i>0;--i){String type=entries[i-1]["type"]|"";
+   if((type.startsWith("hardware.can.")&&!CanBus::available())||(type.startsWith("hardware.modbus.")&&!Rs485::available()))entries.remove(i-1);
+  }
+  JsonDocument filter,catalog;
+  if(CanBus::available())for(const char* key:{"configure","send","received","status"})filter[String("hardware.can.")+key]=true;
+  if(Rs485::available())for(const char* key:{"read","received","value","status"})filter[String("hardware.modbus.")+key]=true;
+  if(filter.size()&&!deserializeJson(catalog,ELMA_LOGIC_CATALOG,DeserializationOption::Filter(filter)))for(JsonPairConst entry:catalog.as<JsonObjectConst>()){
+   bool exists=false;for(JsonObjectConst n:entries)if(n["type"]==entry.key().c_str())exists=true;
+   if(!exists){JsonObject n=entries.add<JsonObject>();n.set(entry.value());n["type"]=entry.key().c_str();n["title"]=entry.key().c_str();n["category"]="Communication";}
+  }
+ }
+ std::string why;
+ for(JsonObject n:next.as<JsonArray>())if(LedArrays::matches(n)){
+  const String key="control:"+String(n["binding"]["index"]|0);
+  if(!LedArrays::updateBinding(n["binding"],helpers[key],why)){error=why.c_str();return false;}
+  if(n["type"]=="peripheral.strip")n["parameters"].set(n["binding"]["defaults"]);
+ }
+ for(JsonObjectConst n:next.as<JsonArrayConst>())if(n["binding"]["kind"]=="peripheral"){
+  const char* id=n["peripheral"]["id"]|"";
+  for(JsonPairConst signal:n["binding"]["pins"].as<JsonObjectConst>()){
+   int pin=signal.value()|-1;if(pin<0)continue;
+   const std::string group=n["binding"]["group"]|"",key=signal.key().c_str();
+   const bool output=group=="control"||group=="audio"||key=="SDA"||key=="SCL"||key=="SCK"||key=="MOSI"||key=="CS"||key=="DC"||key=="RST"||key=="BL";
+   String profile=n["peripheral"]["profile"]|"";
+   const bool analog=((profile.indexOf("potentiometer")>=0||profile.indexOf("joystick")>=0)&&strcmp(signal.key().c_str(),"SW"))||profile=="battery-voltage-divider-220k";
+   if(analog&&physicalPins_[String(pin)]["analog"]!=true){error="This peripheral requires an available analog GPIO";return false;}
+   JsonObjectConst caps=physicalPins_[String(pin)].as<JsonObjectConst>();
+   if(!GPIO_IS_VALID_GPIO(pin)||(output&&!GPIO_IS_VALID_OUTPUT_GPIO(pin))||caps.isNull()||(!settings.ui.gpioSafetyOverride&&caps["safe"]!=true&&caps["compiled"]!=true)){
+    error="Peripheral GPIO is unavailable or reserved on this board: "+String(pin);return false;
+   }
+   for(int reserved:{int(settings.device.statusLedPin),settings.device.statusLedType=="rgb"?settings.device.statusLedGreenPin:-1,settings.device.statusLedType=="rgb"?settings.device.statusLedBluePin:-1})if(pin==reserved){error="Peripheral GPIO conflicts with the status LED";return false;}
+   for(JsonObjectConst graphNode:runtime_.nodes())if(graphNode["type"]=="hardware.gpio"&&graphNode["parameters"]["pin"]==pin){error="Peripheral GPIO is used by a Logics GPIO node";return false;}
+   for(JsonObjectConst other:next.as<JsonArrayConst>())if(other["binding"]["kind"]=="peripheral"&&strcmp(other["peripheral"]["id"]|"",id)){
+    for(JsonPairConst port:other["binding"]["pins"].as<JsonObjectConst>())if(port.value()==pin){
+     const bool shared=!strcmp(signal.key().c_str(),port.key().c_str())&&(!strcmp(port.key().c_str(),"SDA")||!strcmp(port.key().c_str(),"SCL"));
+     if(!shared){error="Peripheral GPIO is already assigned to another peripheral: "+String(pin);return false;}
+    }
+   }
+  }
+ }
+ // Remove occupied signals from the generic GPIO palette, restoring freed pins.
+ for(JsonObject n:next.as<JsonArray>())if(n["type"]=="hardware.gpio"){
+  n["binding"]["allowedPins"].set(physicalPins_);
+  if(!settings.ui.gpioSafetyOverride){JsonObject pins=n["binding"]["allowedPins"];for(JsonPair entry:physicalPins_.as<JsonObject>())if(entry.value()["safe"]!=true)pins.remove(entry.key().c_str());}
+  for(JsonObjectConst peripheral:next.as<JsonArrayConst>())if(peripheral["binding"]["kind"]=="peripheral")for(JsonPairConst pin:peripheral["binding"]["pins"].as<JsonObjectConst>())if(pin.value().as<int>()>=0)n["binding"]["allowedPins"].remove(String(pin.value().as<int>()));
+  for(int pin:{int(settings.device.statusLedPin),settings.device.statusLedType=="rgb"?settings.device.statusLedGreenPin:-1,settings.device.statusLedType=="rgb"?settings.device.statusLedBluePin:-1})n["binding"]["allowedPins"].remove(String(pin));
+ }
+ return !next.overflowed();
+}
+
+bool LogicDevice::validatePeripheralConfiguration(SettingsBundle& settings,String& error){
+ if(!mutex_)return true;
+ if(xSemaphoreTake(mutex_,pdMS_TO_TICKS(100))!=pdTRUE){error="Peripheral configuration is busy; retry";return false;}
+ JsonDocument next,profiles,helpers;
+ bool ok=!deserializeJson(profiles,settings.ui.peripheralProfileSelections)&&!deserializeJson(helpers,settings.ui.peripheralHelperBindings);
+ if(ok)ok=RuntimePeripherals::assignIds(profiles.as<JsonObjectConst>(),helpers.as<JsonObject>(),devices_.as<JsonArrayConst>(),[](){return std::string("web:")+std::to_string(esp_random())+":"+std::to_string(esp_random());},error);
+ if(ok){settings.ui.peripheralHelperBindings="";serializeJson(helpers,settings.ui.peripheralHelperBindings);profiles.clear();helpers.clear();ok=buildPeripheralDevices(settings,next,error);}
+ xSemaphoreGive(mutex_);return ok;
+}
+
+void LogicDevice::configureRuntimePeripherals(const SettingsBundle& settings){
+ const std::array<int,19> hardware={settings.audio.wsPin,settings.audio.bclkPin,settings.audio.doutPin,settings.audio.enabled,settings.oled.sdaPin,settings.oled.sclPin,settings.oled.resetPin,settings.oled.enabled,settings.sd.csPin,settings.sd.sckPin,settings.sd.mosiPin,settings.sd.misoPin,settings.sd.enabled,settings.battery.adcPin,settings.device.statusLedPin,settings.device.statusLedGreenPin,settings.device.statusLedBluePin,settings.ui.gpioSafetyOverride,settings.device.statusLedType=="rgb"?2:settings.device.statusLedType=="neopixel"?1:0};
+ const bool unchanged=runtimeProfiles_==settings.ui.peripheralProfileSelections&&runtimeHelpers_==settings.ui.peripheralHelperBindings&&runtimeHardware_==hardware;
+ if(shutdown_||(unchanged&&(peripheralsReady_||int32_t(millis()-peripheralRetryAt_)<0))||!mutex_||xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+ const String selections=settings.ui.peripheralProfileSelections,bindings=settings.ui.peripheralHelperBindings;
+ JsonDocument next;String error;bool ok=buildPeripheralDevices(settings,next,error);
+ if(ok){
+  peripheralError_.clear();
+  bool removed=false;
+  for(JsonObjectConst node:runtime_.nodes())if(node["binding"]["kind"]=="peripheral"){
+   bool found=false;for(JsonObjectConst definition:next.as<JsonArrayConst>())if(node["peripheral"]["id"]==definition["peripheral"]["id"]&&node["type"]==definition["type"]){found=true;break;}
+   removed|=!found;
+  }
+  if(removed){stopOwnedOutputs();runtime_.pause(millis());mode_="paused";peripheralError_="A Logics peripheral was removed; update its graph before resuming";}
+  for(JsonObjectConst old:devices_.as<JsonArrayConst>())if(LedArrays::matches(old)){
+   bool found=false;for(JsonObjectConst n:next.as<JsonArrayConst>())if(old["peripheral"]["id"]==n["peripheral"]["id"]){found=true;break;}
+   if(!found)LedArrays::releasePin(old["binding"]["pins"]["DIN"]|-1);
+  }
+  devices_=std::move(next);
+  for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(n["binding"]["kind"]=="peripheral")runtime_.setPeripheralBinding(n["peripheral"]["id"]|"",n["binding"]);
+  runtimeProfiles_=selections;runtimeHelpers_=bindings;arrayHelpers_="";
+  runtimeHardware_=hardware;
+  peripheralsReady_=true;
+  ++peripheralRevision_;
+ }else {
+  stopOwnedOutputs();LedArrays::reset();runtime_.pause(millis());mode_="paused";
+  peripheralsReady_=false;peripheralError_=error.length()?error.c_str():"Cannot read peripheral settings";
+  runtimeProfiles_=selections;runtimeHelpers_=bindings;runtimeHardware_=hardware;peripheralRetryAt_=millis()+1000;
+ }
+ xSemaphoreGive(mutex_);
+}
+
 bool LogicDevice::configurePeripheralPins(const SettingsBundle& settings){
  if(!mutex_)return true;
  if(xSemaphoreTake(mutex_,0)!=pdTRUE)return false;
@@ -207,11 +316,11 @@ bool LogicDevice::configurePeripheralPins(const SettingsBundle& settings){
  primary["oled"]["sdaPin"]=settings.oled.sdaPin;primary["oled"]["sclPin"]=settings.oled.sclPin;primary["oled"]["resetPin"]=settings.oled.resetPin;
  primary["sd"]["csPin"]=settings.sd.csPin;primary["sd"]["sckPin"]=settings.sd.sckPin;primary["sd"]["mosiPin"]=settings.sd.mosiPin;primary["sd"]["misoPin"]=settings.sd.misoPin;
  ok=ok&&!helpers.overflowed()&&!primary.overflowed()&&!profiles.overflowed();
- if(!ok){reportedError_="Peripheral GPIO settings could not be read; retrying";xSemaphoreGive(mutex_);return false;}
+ if(!ok){peripheralError_="Peripheral GPIO settings could not be read; retrying";xSemaphoreGive(mutex_);return false;}
  for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(!LedArrays::matches(n)&&PeripheralPins::changed(n,helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>()))
   for(JsonPairConst p:n["binding"]["pins"].as<JsonObjectConst>()){
    int next=PeripheralPins::resolve(n,p.key().c_str(),helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>());
-   if(next>=0&&(!GPIO_IS_VALID_GPIO(next)||(PortablePeripherals::output(n)&&!GPIO_IS_VALID_OUTPUT_GPIO(next)))){reportedError_="Peripheral GPIO is unavailable on this chip";xSemaphoreGive(mutex_);return false;}
+   if(next>=0&&(!GPIO_IS_VALID_GPIO(next)||(PortablePeripherals::output(n)&&!GPIO_IS_VALID_OUTPUT_GPIO(next)))){peripheralError_="Peripheral GPIO is unavailable on this chip";xSemaphoreGive(mutex_);return false;}
   }
  struct Output {const char* id;uint16_t duty;};std::vector<Output> outputs;
  for(JsonObjectConst old:runtime_.nodes())if(!LedArrays::matches(old)&&PeripheralPins::changed(old,helpers.as<JsonObjectConst>(),primary.as<JsonObjectConst>())){
@@ -238,13 +347,13 @@ bool LogicDevice::configurePeripheralPins(const SettingsBundle& settings){
   else {pinMode(gpio,OUTPUT);digitalWrite(gpio,output.duty?HIGH:LOW);}
   rememberOutput(n,args.as<JsonVariantConst>());
  }
- if(reportedError_.rfind("Peripheral GPIO",0)==0)reportedError_.clear();
+ if(peripheralError_.rfind("Peripheral GPIO",0)==0)peripheralError_.clear();
  xSemaphoreGive(mutex_);return true;
 }
 
 // Called from the main loop so array allocation/refresh never runs in TCP callbacks.
 void LogicDevice::configureLedArrays(const String& helpers){
- if(shutdown_||arrayHelpers_==helpers||!mutex_||xSemaphoreTake(mutex_,0)!=pdTRUE)return;
+ if(shutdown_||!peripheralsReady_||arrayHelpers_==helpers||!mutex_||xSemaphoreTake(mutex_,0)!=pdTRUE)return;
  // A TCP settings save can replace the source String while pixels are being
  // allocated. Cache exactly the document we applied, never the newer reference.
  const String appliedHelpers=helpers;
@@ -254,6 +363,7 @@ void LogicDevice::configureLedArrays(const String& helpers){
  for(JsonObject n:updated.as<JsonArray>())if(LedArrays::matches(n)){
   String key="control:"+String(n["binding"]["index"]|0);
   if(!LedArrays::updateBinding(n["binding"],options[key],error))break;
+  if(n["type"]=="peripheral.strip")n["parameters"].set(n["binding"]["defaults"]);
   int pin=n["binding"]["pins"]["DIN"]|-1;
   if(!GPIO_IS_VALID_OUTPUT_GPIO(pin)||pin==(ledBinding_["pin"]|-1)||pin==(ledBinding_["greenPin"]|-1)||pin==(ledBinding_["bluePin"]|-1)){error="LED data GPIO conflicts with board configuration";break;}
  }
@@ -272,7 +382,7 @@ void LogicDevice::configureLedArrays(const String& helpers){
   }
   arrayHelpers_=appliedHelpers;
  }
- if(!error.empty()){reportedError_=error;arrayHelpers_=appliedHelpers;}
+ if(!error.empty()){peripheralError_=error;arrayHelpers_=appliedHelpers;}
  xSemaphoreGive(mutex_);
 }
 
@@ -308,7 +418,8 @@ void LogicDevice::configureStatusLed(const DeviceSettings& device) {
     xSemaphoreGive(mutex_);
 }
 
-bool LogicDevice::begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const DeviceSettings& device) {
+bool LogicDevice::begin(const char* program, AppState& state, StatusWriter status, ElmaLogic::Runtime::Action actions, const SettingsBundle& settings) {
+    const DeviceSettings& device=settings.device;
     state_=&state;status_=std::move(status);actions_=std::move(actions);mode_="stopped";
     mutex_=xSemaphoreCreateMutex();
     if(!mutex_)return false;
@@ -319,6 +430,26 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
         return false;
     }
     devices_.set(compiled["devices"]);
+    {
+        JsonDocument filter,pins;filter[settings.ui.gpioBoardSelection]=true;
+        if(!deserializeJson(pins,FPSTR(ELMA_RUNTIME_BOARD_PINS),DeserializationOption::Filter(filter)))physicalPins_.set(pins[settings.ui.gpioBoardSelection]);
+    }
+    if(physicalPins_.isNull())for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(n["type"]=="hardware.gpio")physicalPins_.set(n["binding"]["allowedPins"]);
+    for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(n["binding"]["kind"]=="peripheral")for(JsonPairConst pin:n["binding"]["pins"].as<JsonObjectConst>())if(pin.value().is<int>()&&pin.value().as<int>()>=0){
+        JsonObject caps=physicalPins_[String(pin.value().as<int>())].as<JsonObject>();
+        if(caps.isNull())caps=physicalPins_[String(pin.value().as<int>())].to<JsonObject>();
+        caps["input"]=true;caps["output"]=GPIO_IS_VALID_OUTPUT_GPIO(pin.value().as<int>());caps["compiled"]=true;
+    }
+    {
+        bool present=false;for(JsonObjectConst n:devices_.as<JsonArrayConst>())if(n["type"]=="hardware.gpio")present=true;
+        if(!present){JsonDocument filter,catalog;filter["hardware.gpio"]=true;
+            if(!deserializeJson(catalog,ELMA_LOGIC_CATALOG,DeserializationOption::Filter(filter))){
+                if(devices_.isNull())devices_.to<JsonArray>();JsonObject gpio=devices_.as<JsonArray>().add<JsonObject>();gpio.set(catalog["hardware.gpio"]);
+                gpio["type"]="hardware.gpio";gpio["title"]="GPIO";gpio["category"]="Hardware";gpio["binding"]["kind"]="gpio";gpio["binding"]["maxPwmFrequency"]=20000;gpio["binding"]["pwmAllowed"]=device.statusLedType!="rgb";gpio["binding"]["allowedPins"].set(physicalPins_);
+            }
+        }
+    }
+
 #if APP_ROTARY_HMI
     {
         if(devices_.isNull())devices_.to<JsonArray>();JsonDocument filter,catalog;
@@ -354,6 +485,7 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     // Keeping both copies exhausts classic ESP32 heap before web registration.
     if(!releaseEditorCatalog(compiled)){state.setLastError("Insufficient memory for Logics graph");return false;}
     configureStatusLed(device);
+    configureRuntimePeripherals(settings);
     mode_=compiled["mode"]|"playing";
     if(mode_!="playing"&&mode_!="paused"&&mode_!="stopped")mode_="stopped";
     {
@@ -386,6 +518,12 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     if(!compiled["devices"].isNull() && !releaseEditorCatalog(compiled)){state.setLastError("Insufficient memory for saved Logics graph");return false;}
     bool ok=runtime_.begin(std::move(compiled),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},error);
     if(ok)runtime_.setLedBinding(ledBinding_.as<JsonObjectConst>());
+    if(ok&&peripheralsReady_){
+        for(JsonObjectConst node:runtime_.nodes())if(!peripheralNodeAvailable(node)){mode_="paused";peripheralError_="A saved automation references a removed peripheral; update its graph";break;}
+        JsonDocument profiles,helpers;deserializeJson(profiles,runtimeProfiles_);deserializeJson(helpers,runtimeHelpers_);String resourceError;
+        if(!RuntimePeripherals::validateResources(profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),ledBinding_.as<JsonObjectConst>(),resourceError,RuntimePeripherals::graphPwm(runtime_.nodes()))){mode_="paused";peripheralError_=resourceError.c_str();}
+    }
+    if(!peripheralsReady_)mode_="paused";
     if (!ok) {state_->setLastError(error.c_str());DebugLog.printf("[logics] %s\n",error.c_str());}
     if(ok && mode_=="paused")runtime_.pause(millis());
     if(ok && recoveryAppliedThisBoot_){String ignored;persist(runtime_.graph(),mode_,ignored);state_->setLastError(recoveryWarning_.c_str());}
@@ -393,7 +531,15 @@ bool LogicDevice::begin(const char* program, AppState& state, StatusWriter statu
     return ok;
 }
 
+bool LogicDevice::peripheralNodeAvailable(JsonObjectConst node) const {
+ if(node["binding"]["kind"]!="peripheral")return true;
+ if(!peripheralsReady_)return false;
+ for(JsonObjectConst definition:devices_.as<JsonArrayConst>())if(node["type"]==definition["type"]&&node["peripheral"]["id"]==definition["peripheral"]["id"]&&node["peripheral"]["profile"]==definition["peripheral"]["profile"])return true;
+ return false;
+}
+
 bool LogicDevice::action(JsonObjectConst node, JsonVariantConst args, std::string& error) {
+    if(!peripheralNodeAvailable(node)){error="Peripheral was removed or its driver is unavailable; update the Logics graph";return false;}
     markLogicActivity(node["id"]|"",groupForNode(node["id"]|""));
     actionMarkedThisTick_=true;
     activityStableAt_=millis()+kLogicActionStableMs;
@@ -445,6 +591,7 @@ void LogicDevice::loop(uint32_t now, bool updating, uint32_t minimumPollInterval
         if(n["type"]=="hardware.gpio" && mode_=="playing")gpio_.sample(n,root["gpio"][n["id"].as<std::string>()].to<JsonObject>());
         if(n["binding"]["kind"]!="peripheral")continue;
         std::string id=n["peripheral"]["id"].as<std::string>();auto target=root["peripherals"][id];
+        if(n["binding"]["group"]=="input"&&(n["binding"]["index"]|0)>=2){PortablePeripherals::sample(n,root);continue;}
         if(n["binding"]["group"]=="sensor" && n["peripheral"]["profile"]=="ldr") {
             int gpio=n["binding"]["pins"]["SIG"]|-1;
             target["available"]=gpio>=0;target["error"]=gpio<0;
@@ -543,6 +690,9 @@ void LogicDevice::ledSnapshot(JsonObject response) {
     // HTTP reads must not restart the graph or race the LED render task.
     if(!mutex_ || xSemaphoreTake(mutex_,0)!=pdTRUE)return;
     LedArrays::snapshot(response["ledArrays"].to<JsonArray>(),mode_=="playing");
+    JsonDocument profiles,helpers;deserializeJson(profiles,runtimeProfiles_);deserializeJson(helpers,runtimeHelpers_);
+    RuntimePeripherals::capabilities(response["peripheralCapabilities"].to<JsonObject>(),false,profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),ledBinding_.as<JsonObjectConst>(),RuntimePeripherals::graphPwm(runtime_.nodes()));
+    response["peripheralCapabilities"]["error"]=peripheralError_;
     JsonObject capabilities=response["ledCapabilities"].to<JsonObject>();
     JsonArray effects=capabilities["effects"].to<JsonArray>();
     for(int i=0;i<16;i++)if(LedEffects::enabled(i))effects.add(LedEffects::names[i]);
@@ -557,7 +707,9 @@ void LogicDevice::snapshot(JsonDocument& response,bool graph) {
     if(!mutex_ || xSemaphoreTake(mutex_,pdMS_TO_TICKS(500))!=pdTRUE){response["error"]="Logics busy";return;}
     response["mode"]=mode_;response["updating"]=updating_;
     if(mode_=="playing")runtime_.telemetry(response["live"].to<JsonObject>());else response["live"]["error"]=runtime_.error();
+    if(!peripheralError_.empty())response["live"]["error"]=peripheralError_;
     response["requestDeduplication"]=true;
+    response["peripheralRevision"]=peripheralRevision_;
     response["execution"]["running"]=mode_=="playing"&&runtime_.hasRunningNodes();
     response["execution"]["ownedOutputs"]=outputOwners_.size();response["execution"]["snapshots"]=executionSnapshots_;
     response["groups"].set(runtime_.graph()["groups"]);
@@ -589,6 +741,7 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
     bool saved=true;
     std::string mode=command["mode"]|mode_.c_str();
     if(mode!="playing"&&mode!="paused"&&mode!="stopped"){error="Invalid Logics control state";return false;}
+    if(command["graph"].isNull()&&(!command["test"].isNull()||(mode=="playing"&&mode_!="playing")||command["group"]["mode"]=="playing"))for(JsonObjectConst node:runtime_.nodes())if(!peripheralNodeAvailable(node)){error="A Logics peripheral was removed; update the graph before resuming";return false;}
     if(!command["test"].isNull()) {
         const char* nodeId=command["test"]["nodeId"]|"";const char* action=command["test"]["action"]|"";
         std::string message;if(!runtime_.testAction(nodeId,action,message)){error=message.c_str();return false;}
@@ -631,12 +784,15 @@ bool LogicDevice::request(JsonVariantConst command,JsonDocument& response,String
         runtime_.releaseEvaluationCache();
         JsonDocument accepted;std::string message;
         if(!ElmaLogic::validateEditable(command["graph"],devices_.as<JsonArrayConst>(),accepted,message)){error=message.c_str();return false;}
+        {JsonDocument profiles,helpers;deserializeJson(profiles,runtimeProfiles_);deserializeJson(helpers,runtimeHelpers_);
+         if(!RuntimePeripherals::validateResources(profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),ledBinding_.as<JsonObjectConst>(),error,RuntimePeripherals::graphPwm(accepted["nodes"])))return false;}
         if(!persist(accepted.as<JsonVariantConst>(),mode,error))return false;
         if(audioOwned_)for(JsonObjectConst n:runtime_.nodes())if(n["id"]==audioOwner_){JsonDocument stop;stop["action"]="stop";stop["all"]=true;std::string ignored;actions_(n,stop.as<JsonVariantConst>(),ignored);break;}
         audioOwned_=false;
         if(!releaseEditorCatalog(accepted)){error="Insufficient memory for Logics graph";return false;}
         stopOwnedOutputs();gpio_.reset();
         LedArrays::reset();
+        arrayHelpers_="";
         if(!runtime_.begin(std::move(accepted),[this](JsonObjectConst n,JsonVariantConst a,std::string& e){return action(n,a,e);},message)){error=message.c_str();return false;}
         mode_="stopped";applyMode(mode);polled_=false;
         if(runtime_.nodes().size()==0 && (recoveryConfirmationRequired_ || recoveryRetries_))clearRecoveryState();

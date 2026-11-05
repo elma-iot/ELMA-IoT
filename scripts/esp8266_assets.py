@@ -58,7 +58,7 @@ lines.append('static const char ELMA_COMPACT_CHIP[]='+json.dumps(chip)+';')
 lines.append('static constexpr int ELMA_COMPACT_PWM_MAX='+str(1000 if small else 20000)+';')
 for name,values in [('GPIO',pins),('LED',sorted(set(pins)|{p for k,p in info['defaults'].items() if k.endswith('Pin') and isinstance(p,int) and p>=0})),('ADC',allowed['false:adc'])]:
  lines.append('inline bool compact'+name+'(int p){return '+('||'.join('p=='+str(p) for p in values) or 'false')+';}')
-lines.append('static const char ELMA_COMPACT_BOARD_INFO[] PROGMEM='+json.dumps(json.dumps({'id':board,'name':info['asset'].get('alt',board).removesuffix(' board'),'chip':chip,'pins':sorted(set(pins)|{p for k,p in info['defaults'].items() if k.endswith('Pin') and isinstance(p,int) and p>=0}),'defaults':info['defaults'],'asset':'/board.svg','contacts':json.loads((root/'web/board-pin-contacts.json').read_text(encoding='utf8')).get(board,{})},separators=(',',':')))+';')
+lines.append('static const char ELMA_COMPACT_BOARD_INFO[] PROGMEM='+json.dumps(json.dumps({'id':board,'name':info['asset'].get('alt',board).removesuffix(' board'),'chip':chip,'pins':sorted(set(pins)|{p for k,p in info['defaults'].items() if k.endswith('Pin') and isinstance(p,int) and p>=0}),'defaults':info['defaults'],'capabilities':pin_caps,'asset':'/board.svg','contacts':json.loads((root/'web/board-pin-contacts.json').read_text(encoding='utf8')).get(board,{})},separators=(',',':')))+';')
 defaults={'device':{k:v for k,v in info['defaults'].items() if k!='preserveExternalLed'},'ui':{'gpioBoardSelection':board,'language':os.environ.get('ELMA_COMPILED_LANGUAGE','en')}}
 path=os.environ.get('ELMA_PROJECT_DEFAULTS_FILE')
 if path:

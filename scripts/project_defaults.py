@@ -8,6 +8,19 @@ def generate_defaults(root,raw):
  if isinstance(editor,dict) and editor.get('nodes') and 'compiledLogic' not in data:raise ValueError('Nonempty Logics graph was not compiled; use the updated Windows compiler before generating firmware')
  logic=data.pop('compiledLogic',{'schemaVersion':1,'nodes':[],'connections':[]})
  if not isinstance(logic,dict) or logic.get('schemaVersion')!=1 or not isinstance(logic.get('nodes'),list) or not isinstance(logic.get('connections'),list):raise ValueError('Invalid compiled Logics')
+ # A newly compiled graph owns its peripheral UUIDs. Replace runtime markers
+ # imported from another image so the graph and boot-time factory agree.
+ ui=data.setdefault('ui',{})
+ helpers=ui.get('peripheralHelperBindings',{})
+ packed=isinstance(helpers,str)
+ if packed:helpers=json.loads(helpers)
+ if isinstance(helpers,dict):
+  for device in logic.get('devices',[]):
+   binding=device.get('binding',{});ref=device.get('peripheral',{})
+   if binding.get('kind')=='peripheral' and ref.get('id'):
+    slot=helpers.setdefault(str(binding['group'])+':'+str(binding.get('index',0)),{})
+    slot['_runtimeId']=ref['id'];slot['_runtimeProfile']=ref['profile']
+  ui['peripheralHelperBindings']=json.dumps(helpers,separators=(',',':')) if packed else helpers
  logic_payload=json.dumps(logic,separators=(',',':'),ensure_ascii=True,allow_nan=False)
  if len(logic_payload)>32768 or len(logic['nodes'])>64 or len(logic['connections'])>128:raise ValueError('Compiled Logics exceeds runtime limits')
  data.get('ui',{}).pop('logicPeripheralIds',None)

@@ -1,4 +1,5 @@
 import {BOARD_DEFAULTS} from './modules/board-defaults.js';
+import {runtimePeripheralOptions} from './modules/runtime-peripheral-policy.js';
 import {createSpiDisplayControls} from './modules/spi-display-controls.js';
 import { fixedOnboardProfile } from "./modules/sunton-capabilities.js";
 import {fileCrc32, retryTransfer, storageChecksum} from './modules/storage-integrity.js';
@@ -16,6 +17,7 @@ import {animateArray} from './modules/led-effects.js';
 const liveLedArrays = new Map();
 let stopDiagramArrays = [];
 let renderedLedCapabilities = '';
+let renderedPeripheralCapabilities = '';
 import './modules/security-tab.js';
 import {createLogicsTab} from './modules/logic-editor.js';
 import {installOnlineHelpLinks} from './modules/online-help.js';
@@ -6887,15 +6889,18 @@ function normalizedPeripheralExpansionProfiles() {
   return sanitizedProfiles.length ? sanitizedProfiles : ["none"];
 }
 
-function appendPeripheralOptions(select, options, selectedValue) {
+function appendPeripheralOptions(select, options, selectedValue, explicitGroup, index = 0) {
   const groups={audio:PERIPHERAL_AUDIO_PROFILE_OPTIONS,audioIn:PERIPHERAL_AUDIO_IN_PROFILE_OPTIONS,display:PERIPHERAL_DISPLAY_PROFILE_OPTIONS,sensor:PERIPHERAL_SENSOR_PROFILE_OPTIONS,input:PERIPHERAL_INPUT_PROFILE_OPTIONS,storage:PERIPHERAL_STORAGE_PROFILE_OPTIONS,communication:PERIPHERAL_COMMUNICATION_PROFILE_OPTIONS,power:PERIPHERAL_POWER_PROFILE_OPTIONS,control:PERIPHERAL_CONTROL_PROFILE_OPTIONS,expansion:PERIPHERAL_EXPANSION_PROFILE_OPTIONS};
-  const group=Object.keys(groups).find(key=>groups[key]===options);
+  const group=explicitGroup||Object.keys(groups).find(key=>groups[key]===options);
   const limited=ONBOARD_BOARDS[activeGpioBoardProfile()]?.allowedProfiles?.[group];
   if(limited)options=options.filter(option=>limited.includes(option.value));
   const board=String(elements.gpioBoardSelector?.value||state.settings?.ui?.gpioBoardSelection||'');
   options=options.filter(o=>o.value!=="mcp2551"||["esp32","esp32s2","esp32s3","esp32c3"].includes(boardChipFamily(board))).filter(o=>!['spk-ns4168','spk-dual-mic'].includes(o.value)||ONBOARD_BOARDS[board]?.audioProfile==='spk-ns4168').filter(o=>o.value!=='sunton-speaker'||ONBOARD_BOARDS[board]?.audioProfile==='sunton-speaker').filter(o=>o.value!=='camera-sdmmc'||!!(ONBOARD_BOARDS[board]?.cameraPins&&ONBOARD_BOARDS[board]?.sdmmcPins)).filter(o=>o.value!=='viewe-sdmmc'||!!ONBOARD_BOARDS[board]?.sdmmcPins).filter(o=>o.value!=='viewe-ms1285'||!!ONBOARD_BOARDS[board]?.rs485).filter(o=>!['viewe-onboard-lcd','viewe-rotary-onboard-lcd'].includes(o.value)||ONBOARD_BOARDS[board]?.displayProfile===o.value);
   options=options.filter(o=>!["qmi8658","waveshare-amoled-sdmmc"].includes(o.value)||!!ONBOARD_BOARDS[board]?.imu);
   options=options.filter(o=>o.value!=="ldr"||ONBOARD_BOARDS[board]?.builtinProfiles?.sensor==="ldr");
+  const slot=Object.entries(select.dataset||{}).find(([key])=>key.startsWith('peripheral')&&key.endsWith('Index'));
+  const collections={audio:'peripheralAudioProfiles',audioIn:'peripheralAudioInProfiles',display:'peripheralDisplayProfiles',sensor:'peripheralSensorProfiles',input:'peripheralInputProfiles',control:'peripheralControlProfiles',storage:'peripheralStorageProfiles',expansion:'peripheralExpansionProfiles',communication:'peripheralCommunicationProfiles',power:'peripheralPowerProfiles'};
+  options=runtimePeripheralOptions(options,state.status?.peripheralCapabilities,group,slot?Number(slot[1]):index,selectedValue,state[collections[group]]||[]);
   for (const optionConfig of options) {
     const option = document.createElement("option");
     option.value = optionConfig.value;
@@ -13934,6 +13939,30 @@ function escapeHtml(value) {
 
 function renderStatus(status) {
   statusRenderModule?.renderStatus(status);
+  if(status.peripheralCapabilities){
+    let warning=document.getElementById('runtimePeripheralError');
+    if(!warning){warning=document.createElement('p');warning.id='runtimePeripheralError';warning.setAttribute('role','alert');warning.className='status-error';document.getElementById('tab-gpio')?.prepend(warning);}
+    warning.textContent=status.peripheralCapabilities.error||'';warning.hidden=!warning.textContent;
+  }
+  const peripheralCapabilities=JSON.stringify(status.peripheralCapabilities||null);
+  if(status.peripheralCapabilities&&peripheralCapabilities!==renderedPeripheralCapabilities){
+    renderedPeripheralCapabilities=peripheralCapabilities;
+    renderPeripheralAudioOutputControls();renderPeripheralAudioInControls();renderPeripheralDisplayControls();
+    renderPeripheralSensorControls();renderPeripheralInputControls();renderPeripheralPowerControls();
+    renderPeripheralControlControls();renderPeripheralExpansionControls();renderPeripheralStorageControls();renderPeripheralCommunicationControls();
+    for(const [group,field,options] of [
+      ['audio','peripheralAudioProfile',PERIPHERAL_AUDIO_PROFILE_OPTIONS],['audioIn','peripheralAudioInProfile',PERIPHERAL_AUDIO_IN_PROFILE_OPTIONS],
+      ['display','peripheralDisplayProfile',PERIPHERAL_DISPLAY_PROFILE_OPTIONS],['storage','peripheralStorageProfile',PERIPHERAL_STORAGE_PROFILE_OPTIONS]]){
+      const select=elements[field];if(!select||select.disabled)continue;
+      const value=select.value;select.replaceChildren();appendPeripheralOptions(select,options,value,group);
+    }
+  }
+  if(status.peripheralCapabilities)for(const [group,field] of [['audio','peripheralAudioAddButton'],['audioIn','peripheralAudioInAddButton'],['display','peripheralDisplayAddButton'],['sensor','peripheralSensorAddButton'],['input','peripheralInputAddButton'],['control','peripheralControlAddButton'],['storage','peripheralStorageAddButton'],['expansion','peripheralExpansionAddButton'],['communication','peripheralCommunicationAddButton'],['power','peripheralPowerAddButton']]){
+    const button=elements[field];if(!button)continue;
+    const maximum=Number(status.peripheralCapabilities.maxInstances?.[group]||0);
+    const names={audio:'peripheralAudioProfiles',audioIn:'peripheralAudioInProfiles',display:'peripheralDisplayProfiles',sensor:'peripheralSensorProfiles',input:'peripheralInputProfiles',control:'peripheralControlProfiles',storage:'peripheralStorageProfiles',expansion:'peripheralExpansionProfiles',communication:'peripheralCommunicationProfiles',power:'peripheralPowerProfiles'};
+    if((state[names[group]]||[]).length>=maximum)button.disabled=true;
+  }
   if(Array.isArray(status.ledArrays)){
     liveLedArrays.clear();
     for(const array of status.ledArrays)liveLedArrays.set(array.pin,{...array,received:performance.now()});

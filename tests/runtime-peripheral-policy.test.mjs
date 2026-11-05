@@ -1,0 +1,16 @@
+import {runtimePeripheralOptions} from '../web/modules/runtime-peripheral-policy.js';
+import assert from 'node:assert/strict';
+const options=[{value:'none',label:'None'},{value:'ws2812-neopixel-led-strip',label:'NeoPixel'},{value:'servo',label:'Servo'}];
+const caps={schema:1,profiles:{control:['none','ws2812-neopixel-led-strip']},maxInstances:{control:4}};
+assert.deepEqual(runtimePeripheralOptions(options,caps,'control').map(o=>o.value),['none','ws2812-neopixel-led-strip']);
+assert.equal(runtimePeripheralOptions(options,caps,'control',0,'servo').at(-1).disabled,true);
+assert.deepEqual(runtimePeripheralOptions(options,caps,'control',4).map(o=>o.value),['none']);
+assert.deepEqual(runtimePeripheralOptions(options,{...caps,profiles:{}},'control').map(o=>o.value),['none']);
+assert.deepEqual(runtimePeripheralOptions(options,null,'control'),options);
+const audio={schema:1,profiles:{audio:['none','dac','buzzer']},maxInstances:{audio:4},profileSlots:{audio:{dac:1,buzzer:4}}};
+assert.deepEqual(runtimePeripheralOptions([{value:'none'},{value:'dac'},{value:'buzzer'}],audio,'audio',1).map(o=>o.value),['none','buzzer']);
+const pwm={...caps,profiles:{control:['none','pwm-fan','relay-module']},resourceAvailable:{pwmChannels:0},resourceCosts:{control:{'pwm-fan':1}}};
+assert.deepEqual(runtimePeripheralOptions([{value:'none'},{value:'pwm-fan'},{value:'relay-module'}],pwm,'control').map(o=>o.value),['none','relay-module']);
+const sensor={schema:1,profiles:{sensor:['none','bno055']},maxInstances:{sensor:8},profileCountLimits:{sensor:{bno055:1}}};
+assert.deepEqual(runtimePeripheralOptions([{value:'none'},{value:'bno055'}],sensor,'sensor',1,'none',['bno055','none']).map(o=>o.value),['none']);
+console.log('PASS exact image capabilities, unavailable saved entries, instance limits and offline designers');
