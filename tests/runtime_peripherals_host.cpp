@@ -9,6 +9,9 @@ int main(){
  helpers["control:0"]["DIN"]="3";helpers["control:0"]["LED_COUNT"]=32;helpers["control:0"]["LED_LAYOUT"]="ring";helpers["control:0"]["LED_DEFAULT_EFFECT"]="chase";
  assert(RuntimePeripherals::validate(profiles.as<JsonObjectConst>(),{},error));
  assert(RuntimePeripherals::reconcile(devices,original.as<JsonArrayConst>(),profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));
+ {JsonDocument missing,rejected;missing.set(helpers);missing["control:0"]["DIN"]="";
+  assert(!RuntimePeripherals::reconcile(rejected,original.as<JsonArrayConst>(),profiles.as<JsonObjectConst>(),missing.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));
+  assert(error.find("Assign a GPIO")!=std::string::npos);error.clear();}
  unsigned arrays=0;std::string identity;
  for(JsonObject n:devices.as<JsonArray>())if(LedArrays::matches(n)){
   ++arrays;assert(n["binding"]["pins"]["DIN"]==3);
@@ -25,9 +28,17 @@ int main(){
  for(JsonObjectConst n:cold.as<JsonArrayConst>())if(n["binding"]["kind"]=="peripheral")assert(n["peripheral"]["id"]==identity);
  profiles["controls"][0]="servo";assert(!RuntimePeripherals::validate(profiles.as<JsonObjectConst>(),{},error));
  profiles["controls"][0]="none";assert(RuntimePeripherals::reconcile(restored,devices.as<JsonArrayConst>(),profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));assert(restored.size()==1);
- profiles["inputs"][0]="physical-button";helpers["input:0"]["OUT"]=0;
+ profiles["inputs"][0]="physical-button";helpers["input:0"]["SIG"]=0;
  assert(RuntimePeripherals::reconcile(restored,original.as<JsonArrayConst>(),profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));
- bool input=false;for(JsonObjectConst n:restored.as<JsonArrayConst>())if(n["binding"]["group"]=="input")input=true;assert(input);
+ bool input=false;for(JsonObjectConst n:restored.as<JsonArrayConst>())if(n["binding"]["group"]=="input"){input=true;assert(n["binding"]["pins"]["SIG"]==0);}assert(input);
+#if !defined(APP_ESP8266_COMPACT) && !APP_DISABLE_DISPLAY
+ {JsonDocument optionalProfiles,optionalHelpers,optionalDevices;
+  optionalProfiles["displayProfiles"][0]="i2c-oled";
+  optionalHelpers["display:0"]["SDA"]=3;optionalHelpers["display:0"]["SCL"]=4;optionalHelpers["display:0"]["RST"]="";
+  assert(RuntimePeripherals::reconcile(optionalDevices,original.as<JsonArrayConst>(),optionalProfiles.as<JsonObjectConst>(),optionalHelpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));
+  optionalHelpers["display:0"]["SDA"]="";
+  assert(!RuntimePeripherals::reconcile(optionalDevices,original.as<JsonArrayConst>(),optionalProfiles.as<JsonObjectConst>(),optionalHelpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));error.clear();}
+#endif
  JsonDocument caps;RuntimePeripherals::capabilities(caps.to<JsonObject>());assert(caps["dynamic"]==true);
  assert(!RuntimePeripherals::available("control","servo"));
  JsonDocument budget,budgetHelpers,led;

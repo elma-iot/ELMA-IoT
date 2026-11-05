@@ -16,7 +16,7 @@ Passed over the device API:
 
 - The saved ring creates a runtime controller and reports an advancing Chase animation.
 - Removing the ring releases the controller; adding it again creates a working controller.
-- Reserved flash GPIOs, duplicate peripheral GPIOs, an excluded servo and excluded I2S audio are rejected without changing the working configuration.
+- Unassigned required pins, reserved flash GPIOs, duplicate peripheral GPIOs, an excluded servo and excluded I2S audio are rejected without changing the working configuration.
 - Peripheral identities survive reboot.
 - A newly added ring can be driven by a saved Logics graph, including after reboot.
 - Removing a graph-owned peripheral pauses its graph.

@@ -257,6 +257,10 @@ template<class Error> inline bool reconcile(JsonDocument& destination,JsonArrayC
     node["peripheral"]["group"]=group.name;node["peripheral"]["profile"]=profile;
     node["peripheral"]["id"]=id;node["peripheral"]["slotId"]=std::string(group.name)+"-"+std::to_string(i);
     node["binding"]["index"]=i;PeripheralPins::apply(node,helpers,config);
+    for(JsonVariantConst required:node["binding"]["requiredPins"].as<JsonArrayConst>()){
+     const char* signal=required|"";
+     if(PeripheralPins::number(node["binding"]["pins"][signal])<0){error=("Assign a GPIO for "+profile+" "+signal).c_str();return false;}
+    }
     if(profile=="ws2812-neopixel-led-strip"){
 #if defined(CONFIG_IDF_TARGET_ESP32C2)
      node["binding"]["maxCount"]=32;
