@@ -122,6 +122,11 @@ inline std::string profileAt(JsonObjectConst profiles,const Group& group,unsigne
  if(std::string(group.name)=="display")return profiles["displayProfile"]|"none";
  return "none";
 }
+inline int firstDivider(JsonObjectConst profiles){
+ int index=0;for(JsonVariantConst item:profiles["sensors"].as<JsonArrayConst>()){
+  std::string profile=item|"";if(profile.find("voltage-divider")!=std::string::npos)return index;++index;
+ }return -1;
+}
 inline unsigned pwmUsed(JsonObjectConst profiles,JsonObjectConst helpers,JsonObjectConst device){
  std::string led=device["statusLedType"]|device["ledType"]|"regular";int pin=device["statusLedPin"]|device["pin"]|-1;
  unsigned used=pin>=0&&pin<64?(led=="rgb"?3:led=="regular"?1:0):0;

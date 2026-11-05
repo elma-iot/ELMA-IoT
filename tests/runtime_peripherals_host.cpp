@@ -40,6 +40,14 @@ int main(){
   assert(!RuntimePeripherals::reconcile(optionalDevices,original.as<JsonArrayConst>(),optionalProfiles.as<JsonObjectConst>(),optionalHelpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error));error.clear();}
 #endif
  JsonDocument caps;RuntimePeripherals::capabilities(caps.to<JsonObject>());assert(caps["dynamic"]==true);
+#ifndef APP_ESP8266_COMPACT
+ {JsonDocument dividerProfiles,dividerConfig,dividerDevices;
+  dividerProfiles["sensors"][0]="none";dividerProfiles["sensors"][1]="battery-voltage-divider-220k";
+  assert(RuntimePeripherals::firstDivider(dividerProfiles.as<JsonObjectConst>())==1);
+  dividerConfig["_firstDivider"]=RuntimePeripherals::firstDivider(dividerProfiles.as<JsonObjectConst>());dividerConfig["battery"]["adcPin"]=4;
+  assert(RuntimePeripherals::reconcile(dividerDevices,original.as<JsonArrayConst>(),dividerProfiles.as<JsonObjectConst>(),{},dividerConfig.as<JsonObjectConst>(),error));
+  bool found=false;for(JsonObjectConst n:dividerDevices.as<JsonArrayConst>())if(n["binding"]["group"]=="sensor"){found=true;assert(n["binding"]["pins"]["SIGNAL"]==4);}assert(found);}
+#endif
  assert(!RuntimePeripherals::available("control","servo"));
  JsonDocument budget,budgetHelpers,led;
  for(unsigned i=0;i<4;i++)budget["controls"][i]="pwm-fan";

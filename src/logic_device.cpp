@@ -202,7 +202,7 @@ bool LogicDevice::buildPeripheralDevices(const SettingsBundle& settings,JsonDocu
  config["audio"]["wsPin"]=settings.audio.wsPin;config["audio"]["bclkPin"]=settings.audio.bclkPin;config["audio"]["doutPin"]=settings.audio.doutPin;
  config["oled"]["sdaPin"]=settings.oled.sdaPin;config["oled"]["sclPin"]=settings.oled.sclPin;config["oled"]["resetPin"]=settings.oled.resetPin;
  config["sd"]["csPin"]=settings.sd.csPin;config["sd"]["sckPin"]=settings.sd.sckPin;config["sd"]["mosiPin"]=settings.sd.mosiPin;config["sd"]["misoPin"]=settings.sd.misoPin;
- config["battery"]["adcPin"]=settings.battery.adcPin;config["_firstDivider"]=0;
+ config["battery"]["adcPin"]=settings.battery.adcPin;config["_firstDivider"]=RuntimePeripherals::firstDivider(profiles.as<JsonObjectConst>());
  config["device"]["statusLedPin"]=settings.device.statusLedPin;config["device"]["statusLedType"]=settings.device.statusLedType;
  if(ok)ok=RuntimePeripherals::validateResources(profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config["device"],error,RuntimePeripherals::graphPwm(runtime_.nodes()));
  if(ok)ok=RuntimePeripherals::reconcile(next,devices_.as<JsonArrayConst>(),profiles.as<JsonObjectConst>(),helpers.as<JsonObjectConst>(),config.as<JsonObjectConst>(),error);
